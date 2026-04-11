@@ -24,7 +24,7 @@ We welcome participation from everyone, regardless of level of experience, gende
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, email `conduct@<TODO-domain>`. Reports will be handled confidentially.
+If you experience or witness unacceptable behavior, report it privately via [GitHub's private vulnerability reporting](https://github.com/vanctran/ra11y/security/advisories/new) (the same channel is used for conduct reports until a dedicated one exists). Reports will be handled confidentially.
 
 Project maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, issues, and other contributions that are not aligned with this Code of Conduct.
 

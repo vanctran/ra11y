@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please **do not open a public GitHub issue** for security vulnerabilities. Email the maintainers at `security@<TODO-domain>` with:
+Please **do not open a public GitHub issue** for security vulnerabilities. Report them privately via [GitHub's private vulnerability reporting](https://github.com/vanctran/ra11y/security/advisories/new) with:
 
 - A description of the vulnerability
 - Steps to reproduce

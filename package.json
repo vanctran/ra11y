@@ -68,12 +68,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/ra11y.git"
+    "url": "git+https://github.com/vanctran/ra11y.git"
   },
   "bugs": {
-    "url": "https://github.com/OWNER/ra11y/issues"
+    "url": "https://github.com/vanctran/ra11y/issues"
   },
-  "homepage": "https://github.com/OWNER/ra11y#readme",
+  "homepage": "https://github.com/vanctran/ra11y#readme",
   "keywords": [
     "accessibility",
     "a11y",

@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@ra11y/core)](https://www.npmjs.com/package/@ra11y/core)
 [![license](https://img.shields.io/npm/l/@ra11y/core)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/OWNER/ra11y/ci.yml?branch=main)](https://github.com/OWNER/ra11y/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/vanctran/ra11y/ci.yml?branch=main)](https://github.com/vanctran/ra11y/actions)
 
 **`ra11y`** (pronounced "rally") is an accessibility scanner for JSX/TSX, HTML, and CSS. It ships with four accessibility standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. It produces VPAT-ready compliance reports and a certification readiness scorecard alongside line-level violations, so the same tool that catches the bug in your precommit also tells your legal team where you stand on ADA conformance.
 

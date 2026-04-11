@@ -44,6 +44,6 @@ EXAMPLES
   ra11y --list-rules
 
 DOCS
-  https://github.com/OWNER/ra11y
+  https://github.com/vanctran/ra11y
 `;
 }

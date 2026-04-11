@@ -20,7 +20,7 @@ Read [`CLAUDE.md`](./CLAUDE.md) first — it is the authoritative spec for the a
 # Bun is the primary dev runtime
 curl -fsSL https://bun.sh/install | bash
 
-git clone https://github.com/OWNER/ra11y.git
+git clone https://github.com/vanctran/ra11y.git
 cd ra11y
 bun install
 bun run verify   # typecheck + lint + test + check-deps

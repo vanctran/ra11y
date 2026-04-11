@@ -36,7 +36,7 @@ Auto-detection: the following environment variables or conditions switch ra11y t
 
 ## Reporting accessibility issues
 
-Accessibility bug reports are **prioritized over feature requests**. Please open an issue with the `a11y` label at `https://github.com/OWNER/ra11y/issues/new?labels=a11y`, or email `a11y@<TODO-domain>`.
+Accessibility bug reports are **prioritized over feature requests**. Please open an issue with the `a11y` label at `https://github.com/vanctran/ra11y/issues/new?labels=a11y`.
 
 When reporting, please include:
 
