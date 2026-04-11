@@ -30,22 +30,22 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [x] `.claude/hooks/notification.ts`
 - [x] `.claude/hooks/instructions-loaded.ts`
 - [x] `.claude/notes/README.md`
-- [ ] `.claude/agents/rule-implementer.md`
-- [ ] `.claude/agents/standard-builder.md`
-- [ ] `.claude/agents/spec-researcher.md`
-- [ ] `.claude/agents/parser-author.md`
-- [ ] `.claude/agents/formatter-author.md`
-- [ ] `.claude/agents/fixture-generator.md`
-- [ ] `.claude/agents/test-author.md`
-- [ ] `.claude/agents/a11y-reviewer.md`
-- [ ] `.claude/agents/code-reviewer.md`
-- [ ] `.claude/agents/type-smith.md`
-- [ ] `.claude/agents/dependency-auditor.md`
-- [ ] `.claude/agents/doc-writer.md`
-- [ ] `.claude/agents/benchmark-tuner.md`
-- [ ] `.claude/agents/fixture-curator.md`
-- [ ] `.claude/agents/migration-author.md`
-- [ ] `.claude/agents/release-captain.md`
+- [x] `.claude/agents/rule-implementer.md`
+- [x] `.claude/agents/standard-builder.md`
+- [x] `.claude/agents/spec-researcher.md`
+- [x] `.claude/agents/parser-author.md`
+- [x] `.claude/agents/formatter-author.md`
+- [x] `.claude/agents/fixture-generator.md`
+- [x] `.claude/agents/test-author.md`
+- [x] `.claude/agents/a11y-reviewer.md`
+- [x] `.claude/agents/code-reviewer.md`
+- [x] `.claude/agents/type-smith.md`
+- [x] `.claude/agents/dependency-auditor.md`
+- [x] `.claude/agents/doc-writer.md`
+- [x] `.claude/agents/benchmark-tuner.md`
+- [x] `.claude/agents/fixture-curator.md`
+- [x] `.claude/agents/migration-author.md`
+- [x] `.claude/agents/release-captain.md`
 - [ ] `.claude/skills/continue/SKILL.md`
 - [ ] `.claude/skills/verify/SKILL.md`
 - [ ] `.claude/skills/add-rule/SKILL.md` + templates + gotchas.md
