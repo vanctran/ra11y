@@ -37,8 +37,21 @@ export function runRule(
     },
     sink,
   );
+  // Mirror the rule-runner lifecycle: beforeFile → check → afterFile.
+  // Document-scoped rules put their logic in afterFile, and we'd
+  // silently skip them if we only called check().
+  const fileCtx = { ...ctx, nodes: ast.root };
+  if (rule.beforeFile) {
+    rule.beforeFile(fileCtx);
+  }
   if (rule.check) {
     const maybe = rule.check(ctx);
+    if (Array.isArray(maybe)) {
+      for (const v of maybe) sink.push(v);
+    }
+  }
+  if (rule.afterFile) {
+    const maybe = rule.afterFile(fileCtx);
     if (Array.isArray(maybe)) {
       for (const v of maybe) sink.push(v);
     }

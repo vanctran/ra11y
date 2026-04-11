@@ -1,12 +1,21 @@
 /**
  * Built-in rules barrel. Every rule ra11y ships out of the box is
- * registered here. Phase 6 adds the first rule (media/alt-text-missing);
- * Phases 11+ fill in the full ~30-rule matrix.
+ * registered here. v0.1.0 targets ~30 rules covering every "auto"
+ * and "partial" criterion under WCAG 2.1 A+AA + WCAG 2.2 A+AA
+ * additions.
  */
 
+import { rule as langAttribute } from "./document/lang-attribute.ts";
+import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
+import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import type { Rule } from "../types/rule.ts";
 
-export const BUILTIN_RULES: readonly Rule[] = [altTextMissing];
+export const BUILTIN_RULES: readonly Rule[] = [
+  altTextMissing,
+  langAttribute,
+  linkDescriptiveText,
+  pageTitled,
+];
 
-export { altTextMissing };
+export { altTextMissing, langAttribute, linkDescriptiveText, pageTitled };

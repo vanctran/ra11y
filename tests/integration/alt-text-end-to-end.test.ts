@@ -56,9 +56,11 @@ describe("end-to-end: alt-text-missing against real WCAG 2.2 pipeline", () => {
       enabled: ["wcag22"],
       files,
     });
-    expect(result.violations.length).toBeGreaterThanOrEqual(3);
-    for (const v of result.violations) {
-      expect(v.ruleId).toBe("media/alt-text-missing");
+    const altViolations = result.violations.filter(
+      (v) => v.ruleId === "media/alt-text-missing",
+    );
+    expect(altViolations.length).toBeGreaterThanOrEqual(3);
+    for (const v of altViolations) {
       expect(v.criteria).toContain("wcag22:1.1.1");
       expect(v.severity).toBe("error");
     }
@@ -104,7 +106,7 @@ describe("end-to-end: alt-text-missing against real WCAG 2.2 pipeline", () => {
       enabled: ["wcag22"],
       files,
     });
-    const violation = result.violations[0];
+    const violation = result.violations.find((v) => v.ruleId === "media/alt-text-missing");
     expect(violation?.message).toContain("revenue-2026.png");
     expect(violation?.suggestion).toContain("revenue 2026");
   });

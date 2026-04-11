@@ -15,6 +15,10 @@
  * every violation. This test proves that the moat actually works —
  * rules stay standard-agnostic, standards are pure data, and the
  * engine does the fan-out automatically.
+ *
+ * These tests filter to `media/alt-text-missing` violations specifically
+ * because the fixture also triggers `document/page-titled` (no title)
+ * and we don't want the filter to depend on fixture ordering.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -25,6 +29,7 @@ import { parseHtml } from "../../src/input/parsers/index.ts";
 import { BUILTIN_RULES } from "../../src/rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../src/standards/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
+import type { Violation } from "../../src/types/violation.ts";
 
 const FIXTURE = join(
   import.meta.dir,
@@ -42,6 +47,10 @@ function loadBadFixture(): ParsedFile {
   return { filePath: "index.html", source, ast };
 }
 
+function altTextViolations(violations: readonly Violation[]): Violation[] {
+  return violations.filter((v) => v.ruleId === "media/alt-text-missing");
+}
+
 describe("multi-standard cross-reference via equivalentTo closure", () => {
   it("a single rule satisfying wcag22:1.1.1 fires violations that cite all four standards when all four are enabled", () => {
     const { result } = runScan({
@@ -51,12 +60,12 @@ describe("multi-standard cross-reference via equivalentTo closure", () => {
       files: [loadBadFixture()],
     });
 
-    expect(result.violations).toHaveLength(1);
-    const violation = result.violations[0];
-    if (!violation) throw new Error("expected a violation");
+    const violations = altTextViolations(result.violations);
+    expect(violations).toHaveLength(1);
+    const violation = violations[0];
+    if (!violation) throw new Error("expected an alt-text violation");
 
-    // All four standards should appear in the criteria list — sorted
-    // deterministically by the standard-filter.
+    // All four standards should appear in the criteria list.
     const cited = [...violation.criteria].sort();
     expect(cited).toContain("wcag22:1.1.1");
     expect(cited).toContain("wcag21:1.1.1");
@@ -72,9 +81,10 @@ describe("multi-standard cross-reference via equivalentTo closure", () => {
       files: [loadBadFixture()],
     });
 
-    expect(result.violations).toHaveLength(1);
-    const violation = result.violations[0];
-    if (!violation) throw new Error("expected a violation");
+    const violations = altTextViolations(result.violations);
+    expect(violations).toHaveLength(1);
+    const violation = violations[0];
+    if (!violation) throw new Error("expected an alt-text violation");
 
     expect(violation.criteria).toContain("section508:1.1.1");
     for (const id of violation.criteria) {
@@ -90,9 +100,10 @@ describe("multi-standard cross-reference via equivalentTo closure", () => {
       files: [loadBadFixture()],
     });
 
-    expect(result.violations).toHaveLength(1);
-    const violation = result.violations[0];
-    if (!violation) throw new Error("expected a violation");
+    const violations = altTextViolations(result.violations);
+    expect(violations).toHaveLength(1);
+    const violation = violations[0];
+    if (!violation) throw new Error("expected an alt-text violation");
 
     expect(violation.criteria).toContain("en301549:9.1.1.1");
     for (const id of violation.criteria) {
@@ -111,7 +122,6 @@ describe("multi-standard cross-reference via equivalentTo closure", () => {
     const ids = report.coverage.map((c) => c.standardId).sort();
     expect(ids).toEqual(["en301549", "section508", "wcag21", "wcag22"]);
 
-    // Every coverage entry should have non-zero total criteria.
     for (const entry of report.coverage) {
       expect(entry.total).toBeGreaterThan(0);
       expect(entry.automated).toBeGreaterThan(0);
@@ -125,10 +135,14 @@ describe("multi-standard cross-reference via equivalentTo closure", () => {
       enabled: ["wcag22"],
       files: [loadBadFixture()],
     });
-    expect(result.violations).toHaveLength(1);
-    expect(result.violations[0]?.criteria).toContain("wcag22:1.1.1");
+
+    const violations = altTextViolations(result.violations);
+    expect(violations).toHaveLength(1);
+    const violation = violations[0];
+    if (!violation) throw new Error("expected an alt-text violation");
+    expect(violation.criteria).toContain("wcag22:1.1.1");
     // Only wcag22 enabled → only wcag22 cited.
-    for (const id of result.violations[0]?.criteria ?? []) {
+    for (const id of violation.criteria) {
       expect(id.startsWith("wcag22:")).toBe(true);
     }
   });

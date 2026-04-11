@@ -179,9 +179,13 @@ class TsxParser {
       if (this.#pos === posBefore) this.#advance(1);
     }
 
-    // HTML-style void elements are always treated as self-closing even
-    // without a trailing slash. React allows this too.
-    if (SELF_CLOSING_VOID.has(tagName.toLowerCase())) selfClosing = true;
+    // HTML-style void elements (lowercase DOM names like <img>, <br>,
+    // <input>) are always treated as self-closing even without a
+    // trailing slash. React allows this too. We deliberately only
+    // match lowercase names: PascalCase components like <Link> or
+    // <Input> are React components that happen to share a name with
+    // a void element and can have children.
+    if (isLowercase(tagName) && SELF_CLOSING_VOID.has(tagName)) selfClosing = true;
 
     const children: JsxNode[] = selfClosing ? [] : this.#consumeJsxChildren(tagName);
 
@@ -405,4 +409,11 @@ class TsxParser {
 function isTagStart(ch: string | undefined): boolean {
   if (ch === undefined) return false;
   return /[a-zA-Z]/.test(ch);
+}
+
+function isLowercase(s: string): boolean {
+  if (s.length === 0) return false;
+  const first = s[0];
+  if (first === undefined) return false;
+  return first === first.toLowerCase() && first !== first.toUpperCase();
 }
