@@ -46,19 +46,18 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [x] `.claude/agents/fixture-curator.md`
 - [x] `.claude/agents/migration-author.md`
 - [x] `.claude/agents/release-captain.md`
-- [ ] `.claude/skills/continue/SKILL.md`
-- [ ] `.claude/skills/verify/SKILL.md`
-- [ ] `.claude/skills/add-rule/SKILL.md` + templates + gotchas.md
-- [ ] `.claude/skills/add-standard/SKILL.md` + templates + gotchas.md
-- [ ] `.claude/skills/add-formatter/SKILL.md` + templates + gotchas.md
-- [ ] `.claude/skills/review/SKILL.md`
-- [ ] `.claude/skills/fix-drift/SKILL.md`
-- [ ] `.claude/skills/bench/SKILL.md`
-- [ ] `.claude/skills/standards-audit/SKILL.md`
-- [ ] `.claude/skills/session-state/SKILL.md`
-- [ ] `.claude/skills/research-latest/SKILL.md`
-- [ ] `.claude/skills/release/SKILL.md`
-- [ ] `.claude/notes/README.md`
+- [x] `.claude/skills/continue/SKILL.md` + gotchas.md
+- [x] `.claude/skills/verify/SKILL.md`
+- [x] `.claude/skills/add-rule/SKILL.md` + templates + gotchas.md
+- [x] `.claude/skills/add-standard/SKILL.md` + templates + gotchas.md
+- [x] `.claude/skills/add-formatter/SKILL.md` + templates
+- [x] `.claude/skills/review/SKILL.md`
+- [x] `.claude/skills/fix-drift/SKILL.md`
+- [x] `.claude/skills/bench/SKILL.md`
+- [x] `.claude/skills/standards-audit/SKILL.md`
+- [x] `.claude/skills/session-state/SKILL.md`
+- [x] `.claude/skills/research-latest/SKILL.md`
+- [x] `.claude/skills/release/SKILL.md`
 
 ## Phase 1 — Guards and scaffolding scripts
 
