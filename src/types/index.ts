@@ -22,3 +22,51 @@ export type {
   Severity,
   Violation,
 } from "./violation.ts";
+
+export type {
+  AppliesTo,
+  EmittedViolation,
+  FileContext,
+  Language,
+  ProjectContext,
+  Rule,
+  RuleContext,
+  RuleDocs,
+  RuleScope,
+} from "./rule.ts";
+
+export type {
+  Config,
+  ConfigOverride,
+  LoadedConfig,
+  ProjectConfig,
+  RuleSetting,
+} from "./config.ts";
+
+export type {
+  Ast,
+  BaseNode,
+  CssAtRule,
+  CssComment,
+  CssDeclaration,
+  CssNode,
+  CssRule,
+  CssStylesheet,
+  HtmlAttribute,
+  HtmlComment,
+  HtmlDoctype,
+  HtmlDocument,
+  HtmlElement,
+  HtmlNode,
+  HtmlText,
+  JsxAttribute,
+  JsxAttributeValue,
+  JsxElement,
+  JsxExpression,
+  JsxNode,
+  JsxText,
+  ParseError,
+  SourcePosition,
+  SourceRange,
+  TsxModule,
+} from "./ast.ts";
