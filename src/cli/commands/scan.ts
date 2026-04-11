@@ -11,12 +11,12 @@ import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { BUILTIN_FORMATTERS } from "../../output/formatters/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
-import { wcag22 } from "../../standards/wcag22/standard.ts";
+import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
 import type { Standard } from "../../types/standard.ts";
 import type { CliOptions } from "../args.ts";
 
-const LOADED_STANDARDS: readonly Standard[] = [wcag22];
+const LOADED_STANDARDS: readonly Standard[] = BUILTIN_STANDARDS;
 
 const STANDARD_BY_ID: Readonly<Record<string, Standard>> = Object.fromEntries(
   LOADED_STANDARDS.map((s) => [s.id, s]),

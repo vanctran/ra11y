@@ -3,11 +3,11 @@
  * version, publisher, URL, and criterion counts broken down by level.
  */
 
-import { wcag22 } from "../../standards/wcag22/standard.ts";
+import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Standard } from "../../types/standard.ts";
 import type { ScanExit } from "./scan.ts";
 
-const LOADED: readonly Standard[] = [wcag22];
+const LOADED: readonly Standard[] = BUILTIN_STANDARDS;
 
 export function runListStandards(): ScanExit {
   const lines: string[] = [];

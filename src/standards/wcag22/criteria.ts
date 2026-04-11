@@ -24,7 +24,13 @@
 import type { Automatability, Criterion } from "../../types/standard.ts";
 import { wcag22Url } from "./metadata.ts";
 
-interface Row {
+/**
+ * Row shape used to build the criteria list. Exported so WCAG 2.1 can
+ * derive its own criteria by filtering this data — 2.1 is literally 2.2
+ * minus 9 criteria, and duplicating 78 rows would rot into divergent
+ * wording over time.
+ */
+export interface WcagRow {
   readonly id: string; // local ID like "1.4.3"
   readonly title: string;
   readonly level: "A" | "AA" | "AAA";
@@ -34,7 +40,8 @@ interface Row {
   readonly equivalentTo?: readonly string[];
 }
 
-const rows: readonly Row[] = [
+/** All 87 WCAG 2.2 rows — the data WCAG22_CRITERIA is built from. */
+export const WCAG22_ROWS: readonly WcagRow[] = [
   // =========================================================================
   // Principle 1 — Perceivable
   // =========================================================================
@@ -924,10 +931,10 @@ const rows: readonly Row[] = [
 ];
 
 /**
- * All 86 WCAG 2.2 success criteria as `Criterion` records, ready to register
+ * All 87 WCAG 2.2 success criteria as `Criterion` records, ready to register
  * into the standards/criteria registries.
  */
-export const WCAG22_CRITERIA: readonly Criterion[] = rows.map((row) => ({
+export const WCAG22_CRITERIA: readonly Criterion[] = WCAG22_ROWS.map((row) => ({
   id: `wcag22:${row.id}`,
   standardId: "wcag22",
   localId: row.id,
