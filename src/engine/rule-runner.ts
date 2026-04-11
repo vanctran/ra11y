@@ -55,11 +55,19 @@ export function runRulesForFile(input: RuleRunnerInput): readonly Violation[] {
     for (const emitted of sink) {
       // Respect inline disables before emission.
       if (ctx.isDisabled(emitted.location.line, rule.id)) continue;
+      // Stamp the file path onto the location. Rules don't know their
+      // own file path — the engine owns that fact. This also lets a
+      // rule emit with `filePath: ""` as a placeholder without the
+      // formatter losing the filename downstream.
+      const location = {
+        ...emitted.location,
+        filePath: input.filePath,
+      };
       out.push({
         ruleId: rule.id,
         criteria: citedCriteria,
         severity: emitted.severity,
-        location: emitted.location,
+        location,
         message: emitted.message,
         ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
         ...(emitted.fix !== undefined && { fix: emitted.fix }),
