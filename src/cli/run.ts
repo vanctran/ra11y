@@ -6,10 +6,14 @@
 import { setColorEnabled } from "../utils/ansi.ts";
 import { setLogLevel } from "../utils/logger.ts";
 import { parseCliArgs } from "./args.ts";
+import { runCertification } from "./commands/certification.ts";
+import { runChecklist } from "./commands/checklist.ts";
+import { runCoverage } from "./commands/coverage.ts";
 import { runExplain } from "./commands/explain.ts";
 import { runListRules } from "./commands/list-rules.ts";
 import { runListStandards } from "./commands/list-standards.ts";
 import { runScanCommand, type ScanExit } from "./commands/scan.ts";
+import { runVpat } from "./commands/vpat.ts";
 import { renderHelp, VERSION } from "./help.ts";
 
 export async function runCli(argv: readonly string[]): Promise<ScanExit> {
@@ -29,6 +33,14 @@ export async function runCli(argv: readonly string[]): Promise<ScanExit> {
       return runListStandards();
     case "explain":
       return runExplain(options.ruleId ?? "");
+    case "coverage":
+      return runCoverage(options);
+    case "checklist":
+      return runChecklist(options);
+    case "vpat":
+      return runVpat(options);
+    case "certification":
+      return runCertification(options);
     case "scan":
       return runScanCommand(options);
   }

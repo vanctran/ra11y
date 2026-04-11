@@ -8,7 +8,17 @@
 import { parseArgs } from "../utils/args.ts";
 
 export interface CliOptions {
-  readonly command: "scan" | "list-rules" | "list-standards" | "explain" | "help" | "version";
+  readonly command:
+    | "scan"
+    | "list-rules"
+    | "list-standards"
+    | "explain"
+    | "coverage"
+    | "checklist"
+    | "vpat"
+    | "certification"
+    | "help"
+    | "version";
   readonly positionals: readonly string[];
   readonly format: "terminal" | "plain" | "json";
   readonly standards: readonly string[];
@@ -31,6 +41,10 @@ const FLAGS = [
   "no-color",
   "list-rules",
   "list-standards",
+  "coverage",
+  "checklist",
+  "vpat",
+  "certification",
 ];
 
 const ALIASES: Readonly<Record<string, string>> = {
@@ -50,6 +64,10 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   if (opts["version"] === true) return baseOpts(parsed.positionals, "version");
   if (opts["list-rules"] === true) return baseOpts(parsed.positionals, "list-rules");
   if (opts["list-standards"] === true) return baseOpts(parsed.positionals, "list-standards");
+  if (opts["coverage"] === true) return baseOpts(parsed.positionals, "coverage", opts);
+  if (opts["checklist"] === true) return baseOpts(parsed.positionals, "checklist", opts);
+  if (opts["vpat"] === true) return baseOpts(parsed.positionals, "vpat", opts);
+  if (opts["certification"] === true) return baseOpts(parsed.positionals, "certification", opts);
 
   const explainTarget = opts["explain"];
   if (typeof explainTarget === "string") {

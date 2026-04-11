@@ -1,8 +1,14 @@
 #!/usr/bin/env bun
 /**
- * Conventional-commit validator. Reads the commit message from
- * .git/COMMIT_EDITMSG (pre-commit hook path) or HEAD (manual invocation)
- * and asserts it matches the ra11y commit convention.
+ * Conventional-commit validator. Reads the commit message from (in
+ * priority order):
+ *
+ *   1. $RA11Y_COMMIT_MESSAGE (set by .claude/hooks/pre-commit.ts when
+ *      the hook extracts the -m argument from the git-commit command)
+ *   2. .git/COMMIT_EDITMSG (a normal commit-msg hook path; note that
+ *      during PreToolUse this file is STALE — it contains the last
+ *      committed message, not the pending one)
+ *   3. `git log -1 --pretty=%B` (manual invocation after a commit)
  *
  * Rules:
  *   - Subject: <type>(<scope>)?: <subject>
@@ -89,9 +95,18 @@ console.log("✓ commit message: passes conventional format");
 process.exit(0);
 
 function readCommitMessage(): string {
+  // Priority 1: env-var override set by the pre-commit hook.
+  const override = process.env.RA11Y_COMMIT_MESSAGE;
+  if (override && override.trim().length > 0) return override;
+
+  // Priority 2: standard commit-msg path. In our PreToolUse context
+  // this is STALE (contains the last committed message, not the new
+  // one). The pre-commit hook bypasses this via the env var above.
   if (existsSync(EDIT_MSG_PATH)) {
     return readFileSync(EDIT_MSG_PATH, "utf8");
   }
+
+  // Priority 3: post-commit / manual invocation fallback.
   try {
     return execSync("git log -1 --pretty=%B", { cwd: ROOT, encoding: "utf8" });
   } catch {
