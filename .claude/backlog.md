@@ -61,13 +61,13 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 
 ## Phase 1 — Guards and scaffolding scripts
 
-- [ ] `scripts/check-zero-deps.ts`
+- [x] `scripts/check-zero-deps.ts`
 - [ ] `scripts/check-limits.ts` (function size, file size, complexity, nesting)
 - [ ] `scripts/check-cycles.ts` (tarjan's)
 - [ ] `scripts/check-dead-exports.ts`
 - [ ] `scripts/check-magic-numbers.ts`
-- [ ] `scripts/check-commit.ts` (conventional commit validator)
-- [ ] `scripts/check-network-isolation.ts`
+- [x] `scripts/check-commit.ts` (conventional commit validator)
+- [x] `scripts/check-network-isolation.ts`
 - [ ] `scripts/check-error-messages.ts`
 - [ ] `scripts/check-tsdoc.ts`
 - [ ] `scripts/check-mermaid.ts`
