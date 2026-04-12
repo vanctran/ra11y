@@ -59,10 +59,11 @@ const SERVER_INSTRUCTIONS =
   "'focus order is meaningful', 'color isn't the only cue'). Then call `checklist` to get the exact " +
   "list of manual criteria with evaluation prompts and candidate source locations. This is where ra11y " +
   "stops and runtime testing (axe-core in Playwright, manual screen-reader passes) starts.\n\n" +
-  "Scope: ra11y is a static analysis tool — it checks markup structure, ARIA usage, keyboard handlers, " +
-  "contrast, and focus indicators. It cannot verify runtime behavior (live regions, focus trapping, " +
-  "ARIA state changes). Pair it with a runtime a11y checker (axe-core via Playwright/Jest-Dom) for the " +
-  "other half.\n\n" +
+  "Scope: ra11y is intentionally static-only — it checks markup structure, ARIA usage, keyboard " +
+  "handlers, contrast, and focus indicators at the source level. It cannot and will not verify runtime " +
+  "behavior (live regions announcing, focus traps releasing on Escape, ARIA state transitions during " +
+  "interaction). Those checks need a real rendered DOM. Users typically run axe-core inside their " +
+  "existing Playwright/Jest-DOM suite to cover that half — that's orthogonal to ra11y, not a plugin.\n\n" +
   "Info findings are the whole point of using an agent: they mark cases where static analysis can't " +
   "decide on its own — a PascalCase component with onClick (does it wrap a <button>?), CSS outline: none " +
   "(does the JSX have Tailwind focus-visible:ring-*?), etc. You can resolve them by reading the source; " +
