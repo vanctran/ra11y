@@ -37,9 +37,6 @@ export interface SessionConfig {
 export class McpSession {
   readonly config: SessionConfig;
   private readonly cache: Map<string, CacheEntry> = new Map();
-  // Project configs (ra11y.config.ts) are cached by cwd so repeated scans
-  // don't re-read the file. Invalidate via clearCache() if the user edits it.
-  private readonly projectConfigs: Map<string, LoadedConfig> = new Map();
 
   constructor() {
     this.config = {
@@ -52,16 +49,16 @@ export class McpSession {
   }
 
   /**
-   * Loads and caches the project's ra11y.config.ts for a given cwd.
-   * Merges its rule settings under the session's explicit overrides —
-   * the session's configure() call always wins when it sets a key.
+   * Loads the project's ra11y.config.ts for a given cwd.
+   *
+   * Not cached: an agent that creates the config file partway through a
+   * session (after a "where do I put nativeWrappers?" answer) expects the
+   * next scan to pick it up. A cache keyed by cwd silently returned stale
+   * null results. The load is a handful of existsSync calls + one dynamic
+   * import — trivially fast compared to a scan.
    */
-  async loadProjectConfig(cwd: string): Promise<LoadedConfig> {
-    const cached = this.projectConfigs.get(cwd);
-    if (cached) return cached;
-    const loaded = await loadConfig({ cwd });
-    this.projectConfigs.set(cwd, loaded);
-    return loaded;
+  loadProjectConfig(cwd: string): Promise<LoadedConfig> {
+    return loadConfig({ cwd });
   }
 
   /**

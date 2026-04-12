@@ -243,6 +243,46 @@ describe("MCP tool: configure", () => {
     expect(fires).toBe(false);
   });
 
+  it("re-reads ra11y.config.ts on each scan (no stale cache)", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-stale-cache-"));
+    const fixture = joinPath(dir, "bad.html");
+    await writeFile(fixture, `<img src="x.png">\n`);
+
+    const scanTool = findTool("scan");
+    const session = new McpSession();
+
+    // First scan: no config file yet, configSource should be null.
+    const before = await scanTool.handler({ paths: [fixture], cwd: dir }, session);
+    const beforeData = JSON.parse(before.content[0].text) as {
+      meta: { configSource: string | null };
+      files: Array<{ findings: Array<{ ruleId: string }> }>;
+    };
+    expect(beforeData.meta.configSource).toBeNull();
+    expect(
+      beforeData.files.some((f) => f.findings.some((v) => v.ruleId === "media/alt-text-missing")),
+    ).toBe(true);
+
+    // Create the config partway through the session — the next scan must pick it up.
+    await writeFile(
+      joinPath(dir, "ra11y.config.ts"),
+      `export default { rules: { "media/alt-text-missing": "off" } };\n`,
+    );
+
+    const after = await scanTool.handler({ paths: [fixture], cwd: dir }, session);
+    const afterData = JSON.parse(after.content[0].text) as {
+      meta: { configSource: string | null };
+      files: Array<{ findings: Array<{ ruleId: string }> }>;
+    };
+    expect(afterData.meta.configSource).toContain("ra11y.config.ts");
+    expect(
+      afterData.files.some((f) => f.findings.some((v) => v.ruleId === "media/alt-text-missing")),
+    ).toBe(false);
+  });
+
   it("nativeWrappers suppresses info keyboard/handler-missing on listed components", async () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
