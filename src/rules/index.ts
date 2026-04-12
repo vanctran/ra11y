@@ -21,6 +21,7 @@ import { rule as linkNoHref } from "./navigation/link-no-href.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
+import { rule as listStructure } from "./semantics/list-structure.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
@@ -35,6 +36,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   langAttribute,
   linkDescriptiveText,
   linkNoHref,
+  listStructure,
   pageTitled,
   requiredAttrs,
   videoCaptionsMissing,
@@ -53,6 +55,7 @@ export {
   langAttribute,
   linkDescriptiveText,
   linkNoHref,
+  listStructure,
   pageTitled,
   requiredAttrs,
   videoCaptionsMissing,
