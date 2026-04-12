@@ -14,6 +14,7 @@ import { buildCoverageReport } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import {
   applyRuleSettings,
@@ -527,6 +528,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   scanTool,
   scanProjectTool,
   scanFileTool,
+  detectNativeWrappersTool,
   explainRuleTool,
   suggestFixTool,
   coverageTool,

@@ -52,18 +52,19 @@ const SERVER_NAME = "ra11y";
 const SERVER_VERSION = "0.1.0";
 
 const SERVER_INSTRUCTIONS =
-  "Start with `scan_project` for a full sweep, or `scan` for specific paths. Use `explain_rule` if a " +
-  "finding is unclear. Use `suggest_fix` to get a code patch. Re-scan with `scan_file` to verify.\n\n" +
-  "After automated findings are clean, run `coverage` to see how many criteria static analysis cannot " +
-  "evaluate (typically around half of WCAG 2.2 — things like 'live regions announce correctly', " +
-  "'focus order is meaningful', 'color isn't the only cue'). Then call `checklist` to get the exact " +
-  "list of manual criteria with evaluation prompts and candidate source locations. This is where ra11y " +
-  "stops and runtime testing (axe-core in Playwright, manual screen-reader passes) starts.\n\n" +
-  "Scope: ra11y is intentionally static-only — it checks markup structure, ARIA usage, keyboard " +
-  "handlers, contrast, and focus indicators at the source level. It cannot and will not verify runtime " +
-  "behavior (live regions announcing, focus traps releasing on Escape, ARIA state transitions during " +
-  "interaction). Those checks need a real rendered DOM. Users typically run axe-core inside their " +
-  "existing Playwright/Jest-DOM suite to cover that half — that's orthogonal to ra11y, not a plugin.\n\n" +
+  "Two entry paths depending on project state:\n\n" +
+  "  * New or noisy codebase: `scan_project` for a full sweep, then `explain_rule` / " +
+  "`suggest_fix` on findings. If the first scan floods with info-level keyboard/handler-missing " +
+  "on PascalCase components, call `detect_native_wrappers` to get a candidate list for " +
+  "`ra11y.config.ts`'s `nativeWrappers`. Re-scan with `scan_file` to verify fixes.\n" +
+  "  * Maintained codebase with clean automated scans: go straight to `coverage` to see how " +
+  "many WCAG criteria static analysis can't evaluate (typically ~half of WCAG 2.2), then " +
+  "`checklist` for the manual-review items with evaluation prompts and candidate source " +
+  "locations. That's where the real audit work is.\n\n" +
+  "Either way, automated clean ≠ WCAG compliant — ra11y stops at what source-level analysis " +
+  "can decide. Runtime checks (live regions, focus traps, ARIA state transitions) need a real " +
+  "rendered DOM and typically run via axe-core inside a Playwright/Jest-DOM suite — orthogonal " +
+  "to ra11y, not a plugin.\n\n" +
   "Info findings are the whole point of using an agent: they mark cases where static analysis can't " +
   "decide on its own — a PascalCase component with onClick (does it wrap a <button>?), CSS outline: none " +
   "(does the JSX have Tailwind focus-visible:ring-*?), etc. You can resolve them by reading the source; " +

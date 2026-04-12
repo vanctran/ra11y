@@ -74,13 +74,14 @@ describe("MCP server JSON-RPC", () => {
 
     expect(res.id).toBe(2);
     const result = res.result as { tools: Array<{ name: string }> };
-    expect(result.tools.length).toBe(9);
+    expect(result.tools.length).toBe(10);
 
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "checklist",
       "configure",
       "coverage",
+      "detect_native_wrappers",
       "explain_rule",
       "list_rules",
       "scan",

@@ -170,6 +170,69 @@ describe("MCP tool: scan_file", () => {
   });
 });
 
+describe("MCP tool: detect_native_wrappers", () => {
+  it("groups info-level keyboard/handler-missing findings by component name", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-detect-"));
+    // Two occurrences of ActionButton, one of Card, and a real <div onClick>.
+    // The tool should surface the first two as candidates and skip the div.
+    const fixture = joinPath(dir, "app.tsx");
+    await writeFile(
+      fixture,
+      [
+        "export function App() {",
+        "  return (",
+        "    <>",
+        "      <ActionButton onClick={a} />",
+        "      <ActionButton onClick={b} />",
+        "      <Card onClick={c} />",
+        "      <div onClick={d}>native</div>",
+        "    </>",
+        "  );",
+        "}",
+      ].join("\n"),
+    );
+
+    const tool = findTool("detect_native_wrappers");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text) as {
+      candidates: Array<{ component: string; occurrences: number }>;
+      nextStep: string;
+    };
+    const names = data.candidates.map((c) => c.component).sort();
+    expect(names).toEqual(["ActionButton", "Card"]);
+    const action = data.candidates.find((c) => c.component === "ActionButton");
+    expect(action?.occurrences).toBe(2);
+    expect(data.nextStep).toContain("nativeWrappers");
+  });
+
+  it("returns empty candidates when no PascalCase onClick is present", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-detect-empty-"));
+    await writeFile(joinPath(dir, "app.tsx"), "export const x = 1;");
+
+    const tool = findTool("detect_native_wrappers");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+
+    const data = JSON.parse(result.content[0].text) as {
+      candidates: unknown[];
+      nextStep: string;
+    };
+    expect(data.candidates).toEqual([]);
+    expect(data.nextStep).toContain("No PascalCase");
+  });
+});
+
 describe("MCP tool: configure", () => {
   it("sets session defaults and returns active config", async () => {
     const tool = findTool("configure");
