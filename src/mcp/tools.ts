@@ -357,7 +357,7 @@ const coverageTool: McpTool = {
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,
         criteriaManualReviewRequired: c.manualCriteria.length,
-        gaps: c.failingCriteria,
+        automatedGaps: c.failingCriteria,
         manualReview: c.manualCriteria,
         summary:
           `${c.passing}/${c.automatable} automatable criteria passing (${c.automatedPassRate}%). ` +
