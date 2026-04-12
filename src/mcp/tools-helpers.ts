@@ -8,7 +8,9 @@
 
 import { isAbsolute, resolve } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
+import { runScan } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
+import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import type { Rule } from "../types/rule.ts";
@@ -108,6 +110,118 @@ export async function parseFiles(
     if (result) parsed.push(result);
   }
   return parsed;
+}
+
+/**
+ * Extracts `{ [ruleId]: "error"|"warning"|"info"|"off" }` from the configure
+ * tool's params. Keeps the configure handler pure over its Record input
+ * while narrowing to the RuleSetting union.
+ */
+function readRuleSettings(
+  params: Record<string, unknown>,
+): Readonly<Record<string, "error" | "warning" | "info" | "off">> | undefined {
+  const raw = (params as { rules?: unknown }).rules;
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const out: Record<string, "error" | "warning" | "info" | "off"> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === "error" || value === "warning" || value === "info" || value === "off") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/** Builds the opts object for McpSession.configure from the configure tool's params. */
+export function buildConfigureOpts(params: Record<string, unknown>): {
+  standard?: string;
+  level?: "A" | "AA" | "AAA";
+  exclude?: readonly string[];
+  rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
+} {
+  const opts: {
+    standard?: string;
+    level?: "A" | "AA" | "AAA";
+    exclude?: readonly string[];
+    rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
+  } = {};
+  const standard = strParam(params, "standard");
+  const level = strParam(params, "level") as "A" | "AA" | "AAA" | undefined;
+  const exclude = strArrayParam(params, "exclude");
+  const rules = readRuleSettings(params);
+  if (standard !== undefined) opts.standard = standard;
+  if (level !== undefined) opts.level = level;
+  if (exclude !== undefined) opts.exclude = exclude;
+  if (rules !== undefined) opts.rules = rules;
+  return opts;
+}
+
+// ─── Shared scan+format ─────────────────────────────────────────────────────
+
+/** Shape of the scan output used by both `scan` and `scan_project`. */
+export interface ScanFormatted {
+  readonly pass: boolean;
+  readonly plan: Record<string, unknown>;
+  readonly files: readonly { readonly path: string; readonly findings: unknown[] }[];
+  readonly meta: Record<string, unknown>;
+}
+
+/**
+ * Runs the scanner against the pre-parsed files and formats the result
+ * into the agent-facing shape (plan, files, meta). Factored out so both
+ * `scan` and `scan_project` share identical semantics.
+ */
+export function runScanAndFormat(
+  files: readonly ParsedFile[],
+  session: McpSession,
+  enabled: readonly string[],
+  minSeverity: string | undefined,
+): {
+  readonly formatted: ScanFormatted;
+  readonly durationMs: number;
+  readonly filesScanned: number;
+} {
+  const { result } = runScan({
+    standards: BUILTIN_STANDARDS,
+    rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
+    enabled,
+    files,
+    finders: BUILTIN_CANDIDATE_FINDERS,
+  });
+
+  const filtered = filterBySeverity(result.violations, minSeverity);
+  const grouped = groupViolationsByFile(filtered);
+  const fileEntries = [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, violations]) => ({
+      path,
+      findings: violations.map(formatFinding),
+    }));
+
+  const violations = filtered.filter((v) => v.severity !== "info");
+  const notes = filtered.filter((v) => v.severity === "info");
+  const autoFixable = violations.filter(
+    (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
+  ).length;
+
+  const formatted: ScanFormatted = {
+    pass: violations.length === 0,
+    plan: {
+      totalFindings: filtered.length,
+      violations: violations.length,
+      notes: notes.length,
+      autoFixable,
+      reviewNeeded: violations.length - autoFixable,
+      summary: buildPlanSummary(violations.length, notes.length, autoFixable),
+    },
+    files: fileEntries,
+    meta: {
+      filesScanned: result.filesScanned,
+      durationMs: Math.round(result.durationMs),
+      standards: [...result.enabledStandards].sort(),
+    },
+  };
+
+  return { formatted, durationMs: result.durationMs, filesScanned: result.filesScanned };
 }
 
 /**

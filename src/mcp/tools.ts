@@ -16,19 +16,19 @@ import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import {
   applyRuleSettings,
-  buildPlanSummary,
+  buildConfigureOpts,
   buildSourceContext,
   errorResult,
   filterBySeverity,
   findRule,
   findStandard,
   formatFinding,
-  groupViolationsByFile,
   type McpTool,
   numParam,
   parseFiles,
   resolveLevel,
   resolveStandards,
+  runScanAndFormat,
   strArrayParam,
   strParam,
   textResult,
@@ -86,53 +86,86 @@ const scanTool: McpTool = {
     const files = await parseFiles(paths, session, strParam(params, "cwd"));
     if (files.length === 0) {
       return textResult({
+        pass: true,
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
-        meta: { filesScanned: 0 },
+        meta: { filesScanned: 0, scannedPaths: paths },
       });
     }
 
-    const { result } = runScan({
-      standards: BUILTIN_STANDARDS,
-      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
-      enabled: standards,
+    const { formatted } = runScanAndFormat(
       files,
-      finders: BUILTIN_CANDIDATE_FINDERS,
-    });
-
-    const filtered = filterBySeverity(result.violations, strParam(params, "minSeverity"));
-    const grouped = groupViolationsByFile(filtered);
-    const fileEntries = [...grouped.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([path, violations]) => ({
-        path,
-        findings: violations.map(formatFinding),
-      }));
-
-    // Info-severity findings are review items, not auto-fixable violations.
-    const violations = filtered.filter((v) => v.severity !== "info");
-    const notes = filtered.filter((v) => v.severity === "info");
-    const autoFixable = violations.filter(
-      (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
-    ).length;
-    const pass = violations.length === 0;
+      session,
+      standards,
+      strParam(params, "minSeverity"),
+    );
 
     return textResult({
-      pass,
-      plan: {
-        totalFindings: filtered.length,
-        violations: violations.length,
-        notes: notes.length,
-        autoFixable,
-        reviewNeeded: violations.length - autoFixable,
-        summary: buildPlanSummary(violations.length, notes.length, autoFixable),
+      ...formatted,
+      meta: { ...formatted.meta, scannedPaths: paths },
+    });
+  },
+};
+
+// ─── Tool: scan_project ─────────────────────────────────────────────────────
+
+const scanProjectTool: McpTool = {
+  def: {
+    name: "scan_project",
+    description:
+      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files). Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description:
+            "Root directory to scan. Defaults to the current working directory. Pass your repo root to scan every parseable file.",
+        },
+        standard: {
+          type: "string",
+          description: "Standard ID (e.g. wcag22). Defaults to session config.",
+        },
+        level: {
+          type: "string",
+          enum: ["A", "AA", "AAA"],
+          description: "Conformance level. Defaults to session config.",
+        },
+        minSeverity: {
+          type: "string",
+          enum: ["error", "warning", "info"],
+          description: "Minimum severity to include. Default: 'info' (all).",
+        },
       },
-      files: fileEntries,
-      meta: {
-        filesScanned: result.filesScanned,
-        durationMs: Math.round(result.durationMs),
-        standards: [...result.enabledStandards].sort(),
-      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  async handler(params, session) {
+    const root = strParam(params, "cwd") ?? process.cwd();
+    const standards = resolveStandards(strParam(params, "standard"), session);
+    const files = await parseFiles([root], session, root);
+
+    if (files.length === 0) {
+      return textResult({
+        pass: true,
+        scannedRoot: root,
+        plan: { totalFindings: 0, summary: "No parseable files found." },
+        files: [],
+        meta: { filesScanned: 0, scannedRoot: root },
+      });
+    }
+
+    const { formatted } = runScanAndFormat(
+      files,
+      session,
+      standards,
+      strParam(params, "minSeverity"),
+    );
+
+    return textResult({
+      ...formatted,
+      scannedRoot: root,
+      meta: { ...formatted.meta, scannedRoot: root },
     });
   },
 };
@@ -513,61 +546,21 @@ const configureTool: McpTool = {
     annotations: { idempotentHint: true },
   },
   handler(params, session) {
-    const standard = strParam(params, "standard");
-    const level = strParam(params, "level") as "A" | "AA" | "AAA" | undefined;
-    const exclude = strArrayParam(params, "exclude");
-    const rules = readRuleSettings(params);
-
-    const opts: {
-      standard?: string;
-      level?: "A" | "AA" | "AAA";
-      exclude?: readonly string[];
-      rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
-    } = {};
-    if (standard !== undefined) opts.standard = standard;
-    if (level !== undefined) opts.level = level;
-    if (exclude !== undefined) opts.exclude = exclude;
-    if (rules !== undefined) opts.rules = rules;
-
-    const config = session.configure(opts);
-
+    const config = session.configure(buildConfigureOpts(params));
     const ruleCount = BUILTIN_RULES.filter((r) =>
       r.satisfies.some((s) => s.startsWith(`${config.standard}:`)),
     ).length;
-
     return textResult({
-      active: {
-        standard: config.standard,
-        level: config.level,
-        ruleCount,
-      },
+      active: { standard: config.standard, level: config.level, ruleCount },
     });
   },
 };
-
-/**
- * Extracts `{ [ruleId]: "error"|"warning"|"info"|"off" }` from the configure
- * tool's params. Keeps the `configure` handler pure over its Record input
- * while narrowing to the RuleSetting union.
- */
-function readRuleSettings(
-  params: Record<string, unknown>,
-): Readonly<Record<string, "error" | "warning" | "info" | "off">> | undefined {
-  const raw = (params as { rules?: unknown }).rules;
-  if (typeof raw !== "object" || raw === null) return undefined;
-  const out: Record<string, "error" | "warning" | "info" | "off"> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (value === "error" || value === "warning" || value === "info" || value === "off") {
-      out[key] = value;
-    }
-  }
-  return out;
-}
 
 // ─── Export ─────────────────────────────────────────────────────────────────
 
 export const MCP_TOOLS: readonly McpTool[] = [
   scanTool,
+  scanProjectTool,
   scanFileTool,
   explainRuleTool,
   suggestFixTool,

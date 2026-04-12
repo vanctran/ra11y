@@ -130,6 +130,25 @@ describe("MCP tool: scan", () => {
   });
 });
 
+describe("MCP tool: scan_project", () => {
+  it("scans the provided cwd as a single root and reports scannedRoot", async () => {
+    const tool = findTool("scan_project");
+    const session = new McpSession();
+    const fixtureDir = BAD_ALT.replace(/\/[^/]+$/, "");
+    const result = await tool.handler({ cwd: fixtureDir }, session);
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text) as {
+      scannedRoot: string;
+      plan: { totalFindings: number };
+      meta: { filesScanned: number; scannedRoot: string };
+    };
+    expect(data.scannedRoot).toBe(fixtureDir);
+    expect(data.meta.scannedRoot).toBe(fixtureDir);
+    expect(data.meta.filesScanned).toBeGreaterThan(0);
+  });
+});
+
 describe("MCP tool: scan_file", () => {
   it("scans a single file", async () => {
     const tool = findTool("scan_file");
