@@ -8,7 +8,7 @@
 
 **`ra11y`** (pronounced "rally") is an accessibility scanner for JSX/TSX, HTML, and CSS. It ships with four accessibility standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. It produces VPAT-ready compliance reports and a certification readiness scorecard alongside line-level violations, so the same tool that catches the bug in your precommit also tells your legal team where you stand on ADA conformance.
 
-> **Status: pre-release (v0.0.x).** The engine, plugin API, and 17 rules are in place. The v0.1.0 milestone targets ~30 rules and a first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
+> **Status: pre-release (v0.0.x).** The engine, plugin API, 29 rules, and four built-in standards are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
 ## Why ra11y
 
@@ -78,7 +78,7 @@ ra11y --vpat                        # Generate VPAT-ready report
 ra11y --certification               # Generate readiness scorecard
 ra11y --checklist                   # Manual review checklist
 ra11y --explain contrast/minimum    # Rule detail, spec quote, examples
-ra11y --list-rules                  # All 17 built-in rules
+ra11y --list-rules                  # All 29 built-in rules
 ra11y --list-standards              # All 4 built-in standards
 ```
 

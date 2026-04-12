@@ -13,6 +13,8 @@ All notable changes to ra11y are documented in this file. The format is based on
 - Network-isolation invariant enforced by `scripts/check-network-isolation.ts` — `src/` cannot reference `fetch`, `node:http`, `node:https`, `node:net`, or `node:dns`.
 - File/function/nesting-depth guard enforced by `scripts/check-limits.ts` (500/120/5).
 - Import-cycle guard enforced by `scripts/check-cycles.ts` (Tarjan SCC).
+- Build pipeline via `scripts/build.ts` (Bun.build for ESM JS + tsc for .d.ts with `rewriteRelativeImportExtensions`).
+- Benchmark suite via `scripts/bench.ts` enforcing CLAUDE.md §13 budgets (cold start 200ms, 10/100/1000 files in 100/500/3000ms). Current headroom: 1000 files in ~70ms, cold start ~25ms.
 
 #### Standards
 - **WCAG 2.2** — all 87 success criteria with automatability classification.
@@ -20,24 +22,36 @@ All notable changes to ra11y are documented in this file. The format is based on
 - **Section 508 (2017 refresh)** — 38 criteria equivalent to WCAG 2.0 A+AA.
 - **EN 301 549 v3.2.1** — 50 criteria equivalent to WCAG 2.1 A+AA.
 
-#### Rules (17 built-in)
+#### Rules (29 built-in)
+- `aria/hidden-focus` (wcag22:4.1.2) — flags aria-hidden on focusable elements (natively or via tabindex)
 - `aria/invalid-role` (wcag22:4.1.2) — flags role values outside the WAI-ARIA 1.2 dictionary, suggests the nearest valid role via Levenshtein distance
 - `aria/required-attrs` (wcag22:4.1.2) — flags ARIA roles missing their required state attributes (checkbox/aria-checked, slider/aria-valuenow, etc.)
+- `aria/valid-attr` (wcag22:4.1.2) — flags aria-* attributes not in the WAI-ARIA 1.2 states/properties dictionary
 - `contrast/minimum` (wcag22:1.4.3) — WCAG contrast ratio check via CSS parser, with large-text heuristic (≥18pt or ≥14pt bold)
+- `document/iframe-title` (wcag22:4.1.2, 2.4.1) — flags iframe elements without a title or aria-label
 - `document/lang-attribute` (wcag22:3.1.1) — flags HTML root without a lang attribute
+- `document/meta-refresh` (wcag22:2.2.1, 2.2.4, 3.2.5) — flags meta http-equiv=refresh auto-redirects/reloads
 - `document/page-titled` (wcag22:2.4.2) — flags documents without a meaningful `<title>`
 - `document/viewport-zoom` (wcag22:1.4.4, 1.4.10) — flags `<meta viewport>` that disables pinch-to-zoom
+- `focus/tabindex-positive` (wcag22:2.4.3) — flags positive tabindex values (focus-order anti-pattern)
 - `forms/autocomplete-missing` (wcag22:1.3.5) — flags personal-info inputs without an autocomplete token
+- `forms/fieldset-legend` (wcag22:1.3.1, 3.3.2) — flags fieldset without a legend (or aria-label substitute)
+- `forms/label-for-id-mismatch` (wcag22:1.3.1) — flags label[for=X] where no element has id=X
 - `forms/labels-required` (wcag22:1.3.1, 3.3.2, 4.1.2) — flags form controls without an accessible label
+- `keyboard/accesskey-duplicate` (wcag22:2.1.1) — flags multiple elements sharing an accesskey value (case-insensitive)
 - `keyboard/handler-missing` (wcag22:2.1.1) — flags clickable elements without a keyboard handler
 - `media/alt-text-missing` (wcag22:1.1.1) — flags images without a text alternative, with filename-derived suggestions
+- `media/autoplay-sound` (wcag22:1.4.2) — flags audio/video autoplay without muted or controls
 - `media/video-captions-missing` (wcag22:1.2.2) — flags `<video>` without a `<track kind="captions">`
 - `navigation/link-descriptive-text` (wcag22:2.4.4) — flags link text like "click here" / "read more"
 - `navigation/link-no-href` (wcag22:2.1.1, 4.1.2) — flags `<a onClick>` without an href
 - `parsing/duplicate-id` (wcag22:4.1.1 historical) — flags duplicate `id` attributes in a document
+- `parsing/html-has-lang` (wcag22:3.1.2) — flags syntactically invalid BCP 47 lang values
 - `semantics/button-name` (wcag22:4.1.2) — flags buttons without an accessible name
 - `semantics/heading-hierarchy` (wcag22:1.3.1) — flags skipped heading levels and missing `<h1>`
 - `semantics/list-structure` (wcag22:1.3.1) — flags `<li>` outside `<ul>/<ol>/<menu>` and list containers with non-`<li>` children
+- `semantics/nested-interactive` (wcag22:4.1.2) — flags interactive elements nested in other interactive elements
+- `semantics/table-headers` (wcag22:1.3.1) — flags data tables without `<th>` header cells
 
 #### Parsers (zero-dep, in-house)
 - TSX/JSX parser — character-driven, preserves PascalCase components, recognizes HTML5 void elements.
@@ -87,12 +101,11 @@ All notable changes to ra11y are documented in this file. The format is based on
 - [`docs/cli.md`](./docs/cli.md) — full flag reference and exit-code table
 - [`docs/configuration.md`](./docs/configuration.md) — config file spec, rule settings, per-directory overrides, precedence rules
 - [`docs/architecture.md`](./docs/architecture.md) — three-layer model, equivalence closure, rule execution lifecycle, plugin boundaries
+- [`docs/kb/patterns/writing-a-rule.md`](./docs/kb/patterns/writing-a-rule.md) — canonical rule-authoring workflow for agents
+- [`docs/kb/architecture/rule-engine.md`](./docs/kb/architecture/rule-engine.md) — engine internals deep dive
 
 ### Target for v0.1.0
 
-- ~30 automated rules covering every "auto" and "partial" criterion under WCAG 2.1 A+AA and WCAG 2.2 A+AA additions (currently 17)
 - First npm release (`npm publish --provenance`)
-- VPAT 2.5 template output and certification readiness scorecard
-- Manual review checklist generator for non-automatable criteria
-- Performance benchmark suite with CI-enforced budgets
-- docs/kb/ knowledge base seed content for agent retrieval
+- Manual review checklist generator for non-automatable criteria (stub exists, needs data)
+- Additional rule coverage beyond the current 29 (stretch — v0.1.0 target of 30 is effectively reached)
