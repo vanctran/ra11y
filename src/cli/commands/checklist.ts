@@ -48,7 +48,7 @@ export async function runChecklist(options: CliOptions): Promise<ScanExit> {
   const violationsOutput = formatter.format(result, report);
 
   // Build and render the manual review checklist with candidate locations.
-  const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);
+  const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, options.level);
   const checklist = buildChecklist(coverage, BUILTIN_STANDARDS, report.candidates ?? []);
   const markdown = renderChecklistMarkdown(checklist);
 

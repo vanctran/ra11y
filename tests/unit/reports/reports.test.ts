@@ -191,3 +191,43 @@ describe("buildCertificationScorecard + renderCertificationMarkdown", () => {
     expect(md).toContain("Next steps");
   });
 });
+
+describe("buildCoverageReport level filtering", () => {
+  it("--level AA excludes AAA criteria from manual review", () => {
+    const coverage = buildCoverageReport(RESULT, BUILTIN_STANDARDS, "AA");
+    const wcag22 = coverage.find((c) => c.standardId === "wcag22");
+    expect(wcag22).toBeDefined();
+    for (const criterionId of wcag22?.manualCriteria ?? []) {
+      // Look up the criterion in the standard to check its level
+      const std = BUILTIN_STANDARDS.find((s) => s.id === "wcag22");
+      const criterion = std?.criteria.find((c) => c.id === criterionId);
+      expect(criterion?.level).not.toBe("AAA");
+    }
+  });
+
+  it("--level AA produces fewer manual criteria than --level AAA", () => {
+    const aa = buildCoverageReport(RESULT, BUILTIN_STANDARDS, "AA");
+    const aaa = buildCoverageReport(RESULT, BUILTIN_STANDARDS, "AAA");
+    const aaManual = aa.find((c) => c.standardId === "wcag22")?.manualCriteria.length ?? 0;
+    const aaaManual = aaa.find((c) => c.standardId === "wcag22")?.manualCriteria.length ?? 0;
+    expect(aaManual).toBeLessThan(aaaManual);
+  });
+
+  it("--level A excludes both AA and AAA criteria", () => {
+    const coverage = buildCoverageReport(RESULT, BUILTIN_STANDARDS, "A");
+    const wcag22 = coverage.find((c) => c.standardId === "wcag22");
+    for (const criterionId of wcag22?.manualCriteria ?? []) {
+      const std = BUILTIN_STANDARDS.find((s) => s.id === "wcag22");
+      const criterion = std?.criteria.find((c) => c.id === criterionId);
+      expect(criterion?.level).toBe("A");
+    }
+  });
+
+  it("omitting level defaults to including all levels", () => {
+    const all = buildCoverageReport(RESULT, BUILTIN_STANDARDS);
+    const aaa = buildCoverageReport(RESULT, BUILTIN_STANDARDS, "AAA");
+    const allManual = all.find((c) => c.standardId === "wcag22")?.manualCriteria.length ?? 0;
+    const aaaManual = aaa.find((c) => c.standardId === "wcag22")?.manualCriteria.length ?? 0;
+    expect(allManual).toBe(aaaManual);
+  });
+});

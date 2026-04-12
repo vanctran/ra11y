@@ -124,7 +124,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   // When --checklist is passed, append the manual review checklist
   // after the violations report so the user gets one complete document.
   if (options.command === "checklist") {
-    const coverage = buildCoverageReport(result, LOADED_STANDARDS);
+    const coverage = buildCoverageReport(result, LOADED_STANDARDS, options.level);
     const checklist = buildChecklist(coverage, LOADED_STANDARDS, report.candidates ?? []);
     const markdown = renderChecklistMarkdown(checklist);
     return { stdout: `${output}\n\n---\n\n${markdown}`, stderr: "", exitCode };

@@ -36,16 +36,30 @@ export interface PerStandardCoverage {
 export function buildCoverageReport(
   result: ScanResult,
   loadedStandards: readonly Standard[],
+  level?: "A" | "AA" | "AAA",
 ): readonly PerStandardCoverage[] {
   const enabledSet = new Set(result.enabledStandards);
   const failingByStandard = indexFailingCriteria(result);
+  const maxLevel = levelRank(level ?? "AAA");
 
   const out: PerStandardCoverage[] = [];
   for (const standard of loadedStandards) {
     if (!enabledSet.has(standard.id)) continue;
-    out.push(buildOne(standard, failingByStandard.get(standard.id) ?? new Set()));
+    const filtered = filterByLevel(standard, maxLevel);
+    out.push(buildOne(filtered, failingByStandard.get(standard.id) ?? new Set()));
   }
   return out;
+}
+
+const LEVEL_RANKS: Readonly<Record<string, number>> = { A: 1, AA: 2, AAA: 3, base: 1 };
+
+function levelRank(level: string): number {
+  return LEVEL_RANKS[level] ?? 3;
+}
+
+function filterByLevel(standard: Standard, maxLevel: number): Standard {
+  const filtered = standard.criteria.filter((c) => levelRank(c.level) <= maxLevel);
+  return { ...standard, criteria: filtered };
 }
 
 function buildOne(standard: Standard, failingSet: ReadonlySet<string>): PerStandardCoverage {
