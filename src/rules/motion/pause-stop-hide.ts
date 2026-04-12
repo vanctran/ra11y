@@ -90,6 +90,10 @@ function checkHtmlMarquee(doc: HtmlDocument, emit: Emit): void {
 
 function checkCssAnimations(stylesheet: CssStylesheet, emit: Emit): void {
   const guardedRules = collectReducedMotionRules(stylesheet);
+  // Universal override: `@media (prefers-reduced-motion: reduce) { *, *::before, *::after { … } }`
+  // is the canonical pattern recommended by MDN. When present, every selector in
+  // the stylesheet is already covered — no need to flag individual animations.
+  if (hasUniversalReducedMotionOverride(guardedRules)) return;
   for (const cssRule of walkCssRules(stylesheet)) {
     if (guardedRules.has(cssRule)) continue;
     for (const decl of cssRule.declarations) {
@@ -131,6 +135,51 @@ function collectReducedMotionRules(stylesheet: CssStylesheet): ReadonlySet<CssRu
 function isReducedMotionQuery(atRule: CssAtRule): boolean {
   if (atRule.name.toLowerCase() !== "media") return false;
   return /prefers-reduced-motion/i.test(atRule.params);
+}
+
+/**
+ * Recognizes the canonical universal override:
+ *   @media (prefers-reduced-motion: reduce) {
+ *     *, *::before, *::after {
+ *       animation-duration: 0.01ms !important;
+ *       transition-duration: 0.01ms !important;
+ *     }
+ *   }
+ * When this pattern is present, every selector in the stylesheet is covered.
+ */
+function hasUniversalReducedMotionOverride(guardedRules: ReadonlySet<CssRule>): boolean {
+  for (const rule of guardedRules) {
+    if (!isUniversalSelector(rule.selector)) continue;
+    if (disablesAnimationOrTransition(rule)) return true;
+  }
+  return false;
+}
+
+/** True if the selector targets every element — `*`, `*, *::before, *::after`, etc. */
+function isUniversalSelector(selector: string): boolean {
+  const parts = selector.split(",").map((s) => s.trim());
+  if (parts.length === 0) return false;
+  return parts.every((p) => p === "*" || p === "*::before" || p === "*::after" || p === "*:root");
+}
+
+/** True if the rule zeroes out animation-duration or transition-duration. */
+function disablesAnimationOrTransition(rule: CssRule): boolean {
+  for (const decl of rule.declarations) {
+    const prop = decl.property.toLowerCase();
+    if (!ANIMATION_PROPERTIES.has(prop)) continue;
+    if (isNoneValue(decl.value) || isNearZeroDuration(decl.value)) return true;
+  }
+  return false;
+}
+
+/** MDN's canonical value is 0.01ms; accept anything effectively instantaneous. */
+function isNearZeroDuration(value: string): boolean {
+  const trimmed = value
+    .trim()
+    .toLowerCase()
+    .replace(/!important$/i, "")
+    .trim();
+  return /^0*\.?0*\d*ms$/.test(trimmed) && Number.parseFloat(trimmed) < 1;
 }
 
 function* walkAtRuleChildren(atRule: CssAtRule): Iterable<CssRule> {

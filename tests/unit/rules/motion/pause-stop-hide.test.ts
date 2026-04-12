@@ -109,6 +109,47 @@ describe("rule motion/pause-stop-hide", () => {
       const v = runRule(rule, `<marquee>News</marquee>`, { filePath: "index.html" });
       expect(v[0]?.suggestion).toContain("prefers-reduced-motion");
     });
+
+    it("recognizes the canonical MDN universal override and suppresses per-selector findings", () => {
+      const src = [
+        `.spinner { animation: spin 1s infinite; }`,
+        `.fade { transition: opacity 0.3s; }`,
+        `@media (prefers-reduced-motion: reduce) {`,
+        `  *, *::before, *::after {`,
+        `    animation-duration: 0.01ms !important;`,
+        `    transition-duration: 0.01ms !important;`,
+        `  }`,
+        `}`,
+      ].join("\n");
+      const v = runRule(rule, src, { filePath: "styles.css" });
+      expect(v).toHaveLength(0);
+    });
+
+    it("universal override with animation: none also counts as a full guard", () => {
+      const src = [
+        `.spinner { animation: spin 1s infinite; }`,
+        `@media (prefers-reduced-motion: reduce) {`,
+        `  * { animation: none; transition: none; }`,
+        `}`,
+      ].join("\n");
+      const v = runRule(rule, src, { filePath: "styles.css" });
+      expect(v).toHaveLength(0);
+    });
+
+    it("non-universal rule inside prefers-reduced-motion does not act as global guard", () => {
+      const src = [
+        `.spinner { animation: spin 1s infinite; }`,
+        `.other { animation: bounce 2s; }`,
+        `@media (prefers-reduced-motion: reduce) {`,
+        `  .spinner { animation: none; }`,
+        `}`,
+      ].join("\n");
+      const v = runRule(rule, src, { filePath: "styles.css" });
+      // Both .spinner (outside-query copy) and .other still fire — a specific
+      // per-selector guard doesn't cover the whole stylesheet. Only a universal
+      // *, *::before, *::after override does.
+      expect(v.length).toBe(2);
+    });
   });
 
   it("cites wcag22:2.2.2 and wcag21:2.2.2", () => {
