@@ -111,6 +111,7 @@ const scanTool: McpTool = {
         ...formatted.meta,
         scannedPaths: paths,
         configSource: projectConfig.sourcePath,
+        configSearchedFrom: cwd,
       },
     });
   },
@@ -471,7 +472,7 @@ const configureTool: McpTool = {
   def: {
     name: "configure",
     description:
-      'Set session defaults for standard, level, excludes, per-rule severity, and native-wrapper components so subsequent tool calls don\'t repeat these parameters. Prefer `nativeWrappers` over `rules: { "keyboard/handler-missing": "off" }` when you just want to quiet a known-safe design-system component — it keeps the rule firing on real `<div onClick>` bugs. For persistent project-level config, put the same fields in `ra11y.config.ts`.',
+      'Set session defaults for standard, level, excludes, per-rule severity, and native-wrapper components so subsequent tool calls don\'t repeat these parameters. Prefer `nativeWrappers` over `rules: { "keyboard/handler-missing": "off" }` when you just want to quiet a known-safe design-system component — it keeps the rule firing on real `<div onClick>` bugs.\n\nFor persistent project-level config, drop a `ra11y.config.ts` at the project root with a default export:\n\n  export default {\n    nativeWrappers: ["Button", "ActionButton"],\n    rules: { "media/alt-text-missing": "warning" },\n    exclude: ["packages/legacy/**"],\n  };\n\nThe scan response surfaces `meta.configSource` (path of the file that was loaded, or null if none was found) and `meta.configSearchedFrom` (the directory the loader walked up from). If `configSource` is null, make sure you pass `cwd` so the loader walks up from your project root, not the MCP server\'s spawn directory.',
     inputSchema: {
       type: "object",
       properties: {

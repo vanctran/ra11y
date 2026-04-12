@@ -19,7 +19,7 @@ export const scanProjectTool: McpTool = {
   def: {
     name: "scan_project",
     description:
-      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files). Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage. Keep the default minSeverity: 'info' — info findings are things the tool flagged but couldn't verify alone (component wrappers, cross-file references); you should read the source to resolve them. Filtering them out upfront will miss real issues.",
+      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files) and the project's `.gitignore`. Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage. Keep the default minSeverity: 'info' — info findings are things the tool flagged but couldn't verify alone (component wrappers, cross-file references); you should read the source to resolve them. Filtering them out upfront will miss real issues.\n\nAlways pass `cwd` set to your project root — the loader uses it to discover `ra11y.config.ts` and the project's `.gitignore`. Omitting `cwd` falls back to the MCP server's spawn directory, which usually isn't the project root; `meta.configSource` will be null in that case.",
     inputSchema: {
       type: "object",
       properties: {
@@ -80,7 +80,12 @@ export const scanProjectTool: McpTool = {
       ...formatted,
       scannedRoot: root,
       configSource: projectConfig.sourcePath,
-      meta: { ...formatted.meta, scannedRoot: root, configSource: projectConfig.sourcePath },
+      meta: {
+        ...formatted.meta,
+        scannedRoot: root,
+        configSource: projectConfig.sourcePath,
+        configSearchedFrom: root,
+      },
     });
   },
 };
