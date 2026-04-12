@@ -29,6 +29,7 @@ import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts"
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as linkNoHref } from "./navigation/link-no-href.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
+import { rule as htmlHasLang } from "./parsing/html-has-lang.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
@@ -47,6 +48,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   handlerMissing,
   headingHierarchy,
   hiddenFocus,
+  htmlHasLang,
   iframeTitle,
   invalidRole,
   labelForIdMismatch,
@@ -78,6 +80,7 @@ export {
   handlerMissing,
   headingHierarchy,
   hiddenFocus,
+  htmlHasLang,
   iframeTitle,
   invalidRole,
   labelForIdMismatch,
