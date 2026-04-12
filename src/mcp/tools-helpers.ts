@@ -160,6 +160,17 @@ export function ms(since: number): string {
   return (performance.now() - since).toFixed(0);
 }
 
+/** Tally parseable files by extension — surfaces coverage gaps at a glance. */
+function countByExtension(files: readonly ParsedFile[]): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const f of files) {
+    const dot = f.filePath.lastIndexOf(".");
+    const ext = dot === -1 ? "(no-ext)" : f.filePath.slice(dot);
+    counts.set(ext, (counts.get(ext) ?? 0) + 1);
+  }
+  return Object.fromEntries([...counts.entries()].sort(([a], [b]) => a.localeCompare(b)));
+}
+
 // ─── Shared scan+format ─────────────────────────────────────────────────────
 
 /** Shape of the scan output used by both `scan` and `scan_project`. */
@@ -227,6 +238,10 @@ export function runScanAndFormat(
     files: fileEntries,
     meta: {
       filesScanned: result.filesScanned,
+      // Per-extension counts build confidence that the scan actually saw
+      // the file types agents expect (e.g., "0 .css scanned" is a red flag
+      // if the repo has CSS). Cheap to compute, sorted for determinism.
+      filesByExtension: countByExtension(files),
       // Count of rules that actually ran after "off" filtering. Without
       // this, a "pass: true" with no findings is indistinguishable from
       // "no applicable rules matched" — agents need to know whether the
@@ -234,13 +249,7 @@ export function runScanAndFormat(
       rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
-      ...(wrappers.length > 0
-        ? {
-            activeNativeWrappers: [...wrappers],
-            nativeWrappersNote:
-              "Info findings on these PascalCase components were suppressed. The list is additive across configure() calls and your ra11y.config.ts.",
-          }
-        : {}),
+      ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
     },
   };
 

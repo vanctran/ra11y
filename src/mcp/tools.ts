@@ -305,35 +305,34 @@ const coverageTool: McpTool = {
   def: {
     name: "coverage",
     description:
-      "Check overall compliance coverage — passing/failing/manual counts per standard. Use after fixing violations to see if you're done.",
+      "Check overall compliance coverage — passing/failing/manual counts per standard. Use after fixing violations to see if you're done. Call it without `paths` to cover the whole project (honors the same cwd + .gitignore + ra11y.config.ts as scan_project); pass `paths` only to narrow the question to a specific subtree.",
     inputSchema: {
       type: "object",
       properties: {
         paths: {
           type: "array",
           items: { type: "string" },
-          description: "File or directory paths to scan.",
+          description:
+            "Optional. File or directory paths to scan. Omit for a project-wide coverage report rooted at `cwd`.",
         },
         standard: { type: "string", description: "Standard ID." },
         level: { type: "string", enum: ["A", "AA", "AAA"], description: "Conformance level." },
         cwd: {
           type: "string",
-          description: "Base directory for resolving relative paths.",
+          description:
+            "Base directory. Used as the scan root when `paths` is omitted, and for resolving relative `paths` when given.",
         },
       },
-      required: ["paths"],
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   async handler(params, session) {
-    const paths = strArrayParam(params, "paths");
-    if (!paths || paths.length === 0) {
-      return errorResult("paths must be a non-empty array.");
-    }
+    const cwd = strParam(params, "cwd") ?? process.cwd();
+    const paths = strArrayParam(params, "paths") ?? [cwd];
 
     const standards = resolveStandards(strParam(params, "standard"), session);
     const level = resolveLevel(strParam(params, "level"), session);
-    const files = await parseFiles(paths, session, strParam(params, "cwd"));
+    const files = await parseFiles(paths, session, cwd);
 
     const { result } = runScan({
       standards: BUILTIN_STANDARDS,
