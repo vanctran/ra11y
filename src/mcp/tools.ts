@@ -343,15 +343,28 @@ const coverageTool: McpTool = {
     });
 
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
-    const entries = coverage.map((c) => ({
-      standardId: c.standardId,
-      score: c.automatedPassRate,
-      criteriaTotal: c.total,
-      criteriaCovered: c.automatable,
-      criteriaPassing: c.passing,
-      gaps: c.failingCriteria,
-      manualReview: c.manualCriteria,
-    }));
+    const entries = coverage.map((c) => {
+      // Two different ratios agents routinely confuse. Surface both with
+      // self-documenting names so a "100" headline can't imply full WCAG
+      // conformance when 26/56 criteria aren't even automatable.
+      const automatedPassRate = c.automatedPassRate; // passing / automatable
+      const overallAutomatedCoverage = c.total > 0 ? Math.round((c.passing / c.total) * 100) : 0;
+      return {
+        standardId: c.standardId,
+        automatedPassRate,
+        overallAutomatedCoverage,
+        criteriaTotal: c.total,
+        criteriaAutomatable: c.automatable,
+        criteriaAutomatablePassing: c.passing,
+        criteriaManualReviewRequired: c.manualCriteria.length,
+        gaps: c.failingCriteria,
+        manualReview: c.manualCriteria,
+        summary:
+          `${c.passing}/${c.automatable} automatable criteria passing (${automatedPassRate}%). ` +
+          `${c.manualCriteria.length} criteria require manual review — call the 'checklist' tool for evaluation prompts. ` +
+          `Overall automated coverage of ${c.standardId}: ${overallAutomatedCoverage}% of ${c.total} criteria.`,
+      };
+    });
 
     return textResult(entries.length === 1 ? entries[0] : entries);
   },

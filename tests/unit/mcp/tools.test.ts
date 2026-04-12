@@ -335,12 +335,23 @@ describe("MCP tool: coverage", () => {
     expect(result.isError).toBeUndefined();
     const data = JSON.parse(result.content[0].text) as {
       standardId: string;
-      score: number;
+      automatedPassRate: number;
+      overallAutomatedCoverage: number;
       criteriaTotal: number;
+      criteriaAutomatable: number;
+      criteriaManualReviewRequired: number;
+      summary: string;
     };
     expect(data.standardId).toBe("wcag22");
-    expect(typeof data.score).toBe("number");
+    expect(typeof data.automatedPassRate).toBe("number");
     expect(data.criteriaTotal).toBeGreaterThan(0);
+    // overallAutomatedCoverage factors in manual criteria, so it can't
+    // exceed (automatable / total) * 100.
+    expect(data.overallAutomatedCoverage).toBeLessThanOrEqual(
+      Math.round((data.criteriaAutomatable / data.criteriaTotal) * 100),
+    );
+    expect(data.criteriaManualReviewRequired).toBeGreaterThan(0);
+    expect(data.summary).toContain("manual review");
   });
 });
 
