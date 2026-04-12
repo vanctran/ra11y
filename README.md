@@ -8,7 +8,7 @@
 
 **`ra11y`** (pronounced "rally") is an accessibility scanner for JSX/TSX, HTML, and CSS. It ships with four accessibility standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. It produces VPAT-ready compliance reports and a certification readiness scorecard alongside line-level violations, so the same tool that catches the bug in your precommit also tells your legal team where you stand on ADA conformance.
 
-> **Status: early development (v0.0.x).** Phase 0 — autonomous Claude Code infrastructure — is in place. Phase 1 — the first rule, first standard, and end-to-end scan — is next. See [`.claude/backlog.md`](./.claude/backlog.md) for the current roadmap.
+> **Status: pre-release (v0.0.x).** The engine, plugin API, and 17 rules are in place. The v0.1.0 milestone targets ~30 rules and a first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
 ## Why ra11y
 
@@ -68,19 +68,21 @@ npx ra11y src/
 
 ```sh
 ra11y --changed                     # Scan only git-staged files (precommit)
+ra11y --since main                  # Scan files changed since a git ref
 ra11y --standard wcag22,section508  # Run multiple standards at once
 ra11y --level AA                    # Enforce conformance level
-ra11y --format sarif --output out.sarif  # GitHub code scanning
+ra11y --format sarif                # GitHub code scanning output
+ra11y --baseline=create              # Freeze existing violations
 ra11y --coverage                    # Per-standard coverage summary
 ra11y --vpat                        # Generate VPAT-ready report
 ra11y --certification               # Generate readiness scorecard
 ra11y --checklist                   # Manual review checklist
 ra11y --explain contrast/minimum    # Rule detail, spec quote, examples
-ra11y --list-standards              # What's loaded
-ra11y --init                        # Scaffold ra11y.config.ts
+ra11y --list-rules                  # All 17 built-in rules
+ra11y --list-standards              # All 4 built-in standards
 ```
 
-Full CLI reference: [`docs/cli.md`](./docs/cli.md).
+Full CLI reference: [`docs/cli.md`](./docs/cli.md). Architecture: [`docs/architecture.md`](./docs/architecture.md).
 
 ## Configure
 
@@ -104,7 +106,13 @@ export default defineConfig({
 
 ## Precommit integration
 
-With [lefthook](https://github.com/evilmartians/lefthook), [husky](https://github.com/typicode/husky), or [pre-commit](https://pre-commit.com):
+Scan only files staged in git, and fail the commit on any error:
+
+```sh
+ra11y --changed --fail-on error
+```
+
+With [lefthook](https://github.com/evilmartians/lefthook):
 
 ```yaml
 # lefthook.yml
@@ -114,7 +122,14 @@ pre-commit:
       run: bunx ra11y --changed --fail-on error
 ```
 
-Examples for each tool: [`examples/`](./examples).
+Or use ra11y's baseline mode to adopt on an existing codebase without fixing everything up front:
+
+```sh
+ra11y --baseline=create    # freeze existing violations
+ra11y --baseline=check     # only new violations fail the scan
+```
+
+Examples for CI and precommit tools: [`examples/`](./examples).
 
 ## Plugin API
 
@@ -149,7 +164,7 @@ export default defineRule({
 });
 ```
 
-Full plugin guide: [`docs/plugins/authoring-a-rule.md`](./docs/plugins/authoring-a-rule.md) and [`docs/plugins/authoring-a-standard.md`](./docs/plugins/authoring-a-standard.md).
+End-to-end templates: [`examples/plugin-rule/`](./examples/plugin-rule/) and [`examples/plugin-standard/`](./examples/plugin-standard/). Architecture deep-dive: [`docs/architecture.md`](./docs/architecture.md).
 
 ## Contributing
 
