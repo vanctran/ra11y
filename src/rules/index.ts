@@ -28,6 +28,7 @@ import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
+import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
@@ -46,6 +47,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   linkNoHref,
   listStructure,
   metaRefresh,
+  nestedInteractive,
   pageTitled,
   requiredAttrs,
   tabindexPositive,
@@ -71,6 +73,7 @@ export {
   linkNoHref,
   listStructure,
   metaRefresh,
+  nestedInteractive,
   pageTitled,
   requiredAttrs,
   tabindexPositive,
