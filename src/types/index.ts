@@ -41,7 +41,12 @@ export type {
   ProjectConfig,
   RuleSetting,
 } from "./config.ts";
-
+export type {
+  CandidateFinder,
+  CandidateFinderDocs,
+  CandidateFinderScope,
+  ReviewCandidate,
+} from "./review.ts";
 export type {
   AppliesTo,
   EmittedViolation,

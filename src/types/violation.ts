@@ -56,6 +56,8 @@ export interface ScanResult {
 export interface ReportData {
   readonly coverage: readonly CoverageEntry[];
   readonly manualReviewNeeded: readonly string[];
+  /** Review candidates grouped by criterion ID (populated when finders are run). */
+  readonly candidates?: readonly import("./review.ts").ReviewCandidate[];
 }
 
 export interface CoverageEntry {

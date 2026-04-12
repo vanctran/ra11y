@@ -21,6 +21,7 @@
  */
 
 import type { Config } from "../types/config.ts";
+import type { CandidateFinder } from "../types/review.ts";
 import type { Rule } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
 import type { ReportData, ScanResult } from "../types/violation.ts";
@@ -100,4 +101,23 @@ export function defineFormatter<T extends Formatter>(formatter: T): T {
  */
 export function defineConfig(config: Config): Config {
   return config;
+}
+
+/**
+ * Defines a candidate finder for assisted manual review. Returns the
+ * same object, typed.
+ *
+ * @example
+ * ```ts
+ * export const finder = defineCandidateFinder({
+ *   id: "review/media-alternatives",
+ *   criterionIds: ["wcag22:1.2.1", "wcag22:1.2.3", "wcag22:1.2.5"],
+ *   scope: "node",
+ *   docs: { …metadata… },
+ *   find(ctx) { … },
+ * });
+ * ```
+ */
+export function defineCandidateFinder<T extends CandidateFinder>(finder: T): T {
+  return finder;
 }

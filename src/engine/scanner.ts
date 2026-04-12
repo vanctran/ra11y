@@ -20,9 +20,11 @@
  */
 
 import type { Ast } from "../types/ast.ts";
+import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
 import type { Rule } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
 import type { ReportData, ScanResult, Violation } from "../types/violation.ts";
+import { runFindersForFile } from "./candidate-runner.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
@@ -44,6 +46,8 @@ export interface ScanInputs {
   readonly enabled: readonly string[];
   readonly files: readonly ParsedFile[];
   readonly isTTY?: boolean;
+  /** Optional candidate finders for assisted manual review. */
+  readonly finders?: readonly CandidateFinder[];
 }
 
 export interface ScanProducts {
@@ -88,8 +92,9 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     });
     for (const v of perFile) allViolations.push(v);
   }
-
   allViolations.sort(compareViolations);
+
+  const allCandidates = collectCandidatesFromFiles(inputs, enabled, standardsRegistry);
 
   const durationMs = Math.max(0, now() - start);
 
@@ -101,7 +106,12 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     isTTY: inputs.isTTY ?? false,
   };
 
-  const report: ReportData = buildReportData(allViolations, standardsRegistry, enabled);
+  const report: ReportData = buildReportData(
+    allViolations,
+    standardsRegistry,
+    enabled,
+    allCandidates,
+  );
 
   return { result, report };
 }
@@ -120,6 +130,7 @@ function buildReportData(
   violations: readonly Violation[],
   standards: StandardsRegistry,
   enabled: ReadonlySet<string>,
+  candidates: readonly ReviewCandidate[],
 ): ReportData {
   const coverage = [];
   const manualReviewNeeded: string[] = [];
@@ -134,7 +145,62 @@ function buildReportData(
 
   // Deduplicate manualReviewNeeded in case multiple standards surface the same criterion.
   const dedupedManual = [...new Set(manualReviewNeeded)].sort();
-  return { coverage, manualReviewNeeded: dedupedManual };
+  return {
+    coverage,
+    manualReviewNeeded: dedupedManual,
+    ...(candidates.length > 0 ? { candidates } : {}),
+  };
+}
+
+/** Runs candidate finders across all files if any are provided. */
+function collectCandidatesFromFiles(
+  inputs: ScanInputs,
+  enabled: ReadonlySet<string>,
+  standards: StandardsRegistry,
+): readonly ReviewCandidate[] {
+  const finders = inputs.finders ?? [];
+  if (finders.length === 0) return [];
+  const activeCriterionIds = collectManualCriterionIds(standards, enabled);
+  const out: ReviewCandidate[] = [];
+  for (const file of inputs.files) {
+    const perFile = runFindersForFile({
+      filePath: file.filePath,
+      source: file.source,
+      ast: file.ast,
+      enabledStandards: enabled,
+      disableMap: file.disableMap ?? new Map(),
+      finders,
+      activeCriterionIds,
+    });
+    for (const c of perFile) out.push(c);
+  }
+  out.sort(compareCandidates);
+  return out;
+}
+
+/** Collects the set of manual criterion IDs across enabled standards. */
+function collectManualCriterionIds(
+  standards: StandardsRegistry,
+  enabled: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const standardId of enabled) {
+    const standard = standards.get(standardId);
+    if (!standard) continue;
+    for (const criterion of standard.criteria) {
+      if (criterion.automatable === "manual") ids.add(criterion.id);
+    }
+  }
+  return ids;
+}
+
+function compareCandidates(a: ReviewCandidate, b: ReviewCandidate): number {
+  if (a.location.filePath !== b.location.filePath) {
+    return a.location.filePath < b.location.filePath ? -1 : 1;
+  }
+  if (a.location.line !== b.location.line) return a.location.line - b.location.line;
+  if (a.criterionId !== b.criterionId) return a.criterionId < b.criterionId ? -1 : 1;
+  return 0;
 }
 
 /** Returns the set of criterion IDs under `standardId` that have at least one violation. */
