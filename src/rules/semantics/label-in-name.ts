@@ -22,8 +22,7 @@ import { defineRule } from "../../api/plugin.ts";
 import {
   getHtmlAttribute,
   getJsxAttribute,
-  htmlTextContent,
-  jsxTextContent,
+  getJsxAttributeString,
   walkHtmlElements,
   walkJsxElements,
 } from "../../engine/ast-helpers.ts";
@@ -87,11 +86,28 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
     if (!isInteractiveHtml(element)) continue;
     const ariaLabel = getHtmlAttribute(element, "aria-label");
     if (ariaLabel === null || ariaLabel.trim().length === 0) continue;
-    const visibleText = htmlTextContent(element).trim();
+    const visibleText = visibleTextHtml(element).trim();
     if (visibleText.length === 0) continue;
     if (containsSubstring(ariaLabel, visibleText)) continue;
     emitViolation(element.tagName, visibleText, ariaLabel, element.loc.start, emit);
   }
+}
+
+/** Text content excluding aria-hidden subtrees — the text a sighted user sees. */
+function visibleTextHtml(element: HtmlElement): string {
+  const chunks: string[] = [];
+  for (const child of element.children) visitHtmlVisible(child, chunks);
+  return chunks.join("").trim();
+}
+
+function visitHtmlVisible(node: HtmlElement["children"][number], chunks: string[]): void {
+  if (node.kind === "HtmlText") {
+    chunks.push(node.value);
+    return;
+  }
+  if (node.kind !== "HtmlElement") return;
+  if (getHtmlAttribute(node, "aria-hidden") === "true") return;
+  for (const child of node.children) visitHtmlVisible(child, chunks);
 }
 
 function isInteractiveHtml(element: HtmlElement): boolean {
@@ -106,11 +122,28 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     if (!ariaAttr?.value || ariaAttr.value.kind !== "StringLiteral") continue;
     const ariaLabel = ariaAttr.value.value.trim();
     if (ariaLabel.length === 0) continue;
-    const visibleText = jsxTextContent(element).trim();
+    const visibleText = visibleTextJsx(element).trim();
     if (visibleText.length === 0) continue;
     if (containsSubstring(ariaLabel, visibleText)) continue;
     emitViolation(element.tagName, visibleText, ariaLabel, element.loc.start, emit);
   }
+}
+
+/** Text content excluding aria-hidden subtrees in JSX. */
+function visibleTextJsx(element: JsxElement): string {
+  const chunks: string[] = [];
+  for (const child of element.children) visitJsxVisible(child, chunks);
+  return chunks.join("").trim();
+}
+
+function visitJsxVisible(node: JsxElement["children"][number], chunks: string[]): void {
+  if (node.kind === "JsxText") {
+    chunks.push(node.value);
+    return;
+  }
+  if (node.kind !== "JsxElement") return;
+  if (getJsxAttributeString(node, "aria-hidden") === "true") return;
+  for (const child of node.children) visitJsxVisible(child, chunks);
 }
 
 function isInteractiveJsx(element: JsxElement): boolean {

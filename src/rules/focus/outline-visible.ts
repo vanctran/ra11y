@@ -39,6 +39,12 @@ const REPLACEMENT_INDICATORS: readonly string[] = [
   "background-color",
   "background",
   "text-decoration",
+  // Tailwind ring utilities compile to these CSS custom properties:
+  "--tw-ring-offset-shadow",
+  "--tw-ring-shadow",
+  "--tw-ring-color",
+  "--tw-ring-offset-width",
+  "ring-color",
 ];
 
 /** Regex matching :focus or :focus-visible pseudo-classes in a selector. */
@@ -76,7 +82,7 @@ export const rule = defineRule({
 });
 
 type Emit = (v: {
-  severity: "error";
+  severity: "error" | "warning" | "info";
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
@@ -87,8 +93,14 @@ function checkCssRule(cssRule: CssRule, emit: Emit): void {
   if (!removesOutline(cssRule)) return;
   if (hasReplacementIndicator(cssRule)) return;
 
+  // Class-scoped selectors (e.g., .composer-scrollbar:focus-visible)
+  // are likely part of a design system that provides replacement focus
+  // indicators via composed utility classes (Tailwind ring-*, etc.)
+  // in a different rule. Downgrade to info since we can't trace
+  // cross-rule composition statically.
+  const severity = isScopedSelector(cssRule.selector) ? "info" : "error";
   emit({
-    severity: "error",
+    severity,
     location: {
       filePath: "",
       line: cssRule.loc.start.line,
@@ -97,6 +109,13 @@ function checkCssRule(cssRule: CssRule, emit: Emit): void {
     message: buildMessage(cssRule.selector),
     suggestion: buildSuggestion(cssRule.selector),
   });
+}
+
+/** True if the selector targets a specific class, id, or attribute — not a bare element. */
+function isScopedSelector(selector: string): boolean {
+  // Strip the :focus/:focus-visible pseudo to examine the base selector.
+  const base = selector.replace(/:focus(-visible)?\b/g, "").trim();
+  return base.includes(".") || base.includes("#") || base.includes("[");
 }
 
 function hasFocusPseudo(selector: string): boolean {
