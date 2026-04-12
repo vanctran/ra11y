@@ -31,6 +31,7 @@ import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
 import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
+import { rule as tableHeaders } from "./semantics/table-headers.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
@@ -55,6 +56,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   pageTitled,
   requiredAttrs,
   tabindexPositive,
+  tableHeaders,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
@@ -83,6 +85,7 @@ export {
   pageTitled,
   requiredAttrs,
   tabindexPositive,
+  tableHeaders,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
