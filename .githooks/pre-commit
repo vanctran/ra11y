@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# ra11y pre-commit hook
+#
+# Runs the precommit verification suite against the current state of the
+# working tree before allowing a commit. This hook is tracked in the repo
+# via core.hooksPath=.githooks (set by `bun run setup`) so every clone
+# gets the same gate.
+#
+# The hook runs `bun run verify:precommit` — a focused fast-path that
+# skips the full build and bench but exercises:
+#   - tsc --noEmit (type check)
+#   - biome check (lint + format)
+#   - bun test (full test suite)
+#   - scripts/check-zero-deps.ts (the invariant)
+#
+# Never --no-verify. If a check fails, fix the underlying issue.
+# See CLAUDE.md section 11 for commit discipline.
+
+set -e
+
+# Only run if we're in a git repo with a working tree.
+if ! git rev-parse --show-toplevel > /dev/null 2>&1; then
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Bail cleanly if bun isn't on PATH — point the user at the install docs.
+if ! command -v bun > /dev/null 2>&1; then
+  echo "ra11y pre-commit: bun is not on PATH. Install from https://bun.sh and retry." >&2
+  exit 1
+fi
+
+echo "ra11y pre-commit: running verify:precommit..."
+if ! bun run verify:precommit; then
+  echo "" >&2
+  echo "ra11y pre-commit: one or more checks failed — fix them before committing." >&2
+  echo "                  (do NOT use --no-verify; see CLAUDE.md section 11)" >&2
+  exit 1
+fi
+
+echo "ra11y pre-commit: ok"

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ra11y commit-msg hook
+#
+# Validates the proposed commit message against ra11y's conventional-commit
+# format (scripts/check-commit.ts). Receives the commit-msg file path as $1
+# — that file contains the message the user just typed (or -m argument) and
+# is where git reads the final message from.
+#
+# See CLAUDE.md section 11 for the format rules.
+
+set -e
+
+MSG_FILE="$1"
+
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  # Nothing to validate — git didn't pass the usual path. Let it through.
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if ! command -v bun > /dev/null 2>&1; then
+  echo "ra11y commit-msg: bun is not on PATH. Install from https://bun.sh and retry." >&2
+  exit 1
+fi
+
+# Pass the message file path as argv so check-commit.ts reads the PENDING
+# message, not the stale .git/COMMIT_EDITMSG from the last commit.
+if ! bun scripts/check-commit.ts "$MSG_FILE"; then
+  echo "" >&2
+  echo "ra11y commit-msg: commit message does not follow the conventional format." >&2
+  echo "                  Fix the subject line and retry." >&2
+  exit 1
+fi

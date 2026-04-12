@@ -49,27 +49,22 @@ const violations: string[] = [];
 
 // Parse `<type>(<scope>)?: <subject>` or `<type>(<scope>)?!: <subject>` for breaking.
 const match = /^(\w+)(?:\(([^)]+)\))?(!)?:\s+(.+)$/.exec(firstLine);
-if (!match) {
-  violations.push(
-    `subject does not match '<type>(<scope>)?: <subject>' — got: '${firstLine}'`,
-  );
-} else {
+if (match) {
   const [, type, scope, , subject] = match;
-  if (!type || !ALLOWED_TYPES.has(type)) {
-    violations.push(
-      `type '${type}' is not in the allowed set (${[...ALLOWED_TYPES].join(", ")})`,
-    );
+  if (!(type && ALLOWED_TYPES.has(type))) {
+    violations.push(`type '${type}' is not in the allowed set (${[...ALLOWED_TYPES].join(", ")})`);
   }
   if (type && SCOPE_REQUIRED.has(type) && !scope) {
     violations.push(`type '${type}' requires a scope like '${type}(engine): …'`);
   }
-  if (subject && subject.length > MAX_SUBJECT_LENGTH - (type?.length ?? 0) - (scope?.length ?? 0) - 4) {
+  if (
+    subject &&
+    subject.length > MAX_SUBJECT_LENGTH - (type?.length ?? 0) - (scope?.length ?? 0) - 4
+  ) {
     // Approximate — real budget is full line ≤ 72, not subject alone.
   }
   if (firstLine.length > MAX_SUBJECT_LENGTH) {
-    violations.push(
-      `subject line is ${firstLine.length} characters — max ${MAX_SUBJECT_LENGTH}`,
-    );
+    violations.push(`subject line is ${firstLine.length} characters — max ${MAX_SUBJECT_LENGTH}`);
   }
   if (subject && /^[A-Z]/.test(subject)) {
     violations.push(`subject starts with an uppercase letter — should start lowercase`);
@@ -77,15 +72,15 @@ if (!match) {
   if (subject?.endsWith(".")) {
     violations.push(`subject ends with a period — should not`);
   }
+} else {
+  violations.push(`subject does not match '<type>(<scope>)?: <subject>' — got: '${firstLine}'`);
 }
 
 if (violations.length > 0) {
   console.error(`✗ commit message does not follow ra11y convention:\n`);
   console.error(`  message: ${firstLine}\n`);
   for (const v of violations) console.error(`  - ${v}`);
-  console.error(
-    `\n  format: <type>(<scope>): <subject>`,
-  );
+  console.error(`\n  format: <type>(<scope>): <subject>`);
   console.error(`  types:  ${[...ALLOWED_TYPES].join(", ")}`);
   console.error(`  example: feat(rules): add contrast/minimum for wcag22:1.4.3`);
   process.exit(1);
@@ -95,18 +90,28 @@ console.log("✓ commit message: passes conventional format");
 process.exit(0);
 
 function readCommitMessage(): string {
-  // Priority 1: env-var override set by the pre-commit hook.
+  // Priority 1: explicit file path passed as argv[2]. The real git
+  // commit-msg hook at .githooks/commit-msg invokes us this way —
+  // git passes the pending message file path as $1.
+  const argvPath = process.argv[2];
+  if (argvPath && existsSync(argvPath)) {
+    return readFileSync(argvPath, "utf8");
+  }
+
+  // Priority 2: env-var override set by the Claude Code pre-commit hook.
+  // The hook extracts -m "..." from the git-commit command line and
+  // passes it through so the check sees the NEW message.
   const override = process.env.RA11Y_COMMIT_MESSAGE;
   if (override && override.trim().length > 0) return override;
 
-  // Priority 2: standard commit-msg path. In our PreToolUse context
-  // this is STALE (contains the last committed message, not the new
-  // one). The pre-commit hook bypasses this via the env var above.
+  // Priority 3: standard .git/COMMIT_EDITMSG path. STALE in the
+  // PreToolUse context (contains the last committed message, not the
+  // new one) — the hooks above bypass it when possible.
   if (existsSync(EDIT_MSG_PATH)) {
     return readFileSync(EDIT_MSG_PATH, "utf8");
   }
 
-  // Priority 3: post-commit / manual invocation fallback.
+  // Priority 4: post-commit / manual invocation fallback.
   try {
     return execSync("git log -1 --pretty=%B", { cwd: ROOT, encoding: "utf8" });
   } catch {

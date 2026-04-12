@@ -7,9 +7,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { block, ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { PreToolUseInput } from "./lib/types.ts";
 
 interface Check {
@@ -64,7 +64,7 @@ const failures: string[] = [];
 for (const check of checks) {
   if (!check.required()) continue;
   const env: NodeJS.ProcessEnv = { ...process.env };
-  if (commitMessage) env["RA11Y_COMMIT_MESSAGE"] = commitMessage;
+  if (commitMessage) env.RA11Y_COMMIT_MESSAGE = commitMessage;
   const result = spawnSync(check.command, {
     cwd: projectDir,
     shell: true,
