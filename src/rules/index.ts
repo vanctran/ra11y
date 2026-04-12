@@ -23,6 +23,7 @@ import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
+import { rule as autoplaySound } from "./media/autoplay-sound.ts";
 import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as linkNoHref } from "./navigation/link-no-href.ts";
@@ -36,6 +37,7 @@ import { rule as tableHeaders } from "./semantics/table-headers.ts";
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
   autocompleteMissing,
+  autoplaySound,
   buttonName,
   contrastMinimum,
   duplicateId,
@@ -65,6 +67,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
 export {
   altTextMissing,
   autocompleteMissing,
+  autoplaySound,
   buttonName,
   contrastMinimum,
   duplicateId,
