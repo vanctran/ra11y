@@ -19,7 +19,7 @@
  *   - "Supports" — zero violations on an automatable criterion
  */
 
-import type { Standard, Criterion } from "../types/standard.ts";
+import type { Criterion, Standard } from "../types/standard.ts";
 import type { ScanResult, Violation } from "../types/violation.ts";
 
 export type Conformance =
@@ -177,9 +177,7 @@ function buildEntry(criterion: Criterion, violations: readonly Violation[]): Vpa
   };
 }
 
-function indexViolationsByCriterion(
-  violations: readonly Violation[],
-): Map<string, Violation[]> {
+function indexViolationsByCriterion(violations: readonly Violation[]): Map<string, Violation[]> {
   const map = new Map<string, Violation[]>();
   for (const v of violations) {
     for (const criterionId of v.criteria) {

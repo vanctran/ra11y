@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { type ParsedFile, runScan } from "../../src/engine/scanner.ts";
 import { parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
-import { runScan, type ParsedFile } from "../../src/engine/scanner.ts";
 import { BUILTIN_RULES } from "../../src/rules/index.ts";
 import { wcag22 } from "../../src/standards/wcag22/standard.ts";
 import type { Ast } from "../../src/types/ast.ts";
@@ -56,9 +56,7 @@ describe("end-to-end: alt-text-missing against real WCAG 2.2 pipeline", () => {
       enabled: ["wcag22"],
       files,
     });
-    const altViolations = result.violations.filter(
-      (v) => v.ruleId === "media/alt-text-missing",
-    );
+    const altViolations = result.violations.filter((v) => v.ruleId === "media/alt-text-missing");
     expect(altViolations.length).toBeGreaterThanOrEqual(3);
     for (const v of altViolations) {
       expect(v.criteria).toContain("wcag22:1.1.1");
@@ -67,10 +65,7 @@ describe("end-to-end: alt-text-missing against real WCAG 2.2 pipeline", () => {
   });
 
   it("sorts violations deterministically by (file, line, column, ruleId)", () => {
-    const files = [
-      loadFixture("bad", "jsx-img-no-alt.tsx"),
-      loadFixture("bad", "img-no-alt.html"),
-    ];
+    const files = [loadFixture("bad", "jsx-img-no-alt.tsx"), loadFixture("bad", "img-no-alt.html")];
     const { result } = runScan({
       standards: [wcag22],
       rules: BUILTIN_RULES,

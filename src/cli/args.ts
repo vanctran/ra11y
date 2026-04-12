@@ -32,6 +32,43 @@ export interface CliOptions {
   readonly quiet: boolean;
 }
 
+/**
+ * Typed view of the raw parseArgs output. Bridges the generic
+ * parser (Record<string, ...>) to dot-accessible named fields so
+ * TS's `noPropertyAccessFromIndexSignature` and Biome's
+ * `useLiteralKeys` rules both apply cleanly. Keys with hyphens
+ * (`no-color`, `list-rules`, etc.) can't be TypeScript identifiers,
+ * so we camelCase them here even though the CLI wire name has a
+ * hyphen — the translation happens once at the boundary.
+ */
+interface RawCliOptions {
+  // Every field is `T | undefined` rather than just `T?` because
+  // translate() builds the object programmatically with defaults,
+  // and `exactOptionalPropertyTypes: true` forbids assigning
+  // explicit undefined to a `?:` field. The semantics are the
+  // same for readers — dot access either returns the value or
+  // undefined — but the assignment side is explicit.
+  readonly help: boolean | undefined;
+  readonly version: boolean | undefined;
+  readonly verbose: boolean | undefined;
+  readonly quiet: boolean | undefined;
+  readonly debug: boolean | undefined;
+  readonly noColor: boolean | undefined;
+  readonly listRules: boolean | undefined;
+  readonly listStandards: boolean | undefined;
+  readonly coverage: boolean | undefined;
+  readonly checklist: boolean | undefined;
+  readonly vpat: boolean | undefined;
+  readonly certification: boolean | undefined;
+  readonly explain: string | undefined;
+  readonly format: string | undefined;
+  readonly standard: string | undefined;
+  readonly level: string | undefined;
+  readonly failOn: string | undefined;
+  readonly exclude: string | readonly string[] | undefined;
+  readonly ignore: string | readonly string[] | undefined;
+}
+
 const FLAGS = [
   "help",
   "version",
@@ -58,58 +95,110 @@ const REPEATABLE = ["exclude", "ignore"];
 
 export function parseCliArgs(argv: readonly string[]): CliOptions {
   const parsed = parseArgs(argv, { flags: FLAGS, aliases: ALIASES, repeatable: REPEATABLE });
-  const opts = parsed.options;
+  const opts = translate(parsed.options);
 
-  if (opts["help"] === true) return baseOpts(parsed.positionals, "help");
-  if (opts["version"] === true) return baseOpts(parsed.positionals, "version");
-  if (opts["list-rules"] === true) return baseOpts(parsed.positionals, "list-rules");
-  if (opts["list-standards"] === true) return baseOpts(parsed.positionals, "list-standards");
-  if (opts["coverage"] === true) return baseOpts(parsed.positionals, "coverage", opts);
-  if (opts["checklist"] === true) return baseOpts(parsed.positionals, "checklist", opts);
-  if (opts["vpat"] === true) return baseOpts(parsed.positionals, "vpat", opts);
-  if (opts["certification"] === true) return baseOpts(parsed.positionals, "certification", opts);
+  if (opts.help === true) return baseOpts(parsed.positionals, "help");
+  if (opts.version === true) return baseOpts(parsed.positionals, "version");
+  if (opts.listRules === true) return baseOpts(parsed.positionals, "list-rules");
+  if (opts.listStandards === true) return baseOpts(parsed.positionals, "list-standards");
+  if (opts.coverage === true) return baseOpts(parsed.positionals, "coverage", opts);
+  if (opts.checklist === true) return baseOpts(parsed.positionals, "checklist", opts);
+  if (opts.vpat === true) return baseOpts(parsed.positionals, "vpat", opts);
+  if (opts.certification === true) return baseOpts(parsed.positionals, "certification", opts);
 
-  const explainTarget = opts["explain"];
-  if (typeof explainTarget === "string") {
-    return { ...baseOpts(parsed.positionals, "explain"), ruleId: explainTarget };
+  if (typeof opts.explain === "string") {
+    return { ...baseOpts(parsed.positionals, "explain"), ruleId: opts.explain };
   }
 
   return baseOpts(parsed.positionals, "scan", opts);
 }
 
-function baseOpts(
-  positionals: readonly string[],
-  command: CliOptions["command"],
-  raw: Readonly<Record<string, string | boolean | string[]>> = {},
-): CliOptions {
-  const format = normalizeFormat(raw["format"]);
-  const standards = normalizeStandards(raw["standard"]);
-  const level = normalizeLevel(raw["level"]);
-  const failOn = normalizeFailOn(raw["fail-on"]);
-  const exclude = normalizeList(raw["exclude"]).concat(normalizeList(raw["ignore"]));
-
+/**
+ * Translates the generic argv map into a typed RawCliOptions. The
+ * mapping is 1:1 except hyphenated keys become camelCase and
+ * `fail-on` collapses into `failOn`. The resulting object is a
+ * plain interface (not an index signature) so downstream dot
+ * access is both correct and lint-clean.
+ */
+function translate(
+  raw: Readonly<Record<string, string | boolean | readonly string[]>>,
+): RawCliOptions {
   return {
-    command,
-    positionals,
-    format,
-    standards,
-    level,
-    exclude,
-    failOn,
-    noColor: raw["no-color"] === true,
-    verbose: raw["verbose"] === true,
-    debug: raw["debug"] === true,
-    quiet: raw["quiet"] === true,
+    help: boolAt(raw, "help"),
+    version: boolAt(raw, "version"),
+    verbose: boolAt(raw, "verbose"),
+    quiet: boolAt(raw, "quiet"),
+    debug: boolAt(raw, "debug"),
+    noColor: boolAt(raw, "no-color"),
+    listRules: boolAt(raw, "list-rules"),
+    listStandards: boolAt(raw, "list-standards"),
+    coverage: boolAt(raw, "coverage"),
+    checklist: boolAt(raw, "checklist"),
+    vpat: boolAt(raw, "vpat"),
+    certification: boolAt(raw, "certification"),
+    explain: stringAt(raw, "explain"),
+    format: stringAt(raw, "format"),
+    standard: stringAt(raw, "standard"),
+    level: stringAt(raw, "level"),
+    failOn: stringAt(raw, "fail-on"),
+    exclude: listAt(raw, "exclude"),
+    ignore: listAt(raw, "ignore"),
   };
 }
 
-function normalizeFormat(value: unknown): CliOptions["format"] {
+function boolAt(
+  raw: Readonly<Record<string, string | boolean | readonly string[]>>,
+  key: string,
+): boolean | undefined {
+  const v = raw[key];
+  return typeof v === "boolean" ? v : undefined;
+}
+
+function stringAt(
+  raw: Readonly<Record<string, string | boolean | readonly string[]>>,
+  key: string,
+): string | undefined {
+  const v = raw[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+function listAt(
+  raw: Readonly<Record<string, string | boolean | readonly string[]>>,
+  key: string,
+): string | readonly string[] | undefined {
+  const v = raw[key];
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+function baseOpts(
+  positionals: readonly string[],
+  command: CliOptions["command"],
+  raw?: RawCliOptions,
+): CliOptions {
+  return {
+    command,
+    positionals,
+    format: normalizeFormat(raw?.format),
+    standards: normalizeStandards(raw?.standard),
+    level: normalizeLevel(raw?.level),
+    exclude: normalizeList(raw?.exclude).concat(normalizeList(raw?.ignore)),
+    failOn: normalizeFailOn(raw?.failOn),
+    noColor: raw?.noColor === true,
+    verbose: raw?.verbose === true,
+    debug: raw?.debug === true,
+    quiet: raw?.quiet === true,
+  };
+}
+
+function normalizeFormat(value: string | undefined): CliOptions["format"] {
   if (value === "plain") return "plain";
   if (value === "json") return "json";
   return "terminal";
 }
 
-function normalizeStandards(value: unknown): readonly string[] {
+function normalizeStandards(value: string | undefined): readonly string[] {
   if (typeof value !== "string") return ["wcag22"];
   return value
     .split(",")
@@ -117,18 +206,18 @@ function normalizeStandards(value: unknown): readonly string[] {
     .filter((s) => s.length > 0);
 }
 
-function normalizeLevel(value: unknown): CliOptions["level"] {
+function normalizeLevel(value: string | undefined): CliOptions["level"] {
   if (value === "A") return "A";
   if (value === "AAA") return "AAA";
   return "AA";
 }
 
-function normalizeFailOn(value: unknown): CliOptions["failOn"] {
+function normalizeFailOn(value: string | undefined): CliOptions["failOn"] {
   if (value === "warning" || value === "any" || value === "never") return value;
   return "error";
 }
 
-function normalizeList(value: unknown): readonly string[] {
+function normalizeList(value: string | readonly string[] | undefined): readonly string[] {
   if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
   if (typeof value === "string") return [value];
   return [];

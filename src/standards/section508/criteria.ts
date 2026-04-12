@@ -55,8 +55,7 @@ const NEW_IN_WCAG22: ReadonlySet<string> = new Set([
 
 const WCAG_20_AA_ROWS = WCAG22_ROWS.filter(
   (row) =>
-    !NEW_IN_WCAG22.has(row.id) &&
-    !NEW_IN_WCAG21.has(row.id) &&
+    !(NEW_IN_WCAG22.has(row.id) || NEW_IN_WCAG21.has(row.id)) &&
     (row.level === "A" || row.level === "AA"),
 );
 

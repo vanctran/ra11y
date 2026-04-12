@@ -4,6 +4,7 @@
  * Bun runtime.
  */
 
+import type { Dirent } from "node:fs";
 import { readFile as nodeReadFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -54,7 +55,10 @@ async function walk(
   filter: (filePath: string) => boolean,
   ignore: ReadonlySet<string>,
 ): Promise<void> {
-  let entries;
+  // `readdir(..., { withFileTypes: true })` returns Dirent<string>[]; the
+  // generic Awaited<ReturnType<typeof readdir>> picks up the default buffer
+  // overload, which has the wrong element type. Name the shape explicitly.
+  let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {
@@ -73,7 +77,12 @@ async function walk(
 }
 
 function isNotFound(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "ENOENT";
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "ENOENT"
+  );
 }
 
 /** Default directories the scanner skips even without a .gitignore. */

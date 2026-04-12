@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
+
 // PreToolUse hook. Fires for tool calls matching the `if` patterns in
 // .claude/settings.json. For truly dangerous patterns (git push --force,
 // git reset --hard, rm -rf src/, rm -rf .claude/) we block unconditionally.
 // For sensitive-but-legitimate edits (package.json, .claude/settings.json)
 // we require an explicit confirmation marker in the new content.
 
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { block, ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { PreToolUseInput } from "./lib/types.ts";
 
 const input = await readHookInput<PreToolUseInput>();

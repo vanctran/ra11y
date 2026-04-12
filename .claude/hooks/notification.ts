@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
+
 // Notification hook. Non-blocking. Fires on idle_prompt (Claude is
 // waiting for the user). Emits a terminal bell — visible in most
 // terminal emulators and usable by the default bell-indicator hooks
 // in macOS / Linux / Windows Terminal.
 
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { NotificationInput } from "./lib/types.ts";
 
 const input = await readHookInput<NotificationInput>();

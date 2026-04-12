@@ -6,7 +6,7 @@
 
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { runScan, type ParsedFile } from "../../engine/scanner.ts";
+import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import {

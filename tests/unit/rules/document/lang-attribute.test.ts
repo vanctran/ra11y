@@ -4,9 +4,13 @@ import { runRule } from "../../../helpers/run-rule.ts";
 
 describe("rule document/lang-attribute", () => {
   it("fires when <html> has no lang attribute", () => {
-    const v = runRule(rule, `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`, {
-      filePath: "index.html",
-    });
+    const v = runRule(
+      rule,
+      `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`,
+      {
+        filePath: "index.html",
+      },
+    );
     expect(v).toHaveLength(1);
     expect(v[0]?.severity).toBe("error");
     expect(v[0]?.message).toContain("missing the lang attribute");

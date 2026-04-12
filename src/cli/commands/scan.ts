@@ -6,7 +6,7 @@
 
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { runScan, type ParsedFile } from "../../engine/scanner.ts";
+import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { BUILTIN_FORMATTERS } from "../../output/formatters/index.ts";
@@ -71,14 +71,10 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
   });
 
-  const formatter = BUILTIN_FORMATTERS[options.format] ?? BUILTIN_FORMATTERS["terminal"];
-  if (!formatter) {
-    return {
-      stdout: "",
-      stderr: `ra11y: no formatter available (internal error)\n`,
-      exitCode: 2,
-    };
-  }
+  // options.format is the CliOptions union "terminal" | "plain" | "json",
+  // which exactly matches BuiltinFormatters keys, so indexing is total
+  // and no fallback is needed.
+  const formatter = BUILTIN_FORMATTERS[options.format];
   const output = formatter.format(result, report);
 
   const exitCode = shouldFail(result, options.failOn) ? 1 : 0;

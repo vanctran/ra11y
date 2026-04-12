@@ -4,8 +4,8 @@ import {
   plainFormatter,
   terminalFormatter,
 } from "../../src/output/formatters/index.ts";
-import { setColorEnabled } from "../../src/utils/ansi.ts";
 import type { ReportData, ScanResult } from "../../src/types/violation.ts";
+import { setColorEnabled } from "../../src/utils/ansi.ts";
 
 // Fixed input so snapshots are deterministic. Duration is zeroed to
 // avoid wall-clock drift.
@@ -43,9 +43,7 @@ const RESULT: ScanResult = {
 };
 
 const REPORT: ReportData = {
-  coverage: [
-    { standardId: "wcag22", automated: 22, total: 87, passing: 20, failing: 2 },
-  ],
+  coverage: [{ standardId: "wcag22", automated: 22, total: 87, passing: 20, failing: 2 }],
   manualReviewNeeded: ["wcag22:1.2.1", "wcag22:1.4.1", "wcag22:2.1.2"],
 };
 
@@ -91,7 +89,9 @@ describe("formatter: terminal (no color)", () => {
 describe("formatter: plain", () => {
   it("emits one line per violation with no ANSI", () => {
     const output = plainFormatter.format(RESULT, REPORT);
-    // No ANSI escape sequences.
+    // No ANSI escape sequences. The ESC (0x1b) character is a literal
+    // control char by definition, so biome-ignore is the right knob.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: asserting absence of ANSI ESC sequences
     expect(output).not.toMatch(/\u001b\[/);
     // Each violation becomes a line.
     const lines = output.trim().split("\n");

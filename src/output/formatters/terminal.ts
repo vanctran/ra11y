@@ -25,11 +25,10 @@
  */
 
 import { defineFormatter } from "../../api/plugin.ts";
+import type { ReportData, ScanResult, Violation } from "../../types/violation.ts";
 import { bold, brightCyan, brightYellow, dim, gray, magenta, red } from "../../utils/ansi.ts";
 import { renderFileBox } from "../theme/layout.ts";
 import { GLYPHS } from "../theme/symbols.ts";
-import type { ScanResult, Violation } from "../../types/violation.ts";
-import type { ReportData } from "../../types/violation.ts";
 
 const VERSION = "0.0.0";
 
@@ -105,7 +104,7 @@ function formatCriteria(criteria: readonly string[]): string {
 function labelForCriterion(id: string): string {
   // wcag22:1.1.1 → "WCAG 2.2 · 1.1.1"
   const [standard, local] = id.split(":");
-  if (!standard || !local) return id;
+  if (!(standard && local)) return id;
   if (standard === "wcag22") return `WCAG 2.2 · ${local}`;
   if (standard === "wcag21") return `WCAG 2.1 · ${local}`;
   if (standard === "section508") return `Section 508 · ${local}`;

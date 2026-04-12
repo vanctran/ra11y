@@ -73,23 +73,14 @@ export interface NotificationInput extends CommonHookInput {
   hook_event_name: "Notification";
   message: string;
   title?: string;
-  notification_type:
-    | "permission_prompt"
-    | "idle_prompt"
-    | "auth_success"
-    | "elicitation_dialog";
+  notification_type: "permission_prompt" | "idle_prompt" | "auth_success" | "elicitation_dialog";
 }
 
 export interface InstructionsLoadedInput extends CommonHookInput {
   hook_event_name: "InstructionsLoaded";
   file_path: string;
   memory_type: "User" | "Project" | "Local" | "Managed";
-  load_reason:
-    | "session_start"
-    | "nested_traversal"
-    | "path_glob_match"
-    | "include"
-    | "compact";
+  load_reason: "session_start" | "nested_traversal" | "path_glob_match" | "include" | "compact";
   globs?: string[];
 }
 

@@ -6,18 +6,18 @@
  * reporting command, not a gate.
  */
 
-import type { ScanExit } from "./scan.ts";
-import { buildCoverageReport } from "../../reports/coverage.ts";
-import { runScan } from "../../engine/scanner.ts";
-import { BUILTIN_RULES } from "../../rules/index.ts";
-import { BUILTIN_STANDARDS } from "../../standards/index.ts";
-import { discoverFiles } from "../../input/discover.ts";
-import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import type { Ast } from "../../types/ast.ts";
 import type { ParsedFile } from "../../engine/scanner.ts";
+import { runScan } from "../../engine/scanner.ts";
+import { discoverFiles } from "../../input/discover.ts";
+import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
+import { buildCoverageReport } from "../../reports/coverage.ts";
+import { BUILTIN_RULES } from "../../rules/index.ts";
+import { BUILTIN_STANDARDS } from "../../standards/index.ts";
+import type { Ast } from "../../types/ast.ts";
 import type { CliOptions } from "../args.ts";
+import type { ScanExit } from "./scan.ts";
 
 export async function runCoverage(options: CliOptions): Promise<ScanExit> {
   // Validate standards — reuse scan command's validation shape by
@@ -79,11 +79,11 @@ function renderCoverageSummary(
     );
     if (entry.failingCriteria.length > 0) {
       const preview = entry.failingCriteria.slice(0, 5).join(", ");
-      const rest = entry.failingCriteria.length > 5 ? `, … ${entry.failingCriteria.length - 5} more` : "";
+      const rest =
+        entry.failingCriteria.length > 5 ? `, … ${entry.failingCriteria.length - 5} more` : "";
       lines.push(`      failing: ${preview}${rest}`);
     }
     lines.push("");
   }
   return lines.join("\n");
 }
-

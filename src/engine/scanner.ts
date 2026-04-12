@@ -26,8 +26,8 @@ import type { ReportData, ScanResult, Violation } from "../types/violation.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
-import { createStandardFilter } from "./standard-filter.ts";
 import { runRulesForFile } from "./rule-runner.ts";
+import { createStandardFilter } from "./standard-filter.ts";
 
 /** A file that has already been parsed and is ready for rule execution. */
 export interface ParsedFile {
@@ -101,7 +101,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     isTTY: inputs.isTTY ?? false,
   };
 
-  const report: ReportData = buildReportData(allViolations, standardsRegistry, criteriaRegistry, enabled);
+  const report: ReportData = buildReportData(allViolations, standardsRegistry, enabled);
 
   return { result, report };
 }
@@ -119,7 +119,6 @@ function compareViolations(a: Violation, b: Violation): number {
 function buildReportData(
   violations: readonly Violation[],
   standards: StandardsRegistry,
-  criteria: CriteriaRegistry,
   enabled: ReadonlySet<string>,
 ): ReportData {
   const coverage = [];
@@ -128,32 +127,63 @@ function buildReportData(
   for (const standardId of enabled) {
     const standard = standards.get(standardId);
     if (!standard) continue;
-    let automated = 0;
-    let total = 0;
-    let passing = 0;
-    let failing = 0;
-    const failingCriteria = new Set<string>();
-    for (const v of violations) {
-      for (const critId of v.criteria) {
-        if (critId.startsWith(`${standardId}:`)) failingCriteria.add(critId);
-      }
-    }
-    for (const criterion of standard.criteria) {
-      total += 1;
-      if (criterion.automatable !== "manual") {
-        automated += 1;
-        if (failingCriteria.has(criterion.id)) failing += 1;
-        else passing += 1;
-      } else {
-        manualReviewNeeded.push(criterion.id);
-      }
-    }
-    coverage.push({ standardId, automated, total, passing, failing });
+    const failingCriteria = collectFailingCriteriaFor(standardId, violations);
+    const counts = countCriteriaFor(standard.criteria, failingCriteria, manualReviewNeeded);
+    coverage.push({ standardId, ...counts });
   }
 
   // Deduplicate manualReviewNeeded in case multiple standards surface the same criterion.
   const dedupedManual = [...new Set(manualReviewNeeded)].sort();
   return { coverage, manualReviewNeeded: dedupedManual };
+}
+
+/** Returns the set of criterion IDs under `standardId` that have at least one violation. */
+function collectFailingCriteriaFor(
+  standardId: string,
+  violations: readonly Violation[],
+): ReadonlySet<string> {
+  const prefix = `${standardId}:`;
+  const out = new Set<string>();
+  for (const v of violations) {
+    for (const critId of v.criteria) {
+      if (critId.startsWith(prefix)) out.add(critId);
+    }
+  }
+  return out;
+}
+
+interface CoverageCounts {
+  readonly automated: number;
+  readonly total: number;
+  readonly passing: number;
+  readonly failing: number;
+}
+
+/**
+ * Walks the standard's criteria and tallies automatable passing/failing
+ * counts. Pushes manual-only criterion IDs into `manualReviewNeeded` so
+ * the caller can dedupe them across standards.
+ */
+function countCriteriaFor(
+  criteria: readonly { readonly id: string; readonly automatable: string }[],
+  failingCriteria: ReadonlySet<string>,
+  manualReviewNeeded: string[],
+): CoverageCounts {
+  let automated = 0;
+  let total = 0;
+  let passing = 0;
+  let failing = 0;
+  for (const criterion of criteria) {
+    total += 1;
+    if (criterion.automatable === "manual") {
+      manualReviewNeeded.push(criterion.id);
+      continue;
+    }
+    automated += 1;
+    if (failingCriteria.has(criterion.id)) failing += 1;
+    else passing += 1;
+  }
+  return { automated, total, passing, failing };
 }
 
 function now(): number {

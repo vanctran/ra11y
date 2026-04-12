@@ -60,7 +60,10 @@ const ruleSatisfyingAlpha = defineRule({
     badExample: "",
     references: [],
   },
-  check() {},
+  check() {
+    // synthetic rule for filter unit tests — no body needed
+    return undefined;
+  },
 });
 
 describe("createStandardFilter", () => {

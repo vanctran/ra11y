@@ -15,10 +15,7 @@
  */
 
 import { defineRule } from "../../api/plugin.ts";
-import {
-  findHtmlElementsByTag,
-  getHtmlAttribute,
-} from "../../engine/ast-helpers.ts";
+import { findHtmlElementsByTag, getHtmlAttribute } from "../../engine/ast-helpers.ts";
 import type { HtmlDocument } from "../../types/ast.ts";
 
 export const rule = defineRule({
@@ -36,7 +33,8 @@ export const rule = defineRule({
       "Screen readers and translation tools rely on the lang attribute to pick the right pronunciation dictionary and voice. A missing or empty lang attribute makes English content announced with a Japanese voice (or vice versa) unintelligible.",
     goodExample: `<html lang="en">`,
     badExample: `<html>`,
-    normativeQuote: "The default human language of each web page can be programmatically determined.",
+    normativeQuote:
+      "The default human language of each web page can be programmatically determined.",
     references: [
       "https://www.w3.org/TR/WCAG22/#language-of-page",
       "https://www.w3.org/WAI/WCAG22/Techniques/html/H57",
@@ -70,7 +68,7 @@ export const rule = defineRule({
           ? "<html> element is missing the lang attribute — screen readers won't know how to pronounce the page content."
           : "<html lang> is empty — screen readers won't know how to pronounce the page content.",
       suggestion:
-        "Add a lang attribute matching the primary language of the page, e.g. lang=\"en\" for English or lang=\"ja\" for Japanese. Use a valid BCP 47 code.",
+        'Add a lang attribute matching the primary language of the page, e.g. lang="en" for English or lang="ja" for Japanese. Use a valid BCP 47 code.',
     });
   },
 });

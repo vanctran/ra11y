@@ -4,16 +4,15 @@
  * by the semver policy.
  */
 
+export type * from "../types/index.ts";
+
+export type {
+  Formatter,
+  FormatterFn,
+} from "./plugin.ts";
 export {
   defineConfig,
   defineFormatter,
   defineRule,
   defineStandard,
 } from "./plugin.ts";
-
-export type {
-  Formatter,
-  FormatterFn,
-} from "./plugin.ts";
-
-export type * from "../types/index.ts";

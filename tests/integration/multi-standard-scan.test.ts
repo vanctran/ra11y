@@ -24,7 +24,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runScan, type ParsedFile } from "../../src/engine/scanner.ts";
+import { type ParsedFile, runScan } from "../../src/engine/scanner.ts";
 import { parseHtml } from "../../src/input/parsers/index.ts";
 import { BUILTIN_RULES } from "../../src/rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../src/standards/index.ts";

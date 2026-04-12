@@ -94,7 +94,11 @@ class HtmlParser {
     if (this.#peek() === "<") {
       // Tag-like construct.
       if (this.#startsWith("<!--")) return this.#consumeComment();
-      if (this.#startsWith("<!") || this.#startsWith("<!DOCTYPE") || this.#startsWithIgnoreCase("<!doctype")) {
+      if (
+        this.#startsWith("<!") ||
+        this.#startsWith("<!DOCTYPE") ||
+        this.#startsWithIgnoreCase("<!doctype")
+      ) {
         return this.#consumeDoctype();
       }
       if (this.#startsWith("</")) {
@@ -109,7 +113,12 @@ class HtmlParser {
           position: startPos,
           recoverable: true,
         });
-        return { kind: "HtmlText", range: this.#range(start), loc: { start: startPos, end: this.#position() }, value: "" };
+        return {
+          kind: "HtmlText",
+          range: this.#range(start),
+          loc: { start: startPos, end: this.#position() },
+          value: "",
+        };
       }
       if (this.#peek(1) !== undefined && isNameStart(this.#peek(1) ?? "")) {
         return this.#consumeElement();
@@ -199,7 +208,7 @@ class HtmlParser {
         // matching close tag as a single text node.
         const start = this.#pos;
         const startPos = this.#position();
-        while (!this.#eof() && !this.#startsWithClosingTag(parentTag)) {
+        while (!(this.#eof() || this.#startsWithClosingTag(parentTag))) {
           this.#advance(1);
         }
         const raw = this.#source.slice(start, this.#pos);
@@ -238,42 +247,50 @@ class HtmlParser {
     const startPos = this.#position();
     const name = this.#readAttributeName();
     this.#skipWhitespace();
-    let value: string | null = null;
-    let quote: "\"" | "'" | null = null;
+    const { value, quote } =
+      this.#peek() === "=" ? this.#consumeAttributeValue() : { value: null, quote: null };
 
-    if (this.#peek() === "=") {
-      this.#advance(1);
-      this.#skipWhitespace();
-      const ch = this.#peek();
-      if (ch === "\"" || ch === "'") {
-        quote = ch as "\"" | "'";
-        this.#advance(1);
-        const valueStart = this.#pos;
-        while (!this.#eof() && this.#peek() !== quote) {
-          this.#advance(1);
-        }
-        value = decodeEntities(this.#source.slice(valueStart, this.#pos));
-        if (this.#peek() === quote) this.#advance(1);
-      } else {
-        const valueStart = this.#pos;
-        while (!this.#eof()) {
-          const c = this.#peek();
-          if (c === undefined || c === ">" || c === " " || c === "\t" || c === "\n" || c === "/") break;
-          this.#advance(1);
-        }
-        value = decodeEntities(this.#source.slice(valueStart, this.#pos));
-      }
-    }
-
-    const end = this.#pos;
     return {
       kind: "HtmlAttribute",
-      range: this.#range(start, end),
+      range: this.#range(start, this.#pos),
       loc: { start: startPos, end: this.#position() },
       name,
       value,
       quote,
     };
+  }
+
+  /** Parses `=value`, `="..."`, or `='...'`. Call only when peek() === "=". */
+  #consumeAttributeValue(): { value: string | null; quote: '"' | "'" | null } {
+    this.#advance(1); // consume "="
+    this.#skipWhitespace();
+    const ch = this.#peek();
+    if (ch === '"' || ch === "'") return this.#consumeQuotedAttributeValue(ch);
+    return { value: decodeEntities(this.#readUnquotedAttributeValue()), quote: null };
+  }
+
+  #consumeQuotedAttributeValue(quote: '"' | "'"): {
+    value: string;
+    quote: '"' | "'";
+  } {
+    this.#advance(1);
+    const valueStart = this.#pos;
+    while (!this.#eof() && this.#peek() !== quote) this.#advance(1);
+    const value = decodeEntities(this.#source.slice(valueStart, this.#pos));
+    if (this.#peek() === quote) this.#advance(1);
+    return { value, quote };
+  }
+
+  #readUnquotedAttributeValue(): string {
+    const valueStart = this.#pos;
+    while (!this.#eof()) {
+      const c = this.#peek();
+      if (c === undefined || c === ">" || c === " " || c === "\t" || c === "\n" || c === "/") {
+        break;
+      }
+      this.#advance(1);
+    }
+    return this.#source.slice(valueStart, this.#pos);
   }
 
   #consumeText(): HtmlText {
@@ -379,7 +396,16 @@ class HtmlParser {
     const start = this.#pos;
     while (!this.#eof()) {
       const c = this.#peek();
-      if (c === undefined || c === "=" || c === ">" || c === "/" || c === " " || c === "\t" || c === "\n") break;
+      if (
+        c === undefined ||
+        c === "=" ||
+        c === ">" ||
+        c === "/" ||
+        c === " " ||
+        c === "\t" ||
+        c === "\n"
+      )
+        break;
       this.#advance(1);
     }
     return this.#source.slice(start, this.#pos);

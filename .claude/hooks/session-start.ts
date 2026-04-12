@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
+
 // SessionStart hook. Injects a project dashboard as additionalContext so
 // every new session starts with an accurate snapshot: branch, backlog
 // progress, rule/standard counts, last test run, and recent commits.
 
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import { getProjectState, renderPhaseLine } from "./lib/project-state.ts";
 import type { SessionStartInput } from "./lib/types.ts";
 

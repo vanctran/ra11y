@@ -5,24 +5,21 @@
  * 2.4 conformance table, and readiness scorecard.
  */
 
-export { buildCoverageReport, toEngineCoverageEntry } from "./coverage.ts";
-export type { PerStandardCoverage } from "./coverage.ts";
-
-export { buildChecklist, renderChecklistMarkdown } from "./checklist.ts";
-export type { ChecklistItem, ChecklistReport, ChecklistSection } from "./checklist.ts";
-
-export { buildVpatReport, renderVpatMarkdown } from "./vpat.ts";
-export type {
-  Conformance,
-  VpatEntry,
-  VpatReport,
-  VpatStandardSection,
-} from "./vpat.ts";
-
-export { buildCertificationScorecard, renderCertificationMarkdown } from "./certification.ts";
 export type {
   CertificationScore,
   ManualReview,
   ManualReviewEntry,
   ManualStatus,
 } from "./certification.ts";
+export { buildCertificationScorecard, renderCertificationMarkdown } from "./certification.ts";
+export type { ChecklistItem, ChecklistReport, ChecklistSection } from "./checklist.ts";
+export { buildChecklist, renderChecklistMarkdown } from "./checklist.ts";
+export type { PerStandardCoverage } from "./coverage.ts";
+export { buildCoverageReport, toEngineCoverageEntry } from "./coverage.ts";
+export type {
+  Conformance,
+  VpatEntry,
+  VpatReport,
+  VpatStandardSection,
+} from "./vpat.ts";
+export { buildVpatReport, renderVpatMarkdown } from "./vpat.ts";

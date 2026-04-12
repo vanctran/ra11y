@@ -8,8 +8,8 @@
  * are pure functions that see exactly what they need.
  */
 
-import type { Ast, Language } from "../types/ast.ts";
-import type { EmittedViolation, RuleContext } from "../types/rule.ts";
+import type { Ast } from "../types/ast.ts";
+import type { EmittedViolation, Language, RuleContext } from "../types/rule.ts";
 
 export interface ContextInput {
   readonly filePath: string;
@@ -20,10 +20,7 @@ export interface ContextInput {
 }
 
 /** Builds a fresh RuleContext. The returned object's `emit` pushes into the supplied array. */
-export function buildContext(
-  input: ContextInput,
-  violationSink: EmittedViolation[],
-): RuleContext {
+export function buildContext(input: ContextInput, violationSink: EmittedViolation[]): RuleContext {
   const language = input.ast.language as Language;
   return {
     filePath: input.filePath,

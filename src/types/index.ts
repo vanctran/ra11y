@@ -8,42 +8,6 @@
  */
 
 export type {
-  Automatability,
-  Criterion,
-  Standard,
-} from "./standard.ts";
-
-export type {
-  CoverageEntry,
-  Fix,
-  Location,
-  ReportData,
-  ScanResult,
-  Severity,
-  Violation,
-} from "./violation.ts";
-
-export type {
-  AppliesTo,
-  EmittedViolation,
-  FileContext,
-  Language,
-  ProjectContext,
-  Rule,
-  RuleContext,
-  RuleDocs,
-  RuleScope,
-} from "./rule.ts";
-
-export type {
-  Config,
-  ConfigOverride,
-  LoadedConfig,
-  ProjectConfig,
-  RuleSetting,
-} from "./config.ts";
-
-export type {
   Ast,
   BaseNode,
   CssAtRule,
@@ -70,3 +34,36 @@ export type {
   SourceRange,
   TsxModule,
 } from "./ast.ts";
+export type {
+  Config,
+  ConfigOverride,
+  LoadedConfig,
+  ProjectConfig,
+  RuleSetting,
+} from "./config.ts";
+
+export type {
+  AppliesTo,
+  EmittedViolation,
+  FileContext,
+  Language,
+  ProjectContext,
+  Rule,
+  RuleContext,
+  RuleDocs,
+  RuleScope,
+} from "./rule.ts";
+export type {
+  Automatability,
+  Criterion,
+  Standard,
+} from "./standard.ts";
+export type {
+  CoverageEntry,
+  Fix,
+  Location,
+  ReportData,
+  ScanResult,
+  Severity,
+  Violation,
+} from "./violation.ts";

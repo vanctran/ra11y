@@ -14,10 +14,7 @@
  */
 
 import { defineRule } from "../../api/plugin.ts";
-import {
-  findHtmlElementsByTag,
-  htmlTextContent,
-} from "../../engine/ast-helpers.ts";
+import { findHtmlElementsByTag, htmlTextContent } from "../../engine/ast-helpers.ts";
 import type { HtmlDocument } from "../../types/ast.ts";
 
 export const rule = defineRule({
@@ -29,7 +26,8 @@ export const rule = defineRule({
     fileExtensions: [".html", ".htm"],
   },
   docs: {
-    description: "HTML documents must have a non-empty <title> element describing topic or purpose.",
+    description:
+      "HTML documents must have a non-empty <title> element describing topic or purpose.",
     rationale:
       "Screen readers announce the page title when a document loads. A missing or empty title leaves non-sighted users unsure what they've landed on; it also breaks browser tabs, bookmarks, and search engine results.",
     goodExample: `<title>Settings — Acme Dashboard</title>`,
@@ -64,8 +62,10 @@ export const rule = defineRule({
           line: htmlEl?.loc.start.line ?? 1,
           column: htmlEl?.loc.start.column ?? 1,
         },
-        message: "HTML document is missing a <title> element — browsers and screen readers have nothing to announce.",
-        suggestion: "Add a <title>…</title> to <head> describing the page topic or purpose. Keep it specific — 'Settings — Acme' is better than 'Acme'.",
+        message:
+          "HTML document is missing a <title> element — browsers and screen readers have nothing to announce.",
+        suggestion:
+          "Add a <title>…</title> to <head> describing the page topic or purpose. Keep it specific — 'Settings — Acme' is better than 'Acme'.",
       });
       return;
     }
@@ -81,7 +81,8 @@ export const rule = defineRule({
             column: title.loc.start.column,
           },
           message: "<title> is empty — screen readers will announce nothing when the page loads.",
-          suggestion: "Fill in the title with a specific description of the page topic or purpose, e.g. 'Settings — Acme Dashboard'.",
+          suggestion:
+            "Fill in the title with a specific description of the page topic or purpose, e.g. 'Settings — Acme Dashboard'.",
         });
       }
     }

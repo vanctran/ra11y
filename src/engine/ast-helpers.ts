@@ -88,10 +88,7 @@ function* walkJsxElementChildren(element: JsxElement): Iterable<JsxElement> {
 }
 
 /** Finds JSX elements by tag name (case-sensitive; matches React component names). */
-export function findJsxElementsByTag(
-  module: TsxModule,
-  tag: string,
-): readonly JsxElement[] {
+export function findJsxElementsByTag(module: TsxModule, tag: string): readonly JsxElement[] {
   const out: JsxElement[] = [];
   for (const el of walkJsxElements(module)) {
     if (el.tagName === tag) out.push(el);
@@ -110,7 +107,7 @@ export function getJsxAttribute(element: JsxElement, name: string): JsxAttribute
 /** Gets the string-literal value of a JSX attribute, or null if missing or expression. */
 export function getJsxAttributeString(element: JsxElement, name: string): string | null {
   const attr = getJsxAttribute(element, name);
-  if (!attr || !attr.value) return null;
+  if (!attr?.value) return null;
   return attr.value.kind === "StringLiteral" ? attr.value.value : null;
 }
 

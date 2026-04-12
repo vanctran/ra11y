@@ -8,8 +8,8 @@
  * violations with ruleId and criteria stamped in).
  */
 
-import { parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
 import { buildContext } from "../../src/engine/context-builder.ts";
+import { parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
 import type { EmittedViolation, Rule } from "../../src/types/rule.ts";
 import type { Violation } from "../../src/types/violation.ts";

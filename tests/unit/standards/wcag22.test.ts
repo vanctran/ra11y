@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { wcag22 } from "../../../src/standards/wcag22/standard.ts";
 import { WCAG22_CRITERIA } from "../../../src/standards/wcag22/criteria.ts";
+import { wcag22 } from "../../../src/standards/wcag22/standard.ts";
 
 describe("WCAG 2.2 standard module", () => {
   describe("identity and metadata", () => {

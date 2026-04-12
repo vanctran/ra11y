@@ -58,11 +58,11 @@ export interface Rule {
   /** Called once per applicable file before the node walk. Optional. */
   beforeFile?(ctx: FileContext): void;
   /** Node-scoped check — called for every matching node. */
-  check?(ctx: RuleContext): readonly Violation[] | void;
+  check?(ctx: RuleContext): readonly Violation[] | undefined;
   /** Document-scoped check — called after the walk with full AST. */
-  afterFile?(ctx: FileContext): readonly Violation[] | void;
+  afterFile?(ctx: FileContext): readonly Violation[] | undefined;
   /** Project-scoped check — called once at end of scan. */
-  afterProject?(ctx: ProjectContext): readonly Violation[] | void;
+  afterProject?(ctx: ProjectContext): readonly Violation[] | undefined;
 }
 
 /** The type the rule author sees inside `check()`. */

@@ -50,11 +50,7 @@ export interface HtmlDocument extends BaseNode {
   readonly children: readonly HtmlNode[];
 }
 
-export type HtmlNode =
-  | HtmlElement
-  | HtmlText
-  | HtmlComment
-  | HtmlDoctype;
+export type HtmlNode = HtmlElement | HtmlText | HtmlComment | HtmlDoctype;
 
 export interface HtmlElement extends BaseNode {
   readonly kind: "HtmlElement";
@@ -68,7 +64,7 @@ export interface HtmlAttribute extends BaseNode {
   readonly kind: "HtmlAttribute";
   readonly name: string;
   readonly value: string | null;
-  readonly quote: "\"" | "'" | null;
+  readonly quote: '"' | "'" | null;
 }
 
 export interface HtmlText extends BaseNode {
@@ -167,8 +163,16 @@ export interface JsxExpression extends BaseNode {
 // ---------------------------------------------------------------------------
 
 export type Ast =
-  | { readonly language: "html"; readonly root: HtmlDocument; readonly errors: readonly ParseError[] }
-  | { readonly language: "css"; readonly root: CssStylesheet; readonly errors: readonly ParseError[] }
+  | {
+      readonly language: "html";
+      readonly root: HtmlDocument;
+      readonly errors: readonly ParseError[];
+    }
+  | {
+      readonly language: "css";
+      readonly root: CssStylesheet;
+      readonly errors: readonly ParseError[];
+    }
   | {
       readonly language: "tsx" | "jsx" | "ts" | "js";
       readonly root: TsxModule;

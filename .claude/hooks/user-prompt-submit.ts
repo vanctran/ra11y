@@ -12,9 +12,7 @@ const input = await readHookInput<UserPromptSubmitInput>();
 const projectDir = process.env.CLAUDE_PROJECT_DIR ?? input.cwd;
 const state = getProjectState(projectDir);
 
-const phases = state.phaseProgress
-  .filter((p) => p.total > 0 && p.done < p.total)
-  .slice(0, 3);
+const phases = state.phaseProgress.filter((p) => p.total > 0 && p.done < p.total).slice(0, 3);
 const phaseStr =
   phases.length > 0
     ? phases.map((p) => `${p.name.replace(/^Phase /, "P")}: ${p.done}/${p.total}`).join(" · ")

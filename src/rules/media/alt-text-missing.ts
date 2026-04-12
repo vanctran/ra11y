@@ -35,12 +35,7 @@ import {
   isDecorativeHtmlElement,
   isDecorativeJsxElement,
 } from "../../engine/ast-helpers.ts";
-import type {
-  HtmlDocument,
-  HtmlElement,
-  JsxElement,
-  TsxModule,
-} from "../../types/ast.ts";
+import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
 
 export const rule = defineRule({
   id: "media/alt-text-missing",

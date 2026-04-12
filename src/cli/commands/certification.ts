@@ -6,18 +6,18 @@
  * pending.
  */
 
-import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { runScan, type ParsedFile } from "../../engine/scanner.ts";
+import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
+import type { ManualReview } from "../../reports/certification.ts";
 import {
   buildCertificationScorecard,
   buildCoverageReport,
   renderCertificationMarkdown,
 } from "../../reports/index.ts";
-import type { ManualReview } from "../../reports/certification.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
@@ -46,12 +46,7 @@ export async function runCertification(options: CliOptions): Promise<ScanExit> {
 
   const manual = await loadManualReview(cwd);
   const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);
-  const scores = buildCertificationScorecard(
-    coverage,
-    BUILTIN_STANDARDS,
-    manual,
-    options.level,
-  );
+  const scores = buildCertificationScorecard(coverage, BUILTIN_STANDARDS, manual, options.level);
   return { stdout: renderCertificationMarkdown(scores), stderr: "", exitCode: 0 };
 }
 

@@ -14,13 +14,22 @@
  * children tracked separately. We skip over JS/TS code outside JSX,
  * entering JSX mode when we see `<TagName` where TagName starts with
  * a letter and is followed by ASCII identifier characters.
+ *
+ * Complexity note: the top-level scanner and element consumers are
+ * built from small single-purpose helpers (#skipLineComment,
+ * #skipQuoted, #consumeJsxOpenTag, #consumeJsxClosingTag, etc.) so
+ * each method stays within the project's cognitive-complexity budget.
+ * If you're adding a new JSX construct, add a helper for it rather
+ * than inlining the logic into the main loop.
  */
 
 import type {
   JsxAttribute,
   JsxAttributeValue,
   JsxElement,
+  JsxExpression,
   JsxNode,
+  JsxText,
   ParseError,
   SourcePosition,
   TsxModule,
@@ -79,59 +88,77 @@ class TsxParser {
     return { root, errors: this.#errors };
   }
 
-  /**
-   * Fast-forward to the next plausible JSX opening tag. We skip over
-   * strings, template literals, regex literals, and comments so a JSX
-   * parser doesn't mistake them for tags. This is a heuristic, not a
-   * full JS lexer — good enough for Phase 6 rules.
-   */
+  // ---------------------------------------------------------------------
+  // Top-level scanner — fast-forward through JS/TS code to the next JSX
+  // tag, skipping strings, templates, and comments so the parser doesn't
+  // misread literal `<` characters in strings as element openers.
+  // ---------------------------------------------------------------------
+
   #scanToJsx(): void {
     while (!this.#eof()) {
       const c = this.#peek();
       if (c === undefined) return;
-
-      // Skip line comments.
-      if (c === "/" && this.#peek(1) === "/") {
-        while (!this.#eof() && this.#peek() !== "\n") this.#advance(1);
-        continue;
-      }
-      // Skip block comments.
-      if (c === "/" && this.#peek(1) === "*") {
-        this.#advance(2);
-        while (!this.#eof() && !(this.#peek() === "*" && this.#peek(1) === "/")) {
-          this.#advance(1);
-        }
-        if (!this.#eof()) this.#advance(2);
-        continue;
-      }
-      // Skip string literals.
-      if (c === "\"" || c === "'") {
-        const quote = c;
-        this.#advance(1);
-        while (!this.#eof() && this.#peek() !== quote) {
-          if (this.#peek() === "\\") this.#advance(2);
-          else this.#advance(1);
-        }
-        if (!this.#eof()) this.#advance(1);
-        continue;
-      }
-      // Skip template literals.
-      if (c === "`") {
-        this.#advance(1);
-        while (!this.#eof() && this.#peek() !== "`") {
-          if (this.#peek() === "\\") this.#advance(2);
-          else this.#advance(1);
-        }
-        if (!this.#eof()) this.#advance(1);
-        continue;
-      }
-      // JSX opening tag: < followed by a name start (letter).
-      if (c === "<" && isTagStart(this.#peek(1))) {
-        return;
-      }
+      if (this.#skipSkippable(c)) continue;
+      if (c === "<" && isTagStart(this.#peek(1))) return;
       this.#advance(1);
     }
   }
+
+  /** Returns true if `c` begins a skippable construct and it was consumed. */
+  #skipSkippable(c: string): boolean {
+    if (c === "/" && this.#peek(1) === "/") {
+      this.#skipLineComment();
+      return true;
+    }
+    if (c === "/" && this.#peek(1) === "*") {
+      this.#skipBlockComment();
+      return true;
+    }
+    if (c === '"' || c === "'") {
+      this.#skipQuoted(c);
+      return true;
+    }
+    if (c === "`") {
+      this.#skipTemplateLiteral();
+      return true;
+    }
+    return false;
+  }
+
+  #skipLineComment(): void {
+    while (!this.#eof() && this.#peek() !== "\n") this.#advance(1);
+  }
+
+  #skipBlockComment(): void {
+    this.#advance(2);
+    while (!this.#eof()) {
+      if (this.#peek() === "*" && this.#peek(1) === "/") break;
+      this.#advance(1);
+    }
+    if (!this.#eof()) this.#advance(2);
+  }
+
+  #skipQuoted(quote: '"' | "'"): void {
+    this.#advance(1);
+    while (!this.#eof() && this.#peek() !== quote) {
+      if (this.#peek() === "\\") this.#advance(2);
+      else this.#advance(1);
+    }
+    if (!this.#eof()) this.#advance(1);
+  }
+
+  #skipTemplateLiteral(): void {
+    this.#advance(1);
+    while (!this.#eof() && this.#peek() !== "`") {
+      if (this.#peek() === "\\") this.#advance(2);
+      else this.#advance(1);
+    }
+    if (!this.#eof()) this.#advance(1);
+  }
+
+  // ---------------------------------------------------------------------
+  // Element consumer
+  // ---------------------------------------------------------------------
 
   #consumeJsxElement(): JsxElement | null {
     const start = this.#pos;
@@ -139,55 +166,14 @@ class TsxParser {
     this.#advance(1); // "<"
     const tagName = this.#readTagName();
     if (!tagName) {
-      // Not actually a JSX tag — back off and let the outer loop skip.
-      this.#advance(1);
+      this.#advance(1); // back off past the stray '<'
       return null;
     }
 
-    const attributes: JsxAttribute[] = [];
-    let selfClosing = false;
-    while (!this.#eof()) {
-      this.#skipWhitespace();
-      const ch = this.#peek();
-      if (ch === ">") {
-        this.#advance(1);
-        break;
-      }
-      if (ch === "/") {
-        if (this.#peek(1) === ">") {
-          selfClosing = true;
-          this.#advance(2);
-          break;
-        }
-        this.#advance(1);
-        continue;
-      }
-      if (ch === undefined) {
-        this.#errors.push({
-          message: `Unterminated JSX element <${tagName}>`,
-          position: startPos,
-          recoverable: true,
-        });
-        break;
-      }
-      const posBefore = this.#pos;
-      const attr = this.#consumeJsxAttribute();
-      if (attr) {
-        attributes.push(attr);
-        continue;
-      }
-      if (this.#pos === posBefore) this.#advance(1);
-    }
-
-    // HTML-style void elements (lowercase DOM names like <img>, <br>,
-    // <input>) are always treated as self-closing even without a
-    // trailing slash. React allows this too. We deliberately only
-    // match lowercase names: PascalCase components like <Link> or
-    // <Input> are React components that happen to share a name with
-    // a void element and can have children.
-    if (isLowercase(tagName) && SELF_CLOSING_VOID.has(tagName)) selfClosing = true;
-
-    const children: JsxNode[] = selfClosing ? [] : this.#consumeJsxChildren(tagName);
+    const { attributes, selfClosing } = this.#consumeJsxOpenTag(tagName, startPos);
+    const effectiveSelfClosing =
+      selfClosing || (isLowercase(tagName) && SELF_CLOSING_VOID.has(tagName));
+    const children: JsxNode[] = effectiveSelfClosing ? [] : this.#consumeJsxChildren(tagName);
 
     return {
       kind: "JsxElement",
@@ -196,29 +182,58 @@ class TsxParser {
       tagName,
       attributes,
       children,
-      selfClosing,
+      selfClosing: effectiveSelfClosing,
     };
   }
+
+  /** Parses the attributes between `<Tag ` and the closing `>` or `/>`. */
+  #consumeJsxOpenTag(
+    tagName: string,
+    startPos: SourcePosition,
+  ): { attributes: JsxAttribute[]; selfClosing: boolean } {
+    const attributes: JsxAttribute[] = [];
+    while (!this.#eof()) {
+      this.#skipWhitespace();
+      const ch = this.#peek();
+      if (ch === undefined) {
+        this.#errors.push({
+          message: `Unterminated JSX element <${tagName}>`,
+          position: startPos,
+          recoverable: true,
+        });
+        return { attributes, selfClosing: false };
+      }
+      if (ch === ">") {
+        this.#advance(1);
+        return { attributes, selfClosing: false };
+      }
+      if (ch === "/") {
+        if (this.#peek(1) === ">") {
+          this.#advance(2);
+          return { attributes, selfClosing: true };
+        }
+        this.#advance(1);
+        continue;
+      }
+      const posBefore = this.#pos;
+      const attr = this.#consumeJsxAttribute();
+      if (attr) attributes.push(attr);
+      if (this.#pos === posBefore) this.#advance(1);
+    }
+    return { attributes, selfClosing: false };
+  }
+
+  // ---------------------------------------------------------------------
+  // Attribute consumer
+  // ---------------------------------------------------------------------
 
   #consumeJsxAttribute(): JsxAttribute | null {
     const start = this.#pos;
     const startPos = this.#position();
-    // Skip spread attributes {...x} and other expression-only attrs — we
-    // only care about string-literal attributes for v0.0.x rules.
+
+    // Spread attribute or other expression-only attr — skip entirely.
     if (this.#peek() === "{") {
-      // Find the matching closing brace, respecting nesting.
-      let depth = 0;
-      while (!this.#eof()) {
-        const c = this.#peek();
-        if (c === "{") depth += 1;
-        else if (c === "}") {
-          depth -= 1;
-          this.#advance(1);
-          if (depth === 0) break;
-          continue;
-        }
-        this.#advance(1);
-      }
+      this.#skipBraceBlock();
       return null;
     }
 
@@ -226,35 +241,7 @@ class TsxParser {
     if (!name) return null;
 
     this.#skipWhitespace();
-    let value: JsxAttributeValue | null = null;
-    if (this.#peek() === "=") {
-      this.#advance(1);
-      this.#skipWhitespace();
-      const ch = this.#peek();
-      if (ch === "\"" || ch === "'") {
-        this.#advance(1);
-        const valStart = this.#pos;
-        while (!this.#eof() && this.#peek() !== ch) this.#advance(1);
-        value = { kind: "StringLiteral", value: this.#source.slice(valStart, this.#pos) };
-        if (!this.#eof()) this.#advance(1);
-      } else if (ch === "{") {
-        // Expression value — record the raw text, not the parsed shape.
-        let depth = 0;
-        const exprStart = this.#pos;
-        while (!this.#eof()) {
-          const c = this.#peek();
-          if (c === "{") depth += 1;
-          else if (c === "}") {
-            depth -= 1;
-            this.#advance(1);
-            if (depth === 0) break;
-            continue;
-          }
-          this.#advance(1);
-        }
-        value = { kind: "Expression", raw: this.#source.slice(exprStart, this.#pos) };
-      }
-    }
+    const value = this.#peek() === "=" ? this.#parseJsxAttributeValue() : null;
 
     return {
       kind: "JsxAttribute",
@@ -265,83 +252,68 @@ class TsxParser {
     };
   }
 
+  #parseJsxAttributeValue(): JsxAttributeValue | null {
+    this.#advance(1); // consume "="
+    this.#skipWhitespace();
+    const ch = this.#peek();
+    if (ch === '"' || ch === "'") return this.#parseStringAttributeValue(ch);
+    if (ch === "{") return this.#parseExpressionAttributeValue();
+    return null;
+  }
+
+  #parseStringAttributeValue(quote: '"' | "'"): JsxAttributeValue {
+    this.#advance(1);
+    const valStart = this.#pos;
+    while (!this.#eof() && this.#peek() !== quote) this.#advance(1);
+    const value: JsxAttributeValue = {
+      kind: "StringLiteral",
+      value: this.#source.slice(valStart, this.#pos),
+    };
+    if (!this.#eof()) this.#advance(1);
+    return value;
+  }
+
+  #parseExpressionAttributeValue(): JsxAttributeValue {
+    const exprStart = this.#pos;
+    this.#skipBraceBlock();
+    return { kind: "Expression", raw: this.#source.slice(exprStart, this.#pos) };
+  }
+
+  /**
+   * Consumes a balanced `{...}` expression block starting at the current
+   * position. Respects nested braces. Advances past the closing `}`.
+   */
+  #skipBraceBlock(): void {
+    let depth = 0;
+    while (!this.#eof()) {
+      const c = this.#peek();
+      if (c === "{") depth += 1;
+      else if (c === "}") {
+        depth -= 1;
+        this.#advance(1);
+        if (depth === 0) return;
+        continue;
+      }
+      this.#advance(1);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Children consumer
+  // ---------------------------------------------------------------------
+
   #consumeJsxChildren(tagName: string): JsxNode[] {
     const children: JsxNode[] = [];
     while (!this.#eof()) {
-      // Closing tag for our parent?
-      if (
-        this.#peek() === "<" &&
-        this.#peek(1) === "/" &&
-        this.#source.slice(this.#pos + 2, this.#pos + 2 + tagName.length).toLowerCase() ===
-          tagName.toLowerCase()
-      ) {
-        // Consume </tagName>
-        this.#advance(2);
-        this.#readTagName();
-        while (!this.#eof() && this.#peek() !== ">") this.#advance(1);
-        if (!this.#eof()) this.#advance(1);
+      if (this.#isMatchingClosingTag(tagName)) {
+        this.#consumeJsxClosingTag();
         return children;
       }
-
-      // Nested element?
-      if (this.#peek() === "<" && isTagStart(this.#peek(1))) {
-        const posBefore = this.#pos;
-        const child = this.#consumeJsxElement();
-        if (child) children.push(child);
-        if (this.#pos === posBefore) this.#advance(1);
-        continue;
-      }
-
-      // Expression child {...}
-      if (this.#peek() === "{") {
-        const start = this.#pos;
-        const startPos = this.#position();
-        let depth = 0;
-        while (!this.#eof()) {
-          const c = this.#peek();
-          if (c === "{") depth += 1;
-          else if (c === "}") {
-            depth -= 1;
-            this.#advance(1);
-            if (depth === 0) break;
-            continue;
-          }
-          this.#advance(1);
-        }
-        children.push({
-          kind: "JsxExpression",
-          range: { start, end: this.#pos },
-          loc: { start: startPos, end: this.#position() },
-          raw: this.#source.slice(start, this.#pos),
-        });
-        continue;
-      }
-
-      // Text node until next < or {.
-      const start = this.#pos;
-      const startPos = this.#position();
-      const posBefore = this.#pos;
-      while (!this.#eof()) {
-        const c = this.#peek();
-        if (c === "<" || c === "{" || c === undefined) break;
-        this.#advance(1);
-      }
-      if (this.#pos === posBefore) {
-        // Progress guarantee.
-        this.#advance(1);
-      }
-      const value = this.#source.slice(start, this.#pos);
-      if (value.trim().length > 0 || value.length > 0) {
-        children.push({
-          kind: "JsxText",
-          range: { start, end: this.#pos },
-          loc: { start: startPos, end: this.#position() },
-          value,
-        });
-      }
+      const before = this.#pos;
+      const child = this.#consumeJsxChildNode();
+      if (child) children.push(child);
+      if (this.#pos === before) this.#advance(1);
     }
-
-    // EOF without closing tag — record error and return.
     this.#errors.push({
       message: `Unclosed JSX element <${tagName}>`,
       position: this.#position(),
@@ -349,6 +321,66 @@ class TsxParser {
     });
     return children;
   }
+
+  /** Dispatches to the right child consumer based on the current character. */
+  #consumeJsxChildNode(): JsxNode | null {
+    const ch = this.#peek();
+    if (ch === "<" && isTagStart(this.#peek(1))) return this.#consumeJsxElement();
+    if (ch === "{") return this.#consumeJsxExpressionChild();
+    return this.#consumeJsxTextChild();
+  }
+
+  #consumeJsxExpressionChild(): JsxExpression {
+    const start = this.#pos;
+    const startPos = this.#position();
+    this.#skipBraceBlock();
+    return {
+      kind: "JsxExpression",
+      range: { start, end: this.#pos },
+      loc: { start: startPos, end: this.#position() },
+      raw: this.#source.slice(start, this.#pos),
+    };
+  }
+
+  #consumeJsxTextChild(): JsxText | null {
+    const start = this.#pos;
+    const startPos = this.#position();
+    while (!this.#eof()) {
+      const c = this.#peek();
+      if (c === "<" || c === "{" || c === undefined) break;
+      this.#advance(1);
+    }
+    if (this.#pos === start) {
+      // Progress guarantee — consume one literal character even if it
+      // doesn't start a recognized construct.
+      this.#advance(1);
+    }
+    const value = this.#source.slice(start, this.#pos);
+    if (value.length === 0) return null;
+    return {
+      kind: "JsxText",
+      range: { start, end: this.#pos },
+      loc: { start: startPos, end: this.#position() },
+      value,
+    };
+  }
+
+  #isMatchingClosingTag(tagName: string): boolean {
+    if (this.#peek() !== "<" || this.#peek(1) !== "/") return false;
+    const after = this.#source.slice(this.#pos + 2, this.#pos + 2 + tagName.length);
+    return after.toLowerCase() === tagName.toLowerCase();
+  }
+
+  #consumeJsxClosingTag(): void {
+    this.#advance(2); // "</"
+    this.#readTagName();
+    while (!this.#eof() && this.#peek() !== ">") this.#advance(1);
+    if (!this.#eof()) this.#advance(1);
+  }
+
+  // ---------------------------------------------------------------------
+  // Low-level character helpers
+  // ---------------------------------------------------------------------
 
   #readTagName(): string {
     const start = this.#pos;
@@ -365,7 +397,17 @@ class TsxParser {
     const start = this.#pos;
     while (!this.#eof()) {
       const c = this.#peek();
-      if (c === undefined || c === "=" || c === ">" || c === "/" || c === " " || c === "\t" || c === "\n") break;
+      if (
+        c === undefined ||
+        c === "=" ||
+        c === ">" ||
+        c === "/" ||
+        c === " " ||
+        c === "\t" ||
+        c === "\n"
+      ) {
+        break;
+      }
       this.#advance(1);
     }
     return this.#source.slice(start, this.#pos);

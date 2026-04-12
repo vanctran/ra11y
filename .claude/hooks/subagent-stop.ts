@@ -8,9 +8,9 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { block, ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { SubagentStopInput } from "./lib/types.ts";
 
 const input = await readHookInput<SubagentStopInput>();

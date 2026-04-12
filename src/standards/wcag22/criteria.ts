@@ -131,7 +131,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Media Alternative (Prerecorded)",
     level: "AAA",
     slug: "media-alternative-prerecorded",
-    description: "An alternative for time-based media is provided for all prerecorded synchronized media and for all prerecorded video-only media.",
+    description:
+      "An alternative for time-based media is provided for all prerecorded synchronized media and for all prerecorded video-only media.",
     automatable: "manual",
     equivalentTo: ["wcag21:1.2.8"],
   },
@@ -162,7 +163,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Meaningful Sequence",
     level: "A",
     slug: "meaningful-sequence",
-    description: "When the sequence of content affects meaning, the sequence can be programmatically determined.",
+    description:
+      "When the sequence of content affects meaning, the sequence can be programmatically determined.",
     automatable: "manual",
     equivalentTo: ["wcag21:1.3.2"],
   },
@@ -273,7 +275,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Low or No Background Audio",
     level: "AAA",
     slug: "low-or-no-background-audio",
-    description: "For prerecorded audio-only content with speech, background sounds are absent or very quiet.",
+    description:
+      "For prerecorded audio-only content with speech, background sounds are absent or very quiet.",
     automatable: "manual",
     equivalentTo: ["wcag21:1.4.7"],
   },
@@ -410,7 +413,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "No Timing",
     level: "AAA",
     slug: "no-timing",
-    description: "Timing is not an essential part of the event or activity presented by the content.",
+    description:
+      "Timing is not an essential part of the event or activity presented by the content.",
     automatable: "manual",
     equivalentTo: ["wcag21:2.2.3"],
   },
@@ -460,7 +464,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Three Flashes",
     level: "AAA",
     slug: "three-flashes",
-    description: "Web pages do not contain anything that flashes more than three times in any one second period.",
+    description:
+      "Web pages do not contain anything that flashes more than three times in any one second period.",
     automatable: "manual",
     equivalentTo: ["wcag21:2.3.2"],
   },
@@ -549,8 +554,7 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Location",
     level: "AAA",
     slug: "location",
-    description:
-      "Information about the user's location within a set of web pages is available.",
+    description: "Information about the user's location within a set of web pages is available.",
     automatable: "manual",
     equivalentTo: ["wcag21:2.4.8"],
   },
@@ -559,7 +563,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Link Purpose (Link Only)",
     level: "AAA",
     slug: "link-purpose-link-only",
-    description: "A mechanism is available to allow the purpose of each link to be identified from link text alone.",
+    description:
+      "A mechanism is available to allow the purpose of each link to be identified from link text alone.",
     automatable: "partial",
     equivalentTo: ["wcag21:2.4.9"],
   },
@@ -717,7 +722,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "Abbreviations",
     level: "AAA",
     slug: "abbreviations",
-    description: "A mechanism for identifying the expanded form or meaning of abbreviations is available.",
+    description:
+      "A mechanism for identifying the expanded form or meaning of abbreviations is available.",
     automatable: "manual",
     equivalentTo: ["wcag21:3.1.4"],
   },
@@ -748,7 +754,8 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     title: "On Focus",
     level: "A",
     slug: "on-focus",
-    description: "When any user interface component receives focus, it does not initiate a change of context.",
+    description:
+      "When any user interface component receives focus, it does not initiate a change of context.",
     automatable: "manual",
     equivalentTo: ["wcag21:3.2.1"],
   },

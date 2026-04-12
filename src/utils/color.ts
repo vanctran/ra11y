@@ -17,82 +17,102 @@ const HEX_RE_3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
 const HEX_RE_4 = /^#([0-9a-f])([0-9a-f])([0-9a-f])([0-9a-f])$/i;
 const HEX_RE_6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
 const HEX_RE_8 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
-const RGB_RE = /^rgba?\(\s*([+-]?\d*\.?\d+)\s*,?\s*([+-]?\d*\.?\d+)\s*,?\s*([+-]?\d*\.?\d+)\s*(?:[,/]\s*([+-]?\d*\.?\d+%?)\s*)?\)$/i;
-const HSL_RE = /^hsla?\(\s*([+-]?\d*\.?\d+)(?:deg)?\s*,?\s*([+-]?\d*\.?\d+)%?\s*,?\s*([+-]?\d*\.?\d+)%?\s*(?:[,/]\s*([+-]?\d*\.?\d+%?)\s*)?\)$/i;
+const RGB_RE =
+  /^rgba?\(\s*([+-]?\d*\.?\d+)\s*,?\s*([+-]?\d*\.?\d+)\s*,?\s*([+-]?\d*\.?\d+)\s*(?:[,/]\s*([+-]?\d*\.?\d+%?)\s*)?\)$/i;
+const HSL_RE =
+  /^hsla?\(\s*([+-]?\d*\.?\d+)(?:deg)?\s*,?\s*([+-]?\d*\.?\d+)%?\s*,?\s*([+-]?\d*\.?\d+)%?\s*(?:[,/]\s*([+-]?\d*\.?\d+%?)\s*)?\)$/i;
 
-/** Parses any CSS color string into Rgb with alpha. Returns null on failure. */
+/**
+ * Parses any CSS color string into Rgb with alpha. Returns null on failure.
+ *
+ * The top-level is a cascade of single-purpose parsers — named, hex,
+ * rgb(), hsl(). Each returns null on miss so the dispatcher stays
+ * flat and readable.
+ */
 export function parseColor(input: string): Rgb | null {
   const trimmed = input.trim().toLowerCase();
+  return (
+    parseNamedColor(trimmed) ??
+    parseHex(trimmed) ??
+    parseRgbFunctional(trimmed) ??
+    parseHslFunctional(trimmed)
+  );
+}
 
-  // Named color shortcut — covers the 16 standard HTML color keywords that
-  // most stylesheets still use. We intentionally don't ship all 147 CSS
-  // named colors in v0.0.x.
+function parseNamedColor(trimmed: string): Rgb | null {
   const named = NAMED_COLORS[trimmed];
   if (named) return named;
-
   if (trimmed === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
-
-  // Hex 8 (#rrggbbaa)
-  const m8 = HEX_RE_8.exec(trimmed);
-  if (m8) {
-    return {
-      r: parseInt(m8[1] ?? "00", 16),
-      g: parseInt(m8[2] ?? "00", 16),
-      b: parseInt(m8[3] ?? "00", 16),
-      a: parseInt(m8[4] ?? "ff", 16) / 255,
-    };
-  }
-  // Hex 6 (#rrggbb)
-  const m6 = HEX_RE_6.exec(trimmed);
-  if (m6) {
-    return {
-      r: parseInt(m6[1] ?? "00", 16),
-      g: parseInt(m6[2] ?? "00", 16),
-      b: parseInt(m6[3] ?? "00", 16),
-      a: 1,
-    };
-  }
-  // Hex 4 (#rgba)
-  const m4 = HEX_RE_4.exec(trimmed);
-  if (m4) {
-    return {
-      r: parseInt((m4[1] ?? "0").repeat(2), 16),
-      g: parseInt((m4[2] ?? "0").repeat(2), 16),
-      b: parseInt((m4[3] ?? "0").repeat(2), 16),
-      a: parseInt((m4[4] ?? "f").repeat(2), 16) / 255,
-    };
-  }
-  // Hex 3 (#rgb)
-  const m3 = HEX_RE_3.exec(trimmed);
-  if (m3) {
-    return {
-      r: parseInt((m3[1] ?? "0").repeat(2), 16),
-      g: parseInt((m3[2] ?? "0").repeat(2), 16),
-      b: parseInt((m3[3] ?? "0").repeat(2), 16),
-      a: 1,
-    };
-  }
-
-  const rgbMatch = RGB_RE.exec(trimmed);
-  if (rgbMatch) {
-    const r = clamp(0, 255, Number.parseFloat(rgbMatch[1] ?? "0"));
-    const g = clamp(0, 255, Number.parseFloat(rgbMatch[2] ?? "0"));
-    const b = clamp(0, 255, Number.parseFloat(rgbMatch[3] ?? "0"));
-    const a = parseAlpha(rgbMatch[4]);
-    return { r, g, b, a };
-  }
-
-  const hslMatch = HSL_RE.exec(trimmed);
-  if (hslMatch) {
-    const h = Number.parseFloat(hslMatch[1] ?? "0");
-    const s = Number.parseFloat(hslMatch[2] ?? "0") / 100;
-    const l = Number.parseFloat(hslMatch[3] ?? "0") / 100;
-    const a = parseAlpha(hslMatch[4]);
-    const rgb = hslToRgb(h, s, l);
-    return { ...rgb, a };
-  }
-
   return null;
+}
+
+function parseHex(trimmed: string): Rgb | null {
+  return parseHex8(trimmed) ?? parseHex6(trimmed) ?? parseHex4(trimmed) ?? parseHex3(trimmed);
+}
+
+function parseHex8(trimmed: string): Rgb | null {
+  const m = HEX_RE_8.exec(trimmed);
+  if (!m) return null;
+  return {
+    r: parseInt(m[1] ?? "00", 16),
+    g: parseInt(m[2] ?? "00", 16),
+    b: parseInt(m[3] ?? "00", 16),
+    a: parseInt(m[4] ?? "ff", 16) / 255,
+  };
+}
+
+function parseHex6(trimmed: string): Rgb | null {
+  const m = HEX_RE_6.exec(trimmed);
+  if (!m) return null;
+  return {
+    r: parseInt(m[1] ?? "00", 16),
+    g: parseInt(m[2] ?? "00", 16),
+    b: parseInt(m[3] ?? "00", 16),
+    a: 1,
+  };
+}
+
+function parseHex4(trimmed: string): Rgb | null {
+  const m = HEX_RE_4.exec(trimmed);
+  if (!m) return null;
+  return {
+    r: parseInt((m[1] ?? "0").repeat(2), 16),
+    g: parseInt((m[2] ?? "0").repeat(2), 16),
+    b: parseInt((m[3] ?? "0").repeat(2), 16),
+    a: parseInt((m[4] ?? "f").repeat(2), 16) / 255,
+  };
+}
+
+function parseHex3(trimmed: string): Rgb | null {
+  const m = HEX_RE_3.exec(trimmed);
+  if (!m) return null;
+  return {
+    r: parseInt((m[1] ?? "0").repeat(2), 16),
+    g: parseInt((m[2] ?? "0").repeat(2), 16),
+    b: parseInt((m[3] ?? "0").repeat(2), 16),
+    a: 1,
+  };
+}
+
+function parseRgbFunctional(trimmed: string): Rgb | null {
+  const m = RGB_RE.exec(trimmed);
+  if (!m) return null;
+  return {
+    r: clamp(0, 255, Number.parseFloat(m[1] ?? "0")),
+    g: clamp(0, 255, Number.parseFloat(m[2] ?? "0")),
+    b: clamp(0, 255, Number.parseFloat(m[3] ?? "0")),
+    a: parseAlpha(m[4]),
+  };
+}
+
+function parseHslFunctional(trimmed: string): Rgb | null {
+  const m = HSL_RE.exec(trimmed);
+  if (!m) return null;
+  const h = Number.parseFloat(m[1] ?? "0");
+  const s = Number.parseFloat(m[2] ?? "0") / 100;
+  const l = Number.parseFloat(m[3] ?? "0") / 100;
+  const rgb = hslToRgb(h, s, l);
+  return { ...rgb, a: parseAlpha(m[4]) };
 }
 
 function parseAlpha(raw: string | undefined): number {

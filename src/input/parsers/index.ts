@@ -3,7 +3,7 @@
  * dispatches to these based on file extension.
  */
 
-export { parseHtml } from "./html.ts";
 export type { HtmlParseResult } from "./html.ts";
-export { parseTsx } from "./tsx.ts";
+export { parseHtml } from "./html.ts";
 export type { TsxParseResult } from "./tsx.ts";
+export { parseTsx } from "./tsx.ts";

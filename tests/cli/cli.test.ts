@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { chdir, cwd } from "node:process";
 import { join } from "node:path";
+import { chdir, cwd } from "node:process";
 import { runCli } from "../../src/cli/run.ts";
 import { setColorEnabled } from "../../src/utils/ansi.ts";
 
@@ -98,13 +98,7 @@ describe("runCli", () => {
   });
 
   it("--fail-on never forces exit 0 even with violations", async () => {
-    const r = await runCli([
-      "bad/alt-text-missing",
-      "--format",
-      "plain",
-      "--fail-on",
-      "never",
-    ]);
+    const r = await runCli(["bad/alt-text-missing", "--format", "plain", "--fail-on", "never"]);
     expect(r.exitCode).toBe(0);
     // Violations are still reported — just not failed on.
     expect(r.stdout).toContain("media/alt-text-missing");
@@ -117,13 +111,7 @@ describe("runCli", () => {
   });
 
   it("--exclude skips matching files", async () => {
-    const r = await runCli([
-      "bad/alt-text-missing",
-      "--format",
-      "plain",
-      "--exclude",
-      "jsx-img",
-    ]);
+    const r = await runCli(["bad/alt-text-missing", "--format", "plain", "--exclude", "jsx-img"]);
     expect(r.exitCode).toBe(1);
     // jsx file should be filtered out; still fails on HTML violations.
     expect(r.stdout).not.toContain("jsx-img-no-alt.tsx");

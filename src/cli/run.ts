@@ -16,6 +16,7 @@ import { runScanCommand, type ScanExit } from "./commands/scan.ts";
 import { runVpat } from "./commands/vpat.ts";
 import { renderHelp, VERSION } from "./help.ts";
 
+// biome-ignore lint/suspicious/useAwait: dispatcher returns command promises directly; adding await would be a no-op
 export async function runCli(argv: readonly string[]): Promise<ScanExit> {
   const options = parseCliArgs(argv);
 

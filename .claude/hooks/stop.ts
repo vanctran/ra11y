@@ -6,9 +6,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { block, ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { StopInput } from "./lib/types.ts";
 
 const input = await readHookInput<StopInput>();
@@ -17,7 +17,7 @@ const projectDir = process.env.CLAUDE_PROJECT_DIR ?? input.cwd;
 // Only run if there's something to check.
 const hasSrc = existsSync(join(projectDir, "src"));
 const hasNodeModules = existsSync(join(projectDir, "node_modules"));
-if (!hasSrc || !hasNodeModules) {
+if (!(hasSrc && hasNodeModules)) {
   audit({ event: "Stop", action: "skip:no-src-or-node-modules" });
   ok();
 }

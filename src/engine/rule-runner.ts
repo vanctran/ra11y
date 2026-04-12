@@ -9,8 +9,7 @@
  * See docs/kb/architecture/rule-engine.md.
  */
 
-import type { Language } from "../types/ast.ts";
-import type { EmittedViolation, Rule } from "../types/rule.ts";
+import type { EmittedViolation, Language, Rule } from "../types/rule.ts";
 import type { Severity, Violation } from "../types/violation.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 import type { StandardFilter } from "./standard-filter.ts";
@@ -30,53 +29,77 @@ export function runRulesForFile(input: RuleRunnerInput): readonly Violation[] {
   for (const rule of input.rules) {
     if (!input.filter.isRuleActive(rule)) continue;
     if (!applies(rule, fileExt, language)) continue;
-
-    const citedCriteria = input.filter.citedCriteria(rule);
-    const sink: EmittedViolation[] = [];
-    const ctx = buildContext(input, sink);
-
-    try {
-      if (rule.beforeFile) {
-        rule.beforeFile({ ...ctx, nodes: input.ast.root });
-      }
-      const nodeReturn = rule.check?.(ctx);
-      if (Array.isArray(nodeReturn)) {
-        for (const v of nodeReturn) sink.push(v);
-      }
-      const afterFileReturn = rule.afterFile?.({ ...ctx, nodes: input.ast.root });
-      if (Array.isArray(afterFileReturn)) {
-        for (const v of afterFileReturn) sink.push(v);
-      }
-    } catch (err) {
-      out.push(ruleCrashViolation(rule.id, input.filePath, err));
-      continue;
-    }
-
-    for (const emitted of sink) {
-      // Respect inline disables before emission.
-      if (ctx.isDisabled(emitted.location.line, rule.id)) continue;
-      // Stamp the file path onto the location. Rules don't know their
-      // own file path — the engine owns that fact. This also lets a
-      // rule emit with `filePath: ""` as a placeholder without the
-      // formatter losing the filename downstream.
-      const location = {
-        ...emitted.location,
-        filePath: input.filePath,
-      };
-      out.push({
-        ruleId: rule.id,
-        criteria: citedCriteria,
-        severity: emitted.severity,
-        location,
-        message: emitted.message,
-        ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
-        ...(emitted.fix !== undefined && { fix: emitted.fix }),
-        ...(emitted.snippet !== undefined && { snippet: emitted.snippet }),
-      });
-    }
+    runOneRule(rule, input, out);
   }
 
   return out;
+}
+
+/**
+ * Executes one rule's lifecycle against the current file and stamps its
+ * emitted violations into `out`. Isolated so the top-level runner stays
+ * under the cognitive-complexity budget — no nested try/catch, no
+ * per-rule local state leaking into the loop.
+ */
+function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void {
+  const citedCriteria = input.filter.citedCriteria(rule);
+  const sink: EmittedViolation[] = [];
+  const ctx = buildContext(input, sink);
+
+  try {
+    invokeLifecycle(rule, ctx, input.ast.root, sink);
+  } catch (err) {
+    out.push(ruleCrashViolation(rule.id, input.filePath, err));
+    return;
+  }
+
+  for (const emitted of sink) {
+    if (ctx.isDisabled(emitted.location.line, rule.id)) continue;
+    out.push(stampViolation(emitted, rule.id, citedCriteria, input.filePath));
+  }
+}
+
+/** Calls beforeFile → check → afterFile, pushing any returned arrays into the sink. */
+function invokeLifecycle(
+  rule: Rule,
+  ctx: ReturnType<typeof buildContext>,
+  astRoot: unknown,
+  sink: EmittedViolation[],
+): void {
+  const fileCtx = { ...ctx, nodes: astRoot };
+  rule.beforeFile?.(fileCtx);
+  collectReturn(rule.check?.(ctx), sink);
+  collectReturn(rule.afterFile?.(fileCtx), sink);
+}
+
+function collectReturn(maybe: readonly Violation[] | undefined, sink: EmittedViolation[]): void {
+  if (Array.isArray(maybe)) {
+    for (const v of maybe) sink.push(v);
+  }
+}
+
+/**
+ * Builds the final Violation record from the rule's emitted form.
+ * Rules don't know their own file path — the engine owns that fact —
+ * so we stamp it here. This also lets a rule emit with `filePath: ""`
+ * as a placeholder without the formatter losing the filename downstream.
+ */
+function stampViolation(
+  emitted: EmittedViolation,
+  ruleId: string,
+  criteria: readonly string[],
+  filePath: string,
+): Violation {
+  return {
+    ruleId,
+    criteria,
+    severity: emitted.severity,
+    location: { ...emitted.location, filePath },
+    message: emitted.message,
+    ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
+    ...(emitted.fix !== undefined && { fix: emitted.fix }),
+    ...(emitted.snippet !== undefined && { snippet: emitted.snippet }),
+  };
 }
 
 function extractExtension(filePath: string): string {

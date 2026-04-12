@@ -15,7 +15,7 @@
  * Exits 0 on success, 1 on violation with a clear diagnostic.
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir ?? process.cwd(), "..");
@@ -98,7 +98,9 @@ function checkFileImports(file: string): void {
     if (isLocal(spec)) continue;
     if (spec.startsWith("node:")) continue;
     if (spec === "typescript" || spec.startsWith("typescript/")) continue;
-    violations.push(`${relative(ROOT, file)}: imports '${spec}' — only node: builtins, typescript, and relative paths are allowed in src/.`);
+    violations.push(
+      `${relative(ROOT, file)}: imports '${spec}' — only node: builtins, typescript, and relative paths are allowed in src/.`,
+    );
   }
 }
 

@@ -4,7 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { runScan, type ParsedFile } from "../../engine/scanner.ts";
+import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { buildVpatReport, renderVpatMarkdown } from "../../reports/index.ts";
@@ -40,8 +40,7 @@ export async function runVpat(options: CliOptions): Promise<ScanExit> {
 }
 
 // Used when the test environment sets this to keep snapshots stable.
-const FIXED_TIMESTAMP =
-  process.env.RA11Y_FIXED_TIMESTAMP ?? new Date().toISOString();
+const FIXED_TIMESTAMP = process.env.RA11Y_FIXED_TIMESTAMP ?? new Date().toISOString();
 
 function parseFor(filePath: string, source: string): Ast | null {
   if (filePath.endsWith(".html") || filePath.endsWith(".htm")) {

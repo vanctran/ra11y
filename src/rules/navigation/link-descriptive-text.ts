@@ -32,12 +32,7 @@ import {
   htmlTextContent,
   jsxTextContent,
 } from "../../engine/ast-helpers.ts";
-import type {
-  HtmlDocument,
-  HtmlElement,
-  JsxElement,
-  TsxModule,
-} from "../../types/ast.ts";
+import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
 
 /**
  * Phrases that are never acceptable as link text on their own. Matched
@@ -60,12 +55,7 @@ const GENERIC_PHRASES: ReadonlySet<string> = new Set([
 ]);
 
 /** JSX tags that represent a link. Covers the common React router libs. */
-const JSX_LINK_TAGS: ReadonlySet<string> = new Set([
-  "a",
-  "Link",
-  "NavLink",
-  "Anchor",
-]);
+const JSX_LINK_TAGS: ReadonlySet<string> = new Set(["a", "Link", "NavLink", "Anchor"]);
 
 export const rule = defineRule({
   id: "navigation/link-descriptive-text",
@@ -137,7 +127,7 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     for (const el of findJsxElementsByTag(module, tag)) {
       if (hasAccessibleNameOverrideJsx(el)) continue;
       // Only check link-style elements with href/to props.
-      if (!hasJsxAttribute(el, "href") && !hasJsxAttribute(el, "to")) continue;
+      if (!(hasJsxAttribute(el, "href") || hasJsxAttribute(el, "to"))) continue;
       const text = jsxTextContent(el);
       const generic = matchesGenericPhrase(text);
       if (!generic) continue;
@@ -198,12 +188,13 @@ function buildSuggestion(href: string | null, phrase: string): string {
 function destinationHint(href: string): string {
   // Turn "/docs/api-reference" into "api reference" so the suggestion
   // reads like a real user-facing link title.
-  const cleaned = href
-    .replace(/^https?:\/\/[^/]+/, "")
-    .replace(/[?#].*$/, "")
-    .replace(/^\//, "")
-    .replace(/\.[a-zA-Z0-9]+$/, "")
-    .split("/")
-    .pop() ?? "";
+  const cleaned =
+    href
+      .replace(/^https?:\/\/[^/]+/, "")
+      .replace(/[?#].*$/, "")
+      .replace(/^\//, "")
+      .replace(/\.[a-zA-Z0-9]+$/, "")
+      .split("/")
+      .pop() ?? "";
   return cleaned.replace(/[-_]+/g, " ").trim();
 }

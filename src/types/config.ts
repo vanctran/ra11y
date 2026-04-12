@@ -14,8 +14,8 @@
  *   5. Built-in defaults
  */
 
-import type { Severity } from "./violation.ts";
 import type { Standard } from "./standard.ts";
+import type { Severity } from "./violation.ts";
 
 /** Rule-level severity override. `"off"` disables the rule entirely. */
 export type RuleSetting = Severity | "off";

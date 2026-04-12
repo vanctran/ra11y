@@ -7,9 +7,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { ok } from "./lib/output.ts";
-import { audit } from "./lib/audit.ts";
 import type { PostToolUseInput } from "./lib/types.ts";
 
 interface TestStatus {
@@ -32,7 +32,7 @@ const isUnderWatched =
   relPath.startsWith("scripts/") ||
   relPath.startsWith(".claude/hooks/");
 
-if (!isTs || !isUnderWatched) ok();
+if (!(isTs && isUnderWatched)) ok();
 if (!existsSync(join(projectDir, "node_modules"))) ok();
 
 const errors: string[] = [];

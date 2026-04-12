@@ -33,7 +33,7 @@ export async function discoverFiles(
 
   for (const raw of roots) {
     const abs = resolve(raw);
-    let info;
+    let info: Awaited<ReturnType<typeof stat>>;
     try {
       info = await stat(abs);
     } catch {

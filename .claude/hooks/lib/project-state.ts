@@ -2,7 +2,7 @@
 // user-prompt-submit. Keeps the two hooks in sync.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export interface ProjectState {
@@ -43,8 +43,11 @@ export function getProjectState(projectDir: string): ProjectState {
 
 function safeGit(cwd: string, args: string): string | null {
   try {
-    return execSync(`git ${args}`, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-      .trim();
+    return execSync(`git ${args}`, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     return null;
   }
@@ -57,30 +60,47 @@ function gitDirty(cwd: string): { dirty: boolean; dirtyCount: number } {
   return { dirty: lines.length > 0, dirtyCount: lines.length };
 }
 
+const HEADING_RE = /^## (Phase [0-9]+)(?:\s*—\s*)?(.*)$/;
+const ITEM_RE = /^- \[(.)\]/;
+
 function readBacklog(projectDir: string): PhaseProgress[] {
   const path = join(projectDir, ".claude", "backlog.md");
   if (!existsSync(path)) return [];
   const text = readFileSync(path, "utf8");
   const phases: PhaseProgress[] = [];
   let current: PhaseProgress | null = null;
-  const headingRe = /^## (Phase [0-9]+)(?:\s*—\s*)?(.*)$/;
-  const itemRe = /^- \[(.)\]/;
   for (const line of text.split("\n")) {
-    const head = headingRe.exec(line);
-    if (head) {
-      if (current) phases.push(current);
-      const label = (head[2] ?? "").trim();
-      current = { name: `${head[1]}${label ? ` — ${label}` : ""}`, done: 0, total: 0 };
-      continue;
-    }
-    const item = itemRe.exec(line);
-    if (item && current) {
-      current.total += 1;
-      if (item[1] === "x") current.done += 1;
-    }
+    const next = parseBacklogLine(line, current);
+    if (next.pushCurrent && current) phases.push(current);
+    if (next.replaceCurrent !== undefined) current = next.replaceCurrent;
   }
   if (current) phases.push(current);
   return phases;
+}
+
+interface BacklogLineEffect {
+  readonly pushCurrent: boolean;
+  readonly replaceCurrent: PhaseProgress | null | undefined;
+}
+
+/** Interprets one line of backlog.md, mutating `current` in place if it's an item. */
+function parseBacklogLine(line: string, current: PhaseProgress | null): BacklogLineEffect {
+  const head = HEADING_RE.exec(line);
+  if (head) {
+    const label = (head[2] ?? "").trim();
+    const next: PhaseProgress = {
+      name: `${head[1]}${label ? ` — ${label}` : ""}`,
+      done: 0,
+      total: 0,
+    };
+    return { pushCurrent: current !== null, replaceCurrent: next };
+  }
+  const item = ITEM_RE.exec(line);
+  if (item && current) {
+    current.total += 1;
+    if (item[1] === "x") current.done += 1;
+  }
+  return { pushCurrent: false, replaceCurrent: undefined };
 }
 
 function countTsFiles(dir: string): number {

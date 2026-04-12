@@ -5,11 +5,11 @@
  * additions.
  */
 
+import type { Rule } from "../types/rule.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
-import type { Rule } from "../types/rule.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,

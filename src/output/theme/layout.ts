@@ -27,17 +27,17 @@ export function gutter(lines: readonly string[]): string[] {
  */
 export function renderFileBox(label: string, body: readonly string[]): string {
   // Top line: ┌─ label ─── (to 64 cols visible)
-  const TARGET_WIDTH = 64;
+  const TargetWidth = 64;
   const labelText = ` ${label} `;
   const prefix = `${BOX.topLeft}${BOX.horizontal}`;
   const suffix = `${BOX.horizontal}`;
   const rulePaddingWidth = Math.max(
     3,
-    TARGET_WIDTH - stringWidth(prefix) - stringWidth(labelText) - stringWidth(suffix),
+    TargetWidth - stringWidth(prefix) - stringWidth(labelText) - stringWidth(suffix),
   );
   const top = `${prefix}${labelText}${BOX.horizontal.repeat(rulePaddingWidth)}${suffix}`;
   const bodyLines = [`${BOX.vertical}`, ...gutter(body), `${BOX.vertical}`];
-  const bottom = `${BOX.bottomLeft}${horizontalRule(TARGET_WIDTH - 1)}`;
+  const bottom = `${BOX.bottomLeft}${horizontalRule(TargetWidth - 1)}`;
   return [top, ...bodyLines, bottom].join("\n");
 }
 

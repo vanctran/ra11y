@@ -9,7 +9,7 @@
  * Exits 0 on success, 1 on violation.
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir ?? process.cwd(), "..");
