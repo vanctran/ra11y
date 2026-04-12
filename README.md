@@ -72,17 +72,41 @@ ra11y --since main                  # Scan files changed since a git ref
 ra11y --standard wcag22,section508  # Run multiple standards at once
 ra11y --level AA                    # Enforce conformance level
 ra11y --format sarif                # GitHub code scanning output
+ra11y --format agent                # AI agent-optimized JSON (see below)
 ra11y --baseline=create              # Freeze existing violations
 ra11y --coverage                    # Per-standard coverage summary
 ra11y --vpat                        # Generate VPAT-ready report
 ra11y --certification               # Generate readiness scorecard
 ra11y --checklist                   # Manual review checklist
 ra11y --explain contrast/minimum    # Rule detail, spec quote, examples
-ra11y --list-rules                  # All 29 built-in rules
+ra11y --list-rules                  # All 36 built-in rules
 ra11y --list-standards              # All 4 built-in standards
 ```
 
 Full CLI reference: [`docs/cli.md`](./docs/cli.md). Architecture: [`docs/architecture.md`](./docs/architecture.md).
+
+## Agent mode
+
+ra11y is the first accessibility scanner designed for AI coding agents. `--format agent` outputs compact JSON optimized for LLM context windows:
+
+```sh
+ra11y src/ --format agent | claude-code --stdin
+```
+
+The output includes:
+- **Plan summary** — "15 findings (12 auto-fixable). Most common: button-name (5), handler-missing (4)." — so the agent can form a strategy before reading individual findings
+- **Findings grouped by file** — with fix confidence (`high`/`medium`/`low`), safety (`safe`/`unsafe`), effort (`trivial`/`moderate`/`significant`), and the exact `// ra11y-ignore` suppression syntax
+- **Review candidates** — locations where the agent should evaluate manual WCAG criteria, with the question to answer, pass/fail criteria, and suggested fix
+
+```json
+{
+  "plan": { "totalFindings": 15, "autoFixable": 12, "summary": "..." },
+  "files": [{ "path": "src/Button.tsx", "findings": [{ "fix": { "confidence": "high" }, ... }] }],
+  "reviewCandidates": [{ "question": "Does this text rely solely on sensory characteristics?", ... }]
+}
+```
+
+Every field earns its place in the context window. No SARIF bloat, no schema URLs, no enterprise metadata.
 
 ## Configure
 
