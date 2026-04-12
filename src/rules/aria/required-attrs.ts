@@ -33,7 +33,7 @@ import {
   walkHtmlElements,
   walkJsxElements,
 } from "../../engine/ast-helpers.ts";
-import type { HtmlDocument, TsxModule } from "../../types/ast.ts";
+import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
 
 /**
  * Maps ARIA role → list of attributes the role *requires* per
@@ -43,17 +43,34 @@ import type { HtmlDocument, TsxModule } from "../../types/ast.ts";
  *
  * Source: https://www.w3.org/TR/wai-aria-1.2/#requiredState
  */
+/**
+ * WAI-ARIA 1.2 required states/properties.
+ *
+ * Changes from ARIA 1.1 → 1.2 reflected here:
+ *   - combobox: aria-expanded was required in 1.1, relaxed in 1.2
+ *     (expanded state is implied by the popup's presence). Removed.
+ *   - option: aria-selected is only required in single-select contexts
+ *     where one option must be selected. Removed — too many false
+ *     positives on standalone or multi-select options.
+ *   - separator: aria-valuenow is only required when the separator is
+ *     focusable. Handled via FOCUSABLE_ONLY_ROLES below.
+ */
 const REQUIRED_BY_ROLE: ReadonlyMap<string, readonly (readonly string[])[]> = new Map([
   ["checkbox", [["aria-checked"]]],
-  ["combobox", [["aria-expanded"]]],
   ["menuitemcheckbox", [["aria-checked"]]],
   ["menuitemradio", [["aria-checked"]]],
-  ["option", [["aria-selected"]]],
   ["radio", [["aria-checked"]]],
   ["scrollbar", [["aria-controls"], ["aria-valuenow"]]],
-  ["separator", [["aria-valuenow"]]], // only when focusable; best-effort
   ["slider", [["aria-valuenow"]]],
   ["switch", [["aria-checked"]]],
+]);
+
+/**
+ * Roles whose required attributes only apply when the element is
+ * focusable (tabindex >= 0 or natively focusable).
+ */
+const FOCUSABLE_ONLY_ROLES: ReadonlyMap<string, readonly (readonly string[])[]> = new Map([
+  ["separator", [["aria-valuenow"]]],
 ]);
 
 export const rule = defineRule({
@@ -103,26 +120,69 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
   for (const element of walkHtmlElements(doc)) {
     const role = getHtmlAttribute(element, "role")?.toLowerCase();
     if (!role) continue;
-    const requirements = REQUIRED_BY_ROLE.get(role);
-    if (!requirements) continue;
-    for (const group of requirements) {
-      if (group.some((attr) => hasHtmlAttribute(element, attr))) continue;
-      emit(buildViolation(element.tagName, role, group, element.loc.start));
+    checkRoleRequirements(role, REQUIRED_BY_ROLE, element, emit);
+    if (isFocusableHtml(element)) {
+      checkRoleRequirements(role, FOCUSABLE_ONLY_ROLES, element, emit);
     }
   }
+}
+
+function checkRoleRequirements(
+  role: string,
+  map: ReadonlyMap<string, readonly (readonly string[])[]>,
+  element: { tagName: string; loc: { start: { line: number; column: number } } },
+  emit: Emit,
+): void {
+  const requirements = map.get(role);
+  if (!requirements) return;
+  for (const group of requirements) {
+    if (group.some((attr) => hasHtmlAttribute(element as HtmlElement, attr))) continue;
+    emit(buildViolation(element.tagName, role, group, element.loc.start));
+  }
+}
+
+function isFocusableHtml(element: HtmlElement): boolean {
+  const tabindex = getHtmlAttribute(element, "tabindex");
+  if (tabindex !== null) {
+    const parsed = Number.parseInt(tabindex, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) return true;
+  }
+  return false;
 }
 
 function checkJsx(module: TsxModule, emit: Emit): void {
   for (const element of walkJsxElements(module)) {
     const role = getJsxAttributeString(element, "role")?.toLowerCase();
     if (!role) continue;
-    const requirements = REQUIRED_BY_ROLE.get(role);
-    if (!requirements) continue;
-    for (const group of requirements) {
-      if (group.some((attr) => hasJsxAttribute(element, attr))) continue;
-      emit(buildViolation(element.tagName, role, group, element.loc.start));
+    checkRoleRequirementsJsx(role, REQUIRED_BY_ROLE, element, emit);
+    if (isFocusableJsx(element)) {
+      checkRoleRequirementsJsx(role, FOCUSABLE_ONLY_ROLES, element, emit);
     }
   }
+}
+
+function checkRoleRequirementsJsx(
+  role: string,
+  map: ReadonlyMap<string, readonly (readonly string[])[]>,
+  element: JsxElement,
+  emit: Emit,
+): void {
+  const requirements = map.get(role);
+  if (!requirements) return;
+  for (const group of requirements) {
+    if (group.some((attr) => hasJsxAttribute(element, attr))) continue;
+    emit(buildViolation(element.tagName, role, group, element.loc.start));
+  }
+}
+
+function isFocusableJsx(element: JsxElement): boolean {
+  const tabindex =
+    getJsxAttributeString(element, "tabIndex") ?? getJsxAttributeString(element, "tabindex");
+  if (tabindex !== null) {
+    const parsed = Number.parseInt(tabindex, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) return true;
+  }
+  return false;
 }
 
 function buildViolation(

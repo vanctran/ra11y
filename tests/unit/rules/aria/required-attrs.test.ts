@@ -21,17 +21,19 @@ describe("rule aria/required-attrs", () => {
       expect(violations[0]?.message).toContain("aria-valuenow");
     });
 
-    it("role=combobox has no aria-expanded", () => {
-      const violations = runRule(rule, `<div role="combobox"></div>`, { filePath: "index.html" });
-      expect(violations).toHaveLength(1);
-      expect(violations[0]?.message).toContain("aria-expanded");
-    });
-
     it("role=switch has no aria-checked", () => {
       const violations = runRule(rule, `<div role="switch" tabindex="0"></div>`, {
         filePath: "index.html",
       });
       expect(violations).toHaveLength(1);
+    });
+
+    it("role=separator with tabindex=0 (focusable) requires aria-valuenow", () => {
+      const violations = runRule(rule, `<div role="separator" tabindex="0"></div>`, {
+        filePath: "index.html",
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.message).toContain("aria-valuenow");
     });
   });
 
@@ -63,6 +65,23 @@ describe("rule aria/required-attrs", () => {
       });
       expect(violations).toHaveLength(0);
     });
+
+    it("role=combobox without aria-expanded is valid in ARIA 1.2", () => {
+      const violations = runRule(rule, `<div role="combobox"></div>`, { filePath: "index.html" });
+      expect(violations).toHaveLength(0);
+    });
+
+    it("role=option without aria-selected is valid (context-dependent)", () => {
+      const violations = runRule(rule, `<div role="option">Choice A</div>`, {
+        filePath: "index.html",
+      });
+      expect(violations).toHaveLength(0);
+    });
+
+    it("role=separator without tabindex (non-focusable) does not require aria-valuenow", () => {
+      const violations = runRule(rule, `<div role="separator"></div>`, { filePath: "index.html" });
+      expect(violations).toHaveLength(0);
+    });
   });
 
   describe("JSX: fires when", () => {
@@ -71,6 +90,11 @@ describe("rule aria/required-attrs", () => {
         rule,
         `const X = <div role="checkbox" tabIndex={0}>Remember me</div>;`,
       );
+      expect(violations).toHaveLength(1);
+    });
+
+    it("role=separator with tabIndex=0 requires aria-valuenow", () => {
+      const violations = runRule(rule, `const X = <div role="separator" tabIndex="0"></div>;`);
       expect(violations).toHaveLength(1);
     });
   });
