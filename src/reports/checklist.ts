@@ -11,6 +11,7 @@
  * Non-WCAG standards are flat.
  */
 
+import type { ReviewCandidate } from "../types/review.ts";
 import type { Standard } from "../types/standard.ts";
 import type { PerStandardCoverage } from "./coverage.ts";
 
@@ -27,6 +28,7 @@ export interface ChecklistItem {
   readonly level: string;
   readonly url: string;
   readonly guidance: string;
+  readonly candidates: readonly ReviewCandidate[];
 }
 
 export interface ChecklistReport {
@@ -59,7 +61,9 @@ const GUIDANCE_BY_ID: Readonly<Record<string, string>> = {
 export function buildChecklist(
   coverage: readonly PerStandardCoverage[],
   standards: readonly Standard[],
+  candidates: readonly ReviewCandidate[] = [],
 ): ChecklistReport {
+  const candidatesByCriterion = groupCandidatesByCriterion(candidates);
   const standardById = new Map(standards.map((s) => [s.id, s]));
   const sections: ChecklistSection[] = [];
   let total = 0;
@@ -79,6 +83,7 @@ export function buildChecklist(
         level: criterion.level,
         url: criterion.url,
         guidance: GUIDANCE_BY_ID[criterion.id] ?? criterion.description,
+        candidates: candidatesByCriterion.get(criterion.id) ?? [],
       });
     }
 
@@ -113,11 +118,32 @@ export function renderChecklistMarkdown(report: ChecklistReport): string {
       lines.push(`- [ ] **${item.localId}** ${item.title} · Level ${item.level}`);
       lines.push(`  - ${item.guidance}`);
       lines.push(`  - Spec: ${item.url}`);
+      if (item.candidates.length > 0) {
+        lines.push(`  - **Review locations** (${item.candidates.length} found):`);
+        for (const c of item.candidates) {
+          lines.push(`    - \`${c.location.filePath}:${c.location.line}\` — ${c.reason}`);
+        }
+      }
       lines.push("");
     }
   }
 
   return lines.join("\n");
+}
+
+function groupCandidatesByCriterion(
+  candidates: readonly ReviewCandidate[],
+): ReadonlyMap<string, readonly ReviewCandidate[]> {
+  const map = new Map<string, ReviewCandidate[]>();
+  for (const candidate of candidates) {
+    let group = map.get(candidate.criterionId);
+    if (!group) {
+      group = [];
+      map.set(candidate.criterionId, group);
+    }
+    group.push(candidate);
+  }
+  return map;
 }
 
 function compareLocalIds(a: string, b: string): number {
