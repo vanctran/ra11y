@@ -6,6 +6,7 @@
 
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
+import { loadConfig, parseInlineDisables } from "../../config/index.ts";
 import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseCss, parseHtml, parseTsx } from "../../input/parsers/index.ts";
@@ -13,6 +14,8 @@ import { BUILTIN_FORMATTERS } from "../../output/formatters/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
+import type { LoadedConfig } from "../../types/config.ts";
+import type { Rule } from "../../types/rule.ts";
 import type { Standard } from "../../types/standard.ts";
 import type { CliOptions } from "../args.ts";
 
@@ -32,8 +35,17 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   const cwd = process.cwd();
   const roots = options.positionals.length > 0 ? options.positionals : [cwd];
 
+  // Load the user's config file (or fall back to defaults). CLI flags
+  // always win over config-file values; we only consult the config to
+  // pick up standards, rule settings, and excludes that aren't
+  // explicitly set on the command line.
+  const fileConfig = await loadConfig({ cwd });
+  const effectiveStandards = mergeStandards(options.standards, fileConfig);
+  const effectiveExcludes = mergeExcludes(options.exclude, fileConfig);
+  const activeRules = filterRulesByConfig(BUILTIN_RULES, fileConfig);
+
   // Validate requested standards before doing any work.
-  const missing = options.standards.filter((id) => !(id in STANDARD_BY_ID));
+  const missing = effectiveStandards.filter((id) => !(id in STANDARD_BY_ID));
   if (missing.length > 0) {
     return {
       stdout: "",
@@ -42,7 +54,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     };
   }
 
-  const discovered = await discoverFiles(roots, { excludes: options.exclude });
+  const discovered = await discoverFiles(roots, { excludes: effectiveExcludes });
   if (discovered.length === 0) {
     return {
       stdout: "ra11y: no parseable files found.\n",
@@ -60,13 +72,14 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
       filePath: relative(cwd, filePath),
       source,
       ast,
+      disableMap: parseInlineDisables(source),
     });
   }
 
   const { result, report } = runScan({
     standards: LOADED_STANDARDS,
-    rules: BUILTIN_RULES,
-    enabled: options.standards,
+    rules: activeRules,
+    enabled: effectiveStandards,
     files: parsed,
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
   });
@@ -113,4 +126,50 @@ function shouldFail(
     if (failOn === "error" && v.severity === "error") return true;
   }
   return false;
+}
+
+/**
+ * CLI standards win when the user specified them explicitly. The
+ * `options.standards` default is `["wcag22"]` — which is also the
+ * config default — so we can't easily distinguish "user wrote
+ * --standard wcag22" from "user wrote nothing". For v0.0.x, the CLI
+ * value always wins; when config support stabilizes the args parser
+ * will track explicit vs. default so the merge is unambiguous.
+ */
+function mergeStandards(
+  cliStandards: readonly string[],
+  fileConfig: LoadedConfig,
+): readonly string[] {
+  // Default CLI value is ["wcag22"]. If config specifies something
+  // different, prefer config. Otherwise stick with CLI.
+  const cliIsDefault = cliStandards.length === 1 && cliStandards[0] === "wcag22";
+  if (cliIsDefault && fileConfig.standards.length > 0) return fileConfig.standards;
+  return cliStandards;
+}
+
+function mergeExcludes(
+  cliExcludes: readonly string[],
+  fileConfig: LoadedConfig,
+): readonly string[] {
+  return [...cliExcludes, ...fileConfig.exclude];
+}
+
+/**
+ * Applies config.rules to the built-in rule list, dropping any rule
+ * whose setting is "off" and leaving the rest for execution. Severity
+ * overrides (`"warn"`, `"error"`) are applied via a wrapper object
+ * that preserves the original rule identity.
+ */
+function filterRulesByConfig(rules: readonly Rule[], fileConfig: LoadedConfig): readonly Rule[] {
+  const settings = fileConfig.rules;
+  return rules
+    .filter((r) => settings[r.id] !== "off")
+    .map((r) => applySeverityOverride(r, settings[r.id]));
+}
+
+function applySeverityOverride(rule: Rule, setting: unknown): Rule {
+  if (setting === "error" || setting === "warning" || setting === "info") {
+    return { ...rule, severity: setting };
+  }
+  return rule;
 }

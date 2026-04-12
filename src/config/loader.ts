@@ -1,0 +1,139 @@
+/**
+ * Configuration loader.
+ *
+ * Resolves a user's `ra11y.config.{ts,js,json}` file walking up from
+ * a starting directory, reads it, and produces a fully resolved
+ * {@link LoadedConfig}. Missing or malformed config files return the
+ * defaults — ra11y works out of the box with no config, but honors
+ * one when it's present.
+ *
+ * Loader precedence (highest wins):
+ *   1. Explicit path passed as `configPath`
+ *   2. `$RA11Y_CONFIG` environment variable
+ *   3. Walk up from cwd looking for ra11y.config.ts/js/json, stopping
+ *      at a .git directory or the filesystem root
+ *   4. Defaults (DEFAULT_CONFIG)
+ *
+ * The TypeScript loading path uses Bun's native .ts import support
+ * (this module is run under Bun). When shipped as a compiled
+ * artifact on Node, the .ts path falls back to .js. .json is always
+ * supported via JSON.parse.
+ */
+
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import type { Config, ConfigOverride, LoadedConfig, RuleSetting } from "../types/config.ts";
+import { DEFAULT_CONFIG } from "./defaults.ts";
+
+const CONFIG_FILENAMES = [
+  "ra11y.config.ts",
+  "ra11y.config.js",
+  "ra11y.config.mjs",
+  "ra11y.config.json",
+] as const;
+
+export interface LoadConfigOptions {
+  /** Starting directory for the upward walk. Defaults to process.cwd(). */
+  readonly cwd?: string;
+  /** Explicit config path override. Skips discovery when provided. */
+  readonly configPath?: string;
+  /** Skip discovery and always return DEFAULT_CONFIG. */
+  readonly skip?: boolean;
+}
+
+export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadedConfig> {
+  if (options.skip === true) return DEFAULT_CONFIG;
+  const cwd = options.cwd ?? process.cwd();
+  const path = resolveConfigPath(cwd, options.configPath);
+  if (!path) return DEFAULT_CONFIG;
+  try {
+    const userConfig = await readConfigFile(path);
+    return mergeConfig(userConfig, path);
+  } catch (err) {
+    // Surface the error but fall back to defaults so a broken config
+    // doesn't completely prevent ra11y from running.
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`ra11y: failed to load config at ${path}: ${message}\n`);
+    return { ...DEFAULT_CONFIG, sourcePath: path };
+  }
+}
+
+/**
+ * Finds the config file by walking up from `cwd`. Returns an absolute
+ * path or null if none exists.
+ */
+function resolveConfigPath(cwd: string, explicit: string | undefined): string | null {
+  const fromExplicit = resolveFromExplicit(cwd, explicit);
+  if (fromExplicit !== null) return fromExplicit;
+  const fromEnv = resolveFromEnv(cwd);
+  if (fromEnv !== null) return fromEnv;
+  return walkUpFrom(resolve(cwd));
+}
+
+function resolveFromExplicit(cwd: string, explicit: string | undefined): string | null {
+  if (explicit === undefined || explicit.length === 0) return null;
+  return isAbsolute(explicit) ? explicit : resolve(cwd, explicit);
+}
+
+function resolveFromEnv(cwd: string): string | null {
+  const envPath = process.env.RA11Y_CONFIG;
+  if (envPath === undefined || envPath.length === 0) return null;
+  return isAbsolute(envPath) ? envPath : resolve(cwd, envPath);
+}
+
+/** Walks up from `start` looking for a known config filename. Stops at .git or the filesystem root. */
+function walkUpFrom(start: string): string | null {
+  let dir = start;
+  while (true) {
+    const found = findConfigIn(dir);
+    if (found !== null) return found;
+    if (existsSync(join(dir, ".git"))) return null;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function findConfigIn(dir: string): string | null {
+  for (const filename of CONFIG_FILENAMES) {
+    const candidate = join(dir, filename);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function readConfigFile(path: string): Promise<Config> {
+  if (path.endsWith(".json")) {
+    const raw = await readFile(path, "utf8");
+    return JSON.parse(raw) as Config;
+  }
+  // Dynamic import handles .ts (under Bun), .js, .mjs.
+  const module = (await import(path)) as { default?: Config };
+  if (module.default === undefined) {
+    throw new Error(`config file has no default export`);
+  }
+  return module.default;
+}
+
+function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
+  const standards = user.standards ?? DEFAULT_CONFIG.standards;
+  const standardsAsStrings: readonly string[] = standards.map((s) =>
+    typeof s === "string" ? s : s.id,
+  );
+
+  const rules: Readonly<Record<string, RuleSetting>> = user.rules ?? DEFAULT_CONFIG.rules;
+  const exclude: readonly string[] = user.exclude ?? DEFAULT_CONFIG.exclude;
+  const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
+  const projects = user.projects ?? DEFAULT_CONFIG.projects;
+
+  return {
+    standards: standardsAsStrings,
+    level: user.level ?? DEFAULT_CONFIG.level,
+    rules,
+    exclude,
+    overrides,
+    projects,
+    sourcePath,
+  };
+}
