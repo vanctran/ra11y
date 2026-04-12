@@ -5,8 +5,15 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import { loadConfig, parseInlineDisables } from "../../config/index.ts";
+import {
+  BASELINE_FILENAME,
+  buildBaselineFile,
+  diffAgainstBaseline,
+  loadBaseline,
+  writeBaseline,
+} from "../../engine/baseline.ts";
 import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseCss, parseHtml, parseTsx } from "../../input/parsers/index.ts";
@@ -17,6 +24,8 @@ import type { Ast } from "../../types/ast.ts";
 import type { LoadedConfig } from "../../types/config.ts";
 import type { Rule } from "../../types/rule.ts";
 import type { Standard } from "../../types/standard.ts";
+import type { ScanResult } from "../../types/violation.ts";
+import { filesChangedSince, stagedFiles } from "../../utils/git.ts";
 import type { CliOptions } from "../args.ts";
 
 const LOADED_STANDARDS: readonly Standard[] = BUILTIN_STANDARDS;
@@ -33,7 +42,6 @@ export interface ScanExit {
 
 export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   const cwd = process.cwd();
-  const roots = options.positionals.length > 0 ? options.positionals : [cwd];
 
   // Load the user's config file (or fall back to defaults). CLI flags
   // always win over config-file values; we only consult the config to
@@ -51,6 +59,18 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
       stdout: "",
       stderr: `ra11y: unknown standard(s): ${missing.join(", ")}. Loaded: ${Object.keys(STANDARD_BY_ID).join(", ")}.\n`,
       exitCode: 2,
+    };
+  }
+
+  // Resolve the root set: positional args first, then fall back to
+  // --changed (git staged), then --since (files changed since ref),
+  // then the current directory.
+  const roots = resolveScanRoots(options, cwd);
+  if (roots.length === 0) {
+    return {
+      stdout: "ra11y: no files to scan.\n",
+      stderr: "",
+      exitCode: 0,
     };
   }
 
@@ -84,6 +104,12 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
   });
 
+  // Baseline mode — create, check, or update. Each branch returns
+  // early with its own output.
+  if (options.baseline !== undefined) {
+    return handleBaselineMode(options, cwd, result);
+  }
+
   // options.format is the CliOptions union "terminal" | "plain" | "json",
   // which exactly matches BuiltinFormatters keys, so indexing is total
   // and no fallback is needed.
@@ -92,6 +118,90 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
 
   const exitCode = shouldFail(result, options.failOn) ? 1 : 0;
   return { stdout: `${output}\n`, stderr: "", exitCode };
+}
+
+/**
+ * Resolves the file/dir roots to scan. Precedence:
+ *   1. Positional arguments (highest)
+ *   2. --changed → git-staged files
+ *   3. --since <ref> → files changed since <ref>
+ *   4. cwd (default)
+ */
+function resolveScanRoots(options: CliOptions, cwd: string): readonly string[] {
+  if (options.positionals.length > 0) return options.positionals;
+  if (options.changed) return stagedFiles(cwd);
+  if (options.since !== undefined && options.since.length > 0) {
+    return filesChangedSince(options.since, cwd);
+  }
+  return [cwd];
+}
+
+/**
+ * Handles the three --baseline sub-modes. All three exit with a
+ * plain-text report instead of going through the normal formatter
+ * pipeline — baseline output is operational, not user-facing.
+ */
+async function handleBaselineMode(
+  options: CliOptions,
+  cwd: string,
+  result: ScanResult,
+): Promise<ScanExit> {
+  const path = options.baselineFile ?? join(cwd, BASELINE_FILENAME);
+
+  if (options.baseline === "create") {
+    const baseline = buildBaselineFile(result);
+    await writeBaseline(path, baseline);
+    return {
+      stdout: `ra11y: wrote baseline with ${baseline.violations.length} entries to ${relative(cwd, path)}\n`,
+      stderr: "",
+      exitCode: 0,
+    };
+  }
+
+  if (options.baseline === "update") {
+    const baseline = buildBaselineFile(result);
+    await writeBaseline(path, baseline);
+    return {
+      stdout: `ra11y: updated baseline — now ${baseline.violations.length} entries in ${relative(cwd, path)}\n`,
+      stderr: "",
+      exitCode: 0,
+    };
+  }
+
+  // check
+  const existing = await loadBaseline(path);
+  if (!existing) {
+    return {
+      stdout: "",
+      stderr: `ra11y: baseline file not found at ${relative(cwd, path)}. Run \`ra11y --baseline create\` first.\n`,
+      exitCode: 2,
+    };
+  }
+  const diff = diffAgainstBaseline(result, existing);
+  const lines: string[] = [];
+  lines.push(
+    `ra11y baseline check: ${diff.grandfathered.length} grandfathered · ${diff.newViolations.length} new · ${diff.resolved.length} resolved`,
+  );
+  if (diff.newViolations.length > 0) {
+    lines.push("");
+    lines.push("New violations not in the baseline:");
+    for (const v of diff.newViolations) {
+      lines.push(
+        `  ${v.location.filePath}:${v.location.line}:${v.location.column}  ${v.ruleId}  ${v.message}`,
+      );
+    }
+  }
+  if (diff.resolved.length > 0) {
+    lines.push("");
+    lines.push(
+      `${diff.resolved.length} baseline entries are resolved — run \`ra11y --baseline update\` to prune them.`,
+    );
+  }
+  return {
+    stdout: `${lines.join("\n")}\n`,
+    stderr: "",
+    exitCode: diff.newViolations.length > 0 ? 3 : 0,
+  };
 }
 
 function parseFor(filePath: string, source: string): Ast | null {

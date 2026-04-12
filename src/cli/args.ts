@@ -30,6 +30,14 @@ export interface CliOptions {
   readonly verbose: boolean;
   readonly debug: boolean;
   readonly quiet: boolean;
+  /** Scan only files currently staged in git. */
+  readonly changed: boolean;
+  /** Scan only files changed since the given git ref. */
+  readonly since: string | undefined;
+  /** Baseline mode: create | check | update, or undefined for off. */
+  readonly baseline: "create" | "check" | "update" | undefined;
+  /** Path to the baseline file (default: .ra11y-baseline.json in cwd). */
+  readonly baselineFile: string | undefined;
 }
 
 /**
@@ -67,6 +75,10 @@ interface RawCliOptions {
   readonly failOn: string | undefined;
   readonly exclude: string | readonly string[] | undefined;
   readonly ignore: string | readonly string[] | undefined;
+  readonly changed: boolean | undefined;
+  readonly since: string | undefined;
+  readonly baseline: string | undefined;
+  readonly baselineFile: string | undefined;
 }
 
 const FLAGS = [
@@ -82,6 +94,7 @@ const FLAGS = [
   "checklist",
   "vpat",
   "certification",
+  "changed",
 ];
 
 const ALIASES: Readonly<Record<string, string>> = {
@@ -143,6 +156,10 @@ function translate(
     failOn: stringAt(raw, "fail-on"),
     exclude: listAt(raw, "exclude"),
     ignore: listAt(raw, "ignore"),
+    changed: boolAt(raw, "changed"),
+    since: stringAt(raw, "since"),
+    baseline: stringAt(raw, "baseline"),
+    baselineFile: stringAt(raw, "baseline-file"),
   };
 }
 
@@ -189,7 +206,16 @@ function baseOpts(
     verbose: raw?.verbose === true,
     debug: raw?.debug === true,
     quiet: raw?.quiet === true,
+    changed: raw?.changed === true,
+    since: raw?.since,
+    baseline: normalizeBaseline(raw?.baseline),
+    baselineFile: raw?.baselineFile,
   };
+}
+
+function normalizeBaseline(value: string | undefined): CliOptions["baseline"] {
+  if (value === "create" || value === "check" || value === "update") return value;
+  return undefined;
 }
 
 function normalizeFormat(value: string | undefined): CliOptions["format"] {
