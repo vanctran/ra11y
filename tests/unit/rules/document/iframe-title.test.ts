@@ -12,7 +12,7 @@ describe("rule document/iframe-title", () => {
       expect(violations[0]?.ruleId).toBe("document/iframe-title");
       expect(violations[0]?.severity).toBe("error");
       expect(violations[0]?.criteria).toContain("wcag22:4.1.2");
-      expect(violations[0]?.criteria).toContain("wcag22:2.4.1");
+      // 2.4.1 (Bypass Blocks) was removed — iframe title is a 4.1.2 issue
     });
 
     it("iframe has an empty title attribute", () => {
@@ -149,11 +149,9 @@ describe("rule document/iframe-title", () => {
   });
 
   describe("rule metadata", () => {
-    it("declares wcag22 and wcag21 for 4.1.2 and 2.4.1", () => {
+    it("declares wcag22 and wcag21 for 4.1.2", () => {
       expect(rule.satisfies).toContain("wcag22:4.1.2");
       expect(rule.satisfies).toContain("wcag21:4.1.2");
-      expect(rule.satisfies).toContain("wcag22:2.4.1");
-      expect(rule.satisfies).toContain("wcag21:2.4.1");
     });
 
     it("has a normativeQuote citing WCAG", () => {

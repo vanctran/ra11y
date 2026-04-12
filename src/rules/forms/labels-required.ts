@@ -46,7 +46,14 @@ const IMPLICIT_SUBMIT_TYPES: ReadonlySet<string> = new Set([
 
 export const rule = defineRule({
   id: "forms/labels-required",
-  satisfies: ["wcag22:3.3.2", "wcag21:3.3.2"],
+  satisfies: [
+    "wcag22:1.3.1",
+    "wcag21:1.3.1",
+    "wcag22:3.3.2",
+    "wcag21:3.3.2",
+    "wcag22:4.1.2",
+    "wcag21:4.1.2",
+  ],
   severity: "error",
   scope: "document",
   appliesTo: {

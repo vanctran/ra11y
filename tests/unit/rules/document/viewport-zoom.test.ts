@@ -86,11 +86,9 @@ describe("rule document/viewport-zoom", () => {
   });
 
   describe("rule metadata", () => {
-    it("declares both 1.4.4 and 1.4.10 across wcag22/wcag21", () => {
+    it("declares 1.4.4 across wcag22/wcag21", () => {
       expect(rule.satisfies).toContain("wcag22:1.4.4");
       expect(rule.satisfies).toContain("wcag21:1.4.4");
-      expect(rule.satisfies).toContain("wcag22:1.4.10");
-      expect(rule.satisfies).toContain("wcag21:1.4.10");
     });
   });
 });

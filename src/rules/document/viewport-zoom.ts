@@ -30,7 +30,7 @@ import type { HtmlDocument } from "../../types/ast.ts";
 
 export const rule = defineRule({
   id: "document/viewport-zoom",
-  satisfies: ["wcag22:1.4.4", "wcag21:1.4.4", "wcag22:1.4.10", "wcag21:1.4.10"],
+  satisfies: ["wcag22:1.4.4", "wcag21:1.4.4"],
   severity: "error",
   scope: "document",
   appliesTo: {

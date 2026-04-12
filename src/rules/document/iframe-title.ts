@@ -40,7 +40,7 @@ import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../typ
 
 export const rule = defineRule({
   id: "document/iframe-title",
-  satisfies: ["wcag22:4.1.2", "wcag21:4.1.2", "wcag22:2.4.1", "wcag21:2.4.1"],
+  satisfies: ["wcag22:4.1.2", "wcag21:4.1.2"],
   severity: "error",
   scope: "node",
   appliesTo: {

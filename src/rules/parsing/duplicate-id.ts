@@ -28,7 +28,14 @@ import type { HtmlDocument, HtmlElement } from "../../types/ast.ts";
 
 export const rule = defineRule({
   id: "parsing/duplicate-id",
-  satisfies: ["wcag22:4.1.1", "wcag21:4.1.1"],
+  satisfies: [
+    "wcag22:4.1.1",
+    "wcag21:4.1.1",
+    "wcag22:1.3.1",
+    "wcag21:1.3.1",
+    "wcag22:4.1.2",
+    "wcag21:4.1.2",
+  ],
   severity: "error",
   scope: "document",
   appliesTo: {

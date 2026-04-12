@@ -42,7 +42,7 @@ const BCP47_BASIC = /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$/;
 
 export const rule = defineRule({
   id: "parsing/html-has-lang",
-  satisfies: ["wcag22:3.1.2", "wcag21:3.1.2"],
+  satisfies: ["wcag22:3.1.1", "wcag21:3.1.1", "wcag22:3.1.2", "wcag21:3.1.2"],
   severity: "error",
   scope: "document",
   appliesTo: {

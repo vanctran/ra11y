@@ -46,7 +46,7 @@ import type { HtmlDocument, JsxElement, TsxModule } from "../../types/ast.ts";
 
 export const rule = defineRule({
   id: "keyboard/accesskey-duplicate",
-  satisfies: ["wcag22:2.1.1", "wcag21:2.1.1"],
+  satisfies: ["wcag22:2.1.1", "wcag21:2.1.1", "wcag22:2.1.4", "wcag21:2.1.4"],
   severity: "error",
   scope: "document",
   appliesTo: {

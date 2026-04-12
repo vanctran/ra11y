@@ -247,7 +247,7 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
     slug: "resize-text",
     description:
       "Text can be resized without assistive technology up to 200 percent without loss of content or functionality.",
-    automatable: "manual",
+    automatable: "partial",
     equivalentTo: ["wcag21:1.4.4"],
   },
   {
