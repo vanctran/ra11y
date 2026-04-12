@@ -18,6 +18,7 @@ import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as viewportZoom } from "./document/viewport-zoom.ts";
 import { rule as tabindexPositive } from "./focus/tabindex-positive.ts";
 import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
+import { rule as fieldsetLegend } from "./forms/fieldset-legend.ts";
 import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
@@ -37,6 +38,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   buttonName,
   contrastMinimum,
   duplicateId,
+  fieldsetLegend,
   handlerMissing,
   headingHierarchy,
   hiddenFocus,
@@ -64,6 +66,7 @@ export {
   buttonName,
   contrastMinimum,
   duplicateId,
+  fieldsetLegend,
   handlerMissing,
   headingHierarchy,
   hiddenFocus,
