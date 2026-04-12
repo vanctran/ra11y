@@ -336,7 +336,6 @@ describe("MCP tool: coverage", () => {
     const data = JSON.parse(result.content[0].text) as {
       standardId: string;
       automatedPassRate: number;
-      overallAutomatedCoverage: number;
       criteriaTotal: number;
       criteriaAutomatable: number;
       criteriaManualReviewRequired: number;
@@ -345,13 +344,12 @@ describe("MCP tool: coverage", () => {
     expect(data.standardId).toBe("wcag22");
     expect(typeof data.automatedPassRate).toBe("number");
     expect(data.criteriaTotal).toBeGreaterThan(0);
-    // overallAutomatedCoverage factors in manual criteria, so it can't
-    // exceed (automatable / total) * 100.
-    expect(data.overallAutomatedCoverage).toBeLessThanOrEqual(
-      Math.round((data.criteriaAutomatable / data.criteriaTotal) * 100),
-    );
+    expect(data.criteriaAutomatable).toBeLessThanOrEqual(data.criteriaTotal);
     expect(data.criteriaManualReviewRequired).toBeGreaterThan(0);
-    expect(data.summary).toContain("manual review");
+    expect(data.summary).toContain("manual");
+    // Must NOT expose overallAutomatedCoverage — that ratio reads as failure
+    // ("54%") when it actually measures a property of the rule library.
+    expect((data as Record<string, unknown>).overallAutomatedCoverage).toBeUndefined();
   });
 });
 

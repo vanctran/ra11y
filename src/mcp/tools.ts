@@ -344,15 +344,15 @@ const coverageTool: McpTool = {
 
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const entries = coverage.map((c) => {
-      // Two different ratios agents routinely confuse. Surface both with
-      // self-documenting names so a "100" headline can't imply full WCAG
-      // conformance when 26/56 criteria aren't even automatable.
-      const automatedPassRate = c.automatedPassRate; // passing / automatable
-      const overallAutomatedCoverage = c.total > 0 ? Math.round((c.passing / c.total) * 100) : 0;
+      // Report only the pass rate for what ra11y actually checks. We used to
+      // also emit `overallAutomatedCoverage = passing / total` but agents read
+      // that "54%" number as failure when it really means "this tool's rule
+      // library automates 54% of WCAG — the rest is inherently manual review,
+      // not a gap in your code." That's a property of the rule set, not a
+      // grade, so we surface it as raw counts instead of a percentage.
       return {
         standardId: c.standardId,
-        automatedPassRate,
-        overallAutomatedCoverage,
+        automatedPassRate: c.automatedPassRate, // passing / automatable
         criteriaTotal: c.total,
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,
@@ -360,9 +360,9 @@ const coverageTool: McpTool = {
         gaps: c.failingCriteria,
         manualReview: c.manualCriteria,
         summary:
-          `${c.passing}/${c.automatable} automatable criteria passing (${automatedPassRate}%). ` +
-          `${c.manualCriteria.length} criteria require manual review — call the 'checklist' tool for evaluation prompts. ` +
-          `Overall automated coverage of ${c.standardId}: ${overallAutomatedCoverage}% of ${c.total} criteria.`,
+          `${c.passing}/${c.automatable} automatable criteria passing (${c.automatedPassRate}%). ` +
+          `${c.manualCriteria.length} of ${c.total} criteria in ${c.standardId} are manual-only ` +
+          `(static analysis can't evaluate them) — run the 'checklist' tool for evaluation prompts.`,
       };
     });
 
