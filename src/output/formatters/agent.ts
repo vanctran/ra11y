@@ -158,7 +158,8 @@ function buildFiles(byFile: Map<string, Violation[]>): readonly AgentFile[] {
 
 function buildFinding(v: Violation): AgentFinding {
   const hasSuggestion = typeof v.suggestion === "string" && v.suggestion.length > 0;
-  const category: Category = hasSuggestion ? "auto-fix" : "review";
+  const category: Category =
+    v.severity === "info" ? "review" : hasSuggestion ? "auto-fix" : "review";
 
   const finding: AgentFinding = {
     id: `${v.ruleId}:${v.location.filePath}:${v.location.line}`,
@@ -229,9 +230,8 @@ function buildPlan(files: readonly AgentFile[], totalFindings: number): AgentPla
 
 function computeEffort(total: number, autoFixable: number): Effort {
   if (total === 0) return "trivial";
-  const manual = total - autoFixable;
-  if (manual > 0) return "significant";
-  if (total > MODERATE_THRESHOLD) return "moderate";
+  if (autoFixable === 0) return "trivial"; // all notes/review — nothing to fix
+  if (autoFixable > MODERATE_THRESHOLD) return "moderate";
   return "trivial";
 }
 
