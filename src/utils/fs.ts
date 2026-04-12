@@ -85,17 +85,41 @@ function isNotFound(err: unknown): boolean {
   );
 }
 
-/** Default directories the scanner skips even without a .gitignore. */
+/**
+ * Default directories the scanner skips even without a .gitignore.
+ *
+ * Includes JS/TS build artifacts, Python virtualenvs and coverage output,
+ * and common tool caches. `htmlcov/` matters specifically because Python
+ * coverage generates hundreds of large auto-generated HTML files that
+ * would otherwise be scanned — not source code a user wants flagged.
+ */
 export const DEFAULT_IGNORED_DIRS: ReadonlySet<string> = new Set([
+  // JS/TS build artifacts
   "node_modules",
-  ".git",
   "dist",
   "build",
   "out",
   ".next",
   ".nuxt",
   ".svelte-kit",
-  "coverage",
   ".turbo",
   ".cache",
+  // VCS / tooling
+  ".git",
+  // Coverage reports (JS + Python)
+  "coverage",
+  "htmlcov",
+  ".nyc_output",
+  // Python
+  "__pycache__",
+  "venv",
+  ".venv",
+  "site-packages",
+  ".tox",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  // Rust / Go
+  "target",
+  "vendor",
 ]);
