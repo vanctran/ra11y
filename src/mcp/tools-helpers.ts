@@ -180,14 +180,16 @@ export function runScanAndFormat(
   session: McpSession,
   enabled: readonly string[],
   minSeverity: string | undefined,
+  ruleSettings?: Readonly<Record<string, string>>,
 ): {
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
   readonly filesScanned: number;
 } {
+  const effective = ruleSettings ?? session.config.rules;
   const { result } = runScan({
     standards: BUILTIN_STANDARDS,
-    rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
+    rules: applyRuleSettings(BUILTIN_RULES, effective),
     enabled,
     files,
     finders: BUILTIN_CANDIDATE_FINDERS,

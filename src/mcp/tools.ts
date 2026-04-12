@@ -83,8 +83,10 @@ const scanTool: McpTool = {
       return errorResult("paths must be a non-empty array of file or directory paths.");
     }
 
+    const cwd = strParam(params, "cwd") ?? process.cwd();
+    const projectConfig = await session.loadProjectConfig(cwd);
     const standards = resolveStandards(strParam(params, "standard"), session);
-    const files = await parseFiles(paths, session, strParam(params, "cwd"));
+    const files = await parseFiles(paths, session, cwd);
     if (files.length === 0) {
       return textResult({
         pass: true,
@@ -99,11 +101,16 @@ const scanTool: McpTool = {
       session,
       standards,
       strParam(params, "minSeverity"),
+      session.effectiveRules(projectConfig),
     );
 
     return textResult({
       ...formatted,
-      meta: { ...formatted.meta, scannedPaths: paths },
+      meta: {
+        ...formatted.meta,
+        scannedPaths: paths,
+        configSource: projectConfig.sourcePath,
+      },
     });
   },
 };

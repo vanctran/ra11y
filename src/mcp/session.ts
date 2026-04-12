@@ -9,11 +9,11 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import { parseInlineDisables } from "../config/index.ts";
+import { loadConfig, parseInlineDisables } from "../config/index.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../input/parsers/index.ts";
 import type { Ast } from "../types/ast.ts";
-import type { RuleSetting } from "../types/config.ts";
+import type { LoadedConfig, RuleSetting } from "../types/config.ts";
 
 /** Cached entry: AST + metadata keyed by absolute path. */
 interface CacheEntry {
@@ -32,6 +32,9 @@ export interface SessionConfig {
 export class McpSession {
   readonly config: SessionConfig;
   private readonly cache: Map<string, CacheEntry> = new Map();
+  // Project configs (ra11y.config.ts) are cached by cwd so repeated scans
+  // don't re-read the file. Invalidate via clearCache() if the user edits it.
+  private readonly projectConfigs: Map<string, LoadedConfig> = new Map();
 
   constructor() {
     this.config = {
@@ -40,6 +43,28 @@ export class McpSession {
       exclude: [],
       rules: {},
     };
+  }
+
+  /**
+   * Loads and caches the project's ra11y.config.ts for a given cwd.
+   * Merges its rule settings under the session's explicit overrides —
+   * the session's configure() call always wins when it sets a key.
+   */
+  async loadProjectConfig(cwd: string): Promise<LoadedConfig> {
+    const cached = this.projectConfigs.get(cwd);
+    if (cached) return cached;
+    const loaded = await loadConfig({ cwd });
+    this.projectConfigs.set(cwd, loaded);
+    return loaded;
+  }
+
+  /**
+   * Merges session rule overrides with the project config's rules.
+   * Session rules win — an explicit `configure({ rules })` call beats
+   * the file. This is the same precedence the CLI uses.
+   */
+  effectiveRules(projectConfig: LoadedConfig): Record<string, RuleSetting> {
+    return { ...projectConfig.rules, ...this.config.rules };
   }
 
   /** Update session defaults. Returns the new active config. */

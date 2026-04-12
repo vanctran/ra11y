@@ -49,6 +49,7 @@ export const scanProjectTool: McpTool = {
   },
   async handler(params, session) {
     const root = strParam(params, "cwd") ?? process.cwd();
+    const projectConfig = await session.loadProjectConfig(root);
     const standards = resolveStandards(strParam(params, "standard"), session);
     const t0 = performance.now();
     const files = await parseFiles([root], session, root);
@@ -69,6 +70,7 @@ export const scanProjectTool: McpTool = {
       session,
       standards,
       strParam(params, "minSeverity"),
+      session.effectiveRules(projectConfig),
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
@@ -76,7 +78,8 @@ export const scanProjectTool: McpTool = {
     return textResult({
       ...formatted,
       scannedRoot: root,
-      meta: { ...formatted.meta, scannedRoot: root },
+      configSource: projectConfig.sourcePath,
+      meta: { ...formatted.meta, scannedRoot: root, configSource: projectConfig.sourcePath },
     });
   },
 };

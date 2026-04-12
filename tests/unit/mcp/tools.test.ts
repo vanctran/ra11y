@@ -211,6 +211,37 @@ describe("MCP tool: configure", () => {
     const stillFires = afterData.findings.some((f) => f.ruleId === "media/alt-text-missing");
     expect(stillFires).toBe(false);
   });
+
+  it("respects ra11y.config.ts rule settings in the caller's cwd", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-mcp-config-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.ts"),
+      `export default { rules: { "media/alt-text-missing": "off" } };\n`,
+    );
+    // Fixture file inside the temp dir so cwd-scoped discovery picks it up.
+    const fixture = joinPath(dir, "bad.html");
+    await writeFile(fixture, `<img src="x.png">\n`);
+
+    const scanTool = findTool("scan");
+    const session = new McpSession();
+    const result = await scanTool.handler({ paths: [fixture], cwd: dir }, session);
+
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { configSource: string | null };
+      files: Array<{ findings: Array<{ ruleId: string }> }>;
+    };
+    // ra11y.config.ts was discovered
+    expect(data.meta.configSource).toContain("ra11y.config.ts");
+    // And its "off" for media/alt-text-missing silenced the finding
+    const fires = data.files.some((f) =>
+      f.findings.some((v) => v.ruleId === "media/alt-text-missing"),
+    );
+    expect(fires).toBe(false);
+  });
 });
 
 describe("MCP tool: coverage", () => {
