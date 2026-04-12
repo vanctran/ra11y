@@ -553,7 +553,7 @@ const configureTool: McpTool = {
 function readRuleSettings(
   params: Record<string, unknown>,
 ): Readonly<Record<string, "error" | "warning" | "info" | "off">> | undefined {
-  const raw = params["rules"];
+  const raw = (params as { rules?: unknown }).rules;
   if (typeof raw !== "object" || raw === null) return undefined;
   const out: Record<string, "error" | "warning" | "info" | "off"> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
