@@ -1,22 +1,14 @@
 /**
  * Rule: parsing/duplicate-id
- * Satisfies: wcag22:4.1.1, wcag21:4.1.1
- * Spec: https://www.w3.org/TR/WCAG22/#parsing
+ * Satisfies: wcag21:4.1.1, wcag22:4.1.2 / wcag21:4.1.2, wcag22:1.3.1 / wcag21:1.3.1
+ * Spec: https://www.w3.org/TR/WCAG22/#name-role-value
  *
- * > In content implemented using markup languages, elements have complete
- * > start and end tags, are nested according to specifications, do not
- * > contain duplicate attributes, and IDs are unique, except where the
- * > specifications allow these features.
- *
- * Note: WCAG 2.2 marks 4.1.1 Parsing as "obsolete — always satisfies"
- * because modern HTML parsers recover from these errors. We still ship
- * this rule because:
- *   1. WCAG 2.1 Level A still requires it — many legal frameworks
- *      (Section 508, EN 301 549) reference 2.1.
- *   2. Duplicate IDs cause real runtime bugs — aria-labelledby and
- *      aria-describedby targets become ambiguous, label[for] targets
- *      become ambiguous, document.getElementById returns only the
- *      first match, and anchor-link navigation is undefined.
+ * WCAG 2.2 removed 4.1.1 Parsing because modern HTML parsers recover
+ * from malformed markup. But duplicate IDs still break ARIA
+ * relationships — they affect Name/Role/Value determination (4.1.2)
+ * and programmatic relationships (1.3.1), which are live in both
+ * 2.1 and 2.2. We keep citing 2.1:4.1.1 for legacy conformance
+ * targets (Section 508, EN 301 549 both reference 2.1).
  *
  * Walks an HTML document collecting every `id=…` value, then emits
  * a violation at every occurrence after the first. Document-scoped.
@@ -28,14 +20,7 @@ import type { HtmlDocument, HtmlElement } from "../../types/ast.ts";
 
 export const rule = defineRule({
   id: "parsing/duplicate-id",
-  satisfies: [
-    "wcag22:4.1.1",
-    "wcag21:4.1.1",
-    "wcag22:1.3.1",
-    "wcag21:1.3.1",
-    "wcag22:4.1.2",
-    "wcag21:4.1.2",
-  ],
+  satisfies: ["wcag21:4.1.1", "wcag22:1.3.1", "wcag21:1.3.1", "wcag22:4.1.2", "wcag21:4.1.2"],
   severity: "error",
   scope: "document",
   appliesTo: {

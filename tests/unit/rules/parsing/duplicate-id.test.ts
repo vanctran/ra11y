@@ -68,8 +68,13 @@ describe("rule parsing/duplicate-id", () => {
     expect(v[0]?.suggestion).toContain("aria-labelledby");
   });
 
-  it("cites wcag22:4.1.1 and wcag21:4.1.1", () => {
-    expect(rule.satisfies).toContain("wcag22:4.1.1");
+  it("cites wcag21:4.1.1 (live in 2.1) but not wcag22:4.1.1 (obsolete)", () => {
     expect(rule.satisfies).toContain("wcag21:4.1.1");
+    expect(rule.satisfies).not.toContain("wcag22:4.1.1");
+  });
+
+  it("maps to WCAG 2.2 via 4.1.2 Name, Role, Value", () => {
+    expect(rule.satisfies).toContain("wcag22:4.1.2");
+    expect(rule.satisfies).toContain("wcag21:4.1.2");
   });
 });

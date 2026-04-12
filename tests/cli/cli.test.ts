@@ -53,7 +53,7 @@ describe("runCli", () => {
     expect(r.stdout).toContain("wcag22");
     expect(r.stdout).toContain("WCAG 2.2");
     expect(r.stdout).toContain("W3C");
-    expect(r.stdout).toContain("87 total");
+    expect(r.stdout).toContain("86 total");
   });
 
   it("--explain <rule-id> prints detailed rule metadata", async () => {

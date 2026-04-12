@@ -232,7 +232,7 @@ describe("formatter: agent — files", () => {
       violations: [
         {
           ruleId: "parsing/duplicate-id",
-          criteria: ["wcag22:4.1.1"],
+          criteria: ["wcag22:4.1.2"],
           severity: "error",
           location: { filePath: "src/util.ts", line: 3, column: 1 },
           message: "msg",

@@ -21,13 +21,14 @@ describe("WCAG 2.2 standard module", () => {
   });
 
   describe("criteria list", () => {
-    it("contains all 87 criteria (86 active + 4.1.1 historical)", () => {
-      // WCAG 2.2 has 86 active SCs after removing the obsolete 4.1.1 Parsing.
-      // We include 4.1.1 as a historical entry so the ID resolves for
-      // older rules and docs — marked automatable: "manual" to keep it
-      // out of the automated-coverage report.
-      expect(wcag22.criteria.length).toBe(87);
-      expect(WCAG22_CRITERIA.length).toBe(87);
+    it("contains all 86 active criteria (4.1.1 removed in 2.2)", () => {
+      // WCAG 2.2 has 86 active SCs — 4.1.1 Parsing was removed from the
+      // spec because modern parsers recover from the errors it flagged.
+      // Surfacing it in manual-review would be noise (agents would triage
+      // a criterion that always satisfies). It remains in wcag21 where
+      // it's still live.
+      expect(wcag22.criteria.length).toBe(86);
+      expect(WCAG22_CRITERIA.length).toBe(86);
     });
 
     it("distributes criteria across levels", () => {
@@ -37,8 +38,8 @@ describe("WCAG 2.2 standard module", () => {
         else if (c.level === "AA") byLevel.AA += 1;
         else if (c.level === "AAA") byLevel.AAA += 1;
       }
-      // Golden numbers: 32 A, 24 AA, 31 AAA (including historical 4.1.1 at level A).
-      expect(byLevel).toEqual({ A: 32, AA: 24, AAA: 31 });
+      // Golden numbers: 31 A, 24 AA, 31 AAA (86 total; 4.1.1 removed).
+      expect(byLevel).toEqual({ A: 31, AA: 24, AAA: 31 });
     });
 
     it("uses globally unique criterion IDs", () => {
@@ -77,12 +78,9 @@ describe("WCAG 2.2 standard module", () => {
       }
     });
 
-    it("marks 4.1.1 Parsing as obsolete but still present", () => {
+    it("omits 4.1.1 Parsing (removed from WCAG 2.2)", () => {
       const parsing = wcag22.criteria.find((c) => c.localId === "4.1.1");
-      expect(parsing).toBeDefined();
-      expect(parsing?.title.toLowerCase()).toContain("parsing");
-      // Obsolete → manual so coverage reports don't treat it as missing.
-      expect(parsing?.automatable).toBe("manual");
+      expect(parsing).toBeUndefined();
     });
   });
 

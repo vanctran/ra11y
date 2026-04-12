@@ -124,12 +124,22 @@ function compareScId(a: string, b: string): number {
 }
 
 /**
- * All 87 WCAG 2.2 rows — the shared 78 plus the 9 new in 2.2,
- * sorted into their correct SC-number order.
+ * All 86 WCAG 2.2 rows — the shared 78 minus 4.1.1 (removed from the
+ * spec in 2.2) plus the 9 new in 2.2, sorted into SC-number order.
+ *
+ * 4.1.1 Parsing was deprecated in WCAG 2.2 because modern parsers
+ * recover from the errors it flagged. A criterion that "always
+ * satisfies" shouldn't appear in a manual-review checklist — users
+ * targeting wcag22 would have to triage a no-op.
+ *
+ * The shared row still exists for wcag21 (where 4.1.1 is live) and
+ * for downstream standards whose equivalentTo edges point at
+ * wcag21:4.1.1 (Section 508, EN 301 549).
  */
-export const WCAG22_ROWS: readonly WcagRow[] = [...SHARED_WCAG_ROWS, ...NEW_IN_WCAG22].sort(
-  (a, b) => compareScId(a.id, b.id),
-);
+export const WCAG22_ROWS: readonly WcagRow[] = [
+  ...SHARED_WCAG_ROWS.filter((row) => row.id !== "4.1.1"),
+  ...NEW_IN_WCAG22,
+].sort((a, b) => compareScId(a.id, b.id));
 
 /**
  * All 87 WCAG 2.2 success criteria as `Criterion` records, ready to register
