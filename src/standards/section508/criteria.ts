@@ -8,8 +8,7 @@
  * (which also covers `wcag21:` via the registry's transitive
  * closure).
  *
- * The filter below reuses the WCAG 2.2 row data and excludes:
- *   - the 9 criteria introduced in WCAG 2.2
+ * The filter below reuses the shared WCAG row data and excludes:
  *   - the 17 criteria introduced in WCAG 2.1
  *   - every Level AAA criterion (Section 508 only requires A+AA)
  *
@@ -17,7 +16,7 @@
  */
 
 import type { Criterion } from "../../types/standard.ts";
-import { WCAG22_ROWS } from "../wcag22/criteria.ts";
+import { SHARED_WCAG_ROWS } from "../wcag-shared/rows.ts";
 
 /** Local IDs of criteria added in WCAG 2.1 — NOT part of WCAG 2.0. */
 const NEW_IN_WCAG21: ReadonlySet<string> = new Set([
@@ -40,23 +39,8 @@ const NEW_IN_WCAG21: ReadonlySet<string> = new Set([
   "4.1.3",
 ]);
 
-/** Local IDs of criteria added in WCAG 2.2 — NOT part of WCAG 2.0 or 2.1. */
-const NEW_IN_WCAG22: ReadonlySet<string> = new Set([
-  "2.4.11",
-  "2.4.12",
-  "2.4.13",
-  "2.5.7",
-  "2.5.8",
-  "3.2.6",
-  "3.3.7",
-  "3.3.8",
-  "3.3.9",
-]);
-
-const WCAG_20_AA_ROWS = WCAG22_ROWS.filter(
-  (row) =>
-    !(NEW_IN_WCAG22.has(row.id) || NEW_IN_WCAG21.has(row.id)) &&
-    (row.level === "A" || row.level === "AA"),
+const WCAG_20_AA_ROWS = SHARED_WCAG_ROWS.filter(
+  (row) => !NEW_IN_WCAG21.has(row.id) && (row.level === "A" || row.level === "AA"),
 );
 
 export const SECTION508_CRITERIA: readonly Criterion[] = WCAG_20_AA_ROWS.map((row) => ({

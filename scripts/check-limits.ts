@@ -35,7 +35,10 @@ const MAX_NESTING_DEPTH = 5;
  * Function-line and nesting budgets still apply — this only waives
  * the whole-file count.
  */
-const DATA_FILE_EXEMPTIONS: readonly RegExp[] = [/src\/standards\/[^/]+\/criteria\.ts$/];
+const DATA_FILE_EXEMPTIONS: readonly RegExp[] = [
+  /src\/standards\/[^/]+\/criteria\.ts$/,
+  /src\/standards\/wcag-shared\/rows\.ts$/,
+];
 
 const violations: string[] = [];
 
