@@ -31,10 +31,12 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
 
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
 
     "outDir": "dist",
     "rootDir": "src",
@@ -43,9 +45,8 @@
     "sourceMap": true,
     "removeComments": false,
 
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts"],

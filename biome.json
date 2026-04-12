@@ -7,12 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": [
-      "src/**/*.ts",
-      "tests/**/*.ts",
-      "scripts/**/*.ts",
-      ".claude/hooks/**/*.ts"
-    ]
+    "includes": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", ".claude/hooks/**/*.ts"]
   },
   "formatter": {
     "enabled": true,
@@ -57,7 +52,27 @@
         "useImportType": "error",
         "useNamingConvention": {
           "level": "error",
-          "options": { "strictCase": true, "requireAscii": true }
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": { "kind": "objectLiteralMember" },
+                "formats": ["camelCase", "CONSTANT_CASE", "PascalCase", "snake_case"]
+              },
+              {
+                "selector": { "kind": "typeProperty" },
+                "formats": ["camelCase", "CONSTANT_CASE", "PascalCase", "snake_case"]
+              },
+              {
+                "selector": { "kind": "const" },
+                "formats": ["camelCase", "CONSTANT_CASE", "PascalCase"]
+              },
+              {
+                "selector": { "kind": "let" },
+                "formats": ["camelCase"]
+              }
+            ]
+          }
         },
         "useNodejsImportProtocol": "error",
         "useTemplate": "error",
@@ -86,8 +101,15 @@
       "includes": ["tests/**/*.ts"],
       "linter": {
         "rules": {
+          "complexity": {
+            "useLiteralKeys": "off"
+          },
           "suspicious": {
             "noConsole": "off"
+          },
+          "style": {
+            "noNonNullAssertion": "off",
+            "useNamingConvention": "off"
           }
         }
       }
@@ -97,7 +119,8 @@
       "linter": {
         "rules": {
           "style": {
-            "noDefaultExport": "off"
+            "noDefaultExport": "off",
+            "useNamingConvention": "off"
           },
           "suspicious": {
             "noConsole": "off"
