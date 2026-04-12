@@ -198,12 +198,19 @@ function buildFix(v: Violation): AgentFix {
   };
 }
 
-/** Comment syntax depends on the file — CSS needs /* *\/, HTML needs <!-- -->. */
+/**
+ * Comment syntax by file type. TSX/JSX gets the `{/* … *\/}` form so it
+ * pastes correctly inside a JSX element (where most violations live);
+ * that form is also valid at module scope.
+ */
 function buildSuppressPragma(filePath: string, ruleId: string): string {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
   if (lower.endsWith(".html") || lower.endsWith(".htm")) {
     return `<!-- ra11y-disable-next-line ${ruleId} -->`;
+  }
+  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
+    return `{/* ra11y-disable-next-line ${ruleId} */}`;
   }
   return `// ra11y-disable-next-line ${ruleId}`;
 }

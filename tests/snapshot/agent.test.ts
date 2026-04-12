@@ -217,13 +217,35 @@ describe("formatter: agent — files", () => {
     expect(finding!.id).toBe(`${finding!.ruleId}:${files[0]?.path}:${finding!.line}`);
   });
 
-  it("finding.suppressWith has the ra11y-disable-next-line format", () => {
+  it("suppressWith uses JSX block comment syntax for .tsx files", () => {
     const { files } = parse();
     for (const file of files) {
       for (const finding of file.findings) {
-        expect(finding.suppressWith).toBe(`// ra11y-disable-next-line ${finding.ruleId}`);
+        expect(finding.suppressWith).toBe(`{/* ra11y-disable-next-line ${finding.ruleId} */}`);
       }
     }
+  });
+
+  it("suppressWith uses // syntax for plain .ts files", () => {
+    const tsResult: ScanResult = {
+      ...RESULT,
+      violations: [
+        {
+          ruleId: "parsing/duplicate-id",
+          criteria: ["wcag22:4.1.1"],
+          severity: "error",
+          location: { filePath: "src/util.ts", line: 3, column: 1 },
+          message: "msg",
+          suggestion: "fix",
+        },
+      ],
+    };
+    const parsed = JSON.parse(agentFormatter.format(tsResult, REPORT)) as {
+      files: Array<{ findings: Array<{ suppressWith: string }> }>;
+    };
+    expect(parsed.files[0]?.findings[0]?.suppressWith).toBe(
+      "// ra11y-disable-next-line parsing/duplicate-id",
+    );
   });
 
   it("suppressWith uses CSS comment syntax for .css files", () => {

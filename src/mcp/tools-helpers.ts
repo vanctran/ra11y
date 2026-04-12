@@ -306,12 +306,22 @@ export function formatFinding(v: Violation): Record<string, unknown> {
   };
 }
 
-/** Comment syntax depends on the file — CSS needs /* *\/, HTML needs <!-- -->. */
+/**
+ * Comment syntax depends on the file.
+ *
+ * For TSX/JSX we emit the JSX-safe `{/* … *\/}` form — a bare `//` line
+ * comment is invalid inside a JSX element, which is where most ra11y
+ * violations actually live. The `{…}` wrapper is a valid expression
+ * both inside JSX and at module scope, so one form works everywhere.
+ */
 function suppressPragma(filePath: string, ruleId: string): string {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
   if (lower.endsWith(".html") || lower.endsWith(".htm")) {
     return `<!-- ra11y-disable-next-line ${ruleId} -->`;
+  }
+  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
+    return `{/* ra11y-disable-next-line ${ruleId} */}`;
   }
   return `// ra11y-disable-next-line ${ruleId}`;
 }
