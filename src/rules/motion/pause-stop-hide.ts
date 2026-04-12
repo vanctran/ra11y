@@ -155,11 +155,30 @@ function hasUniversalReducedMotionOverride(guardedRules: ReadonlySet<CssRule>): 
   return false;
 }
 
-/** True if the selector targets every element — `*`, `*, *::before, *::after`, etc. */
+/**
+ * True if the selector targets every element.
+ *
+ * Accepts both the MDN-canonical `*, *::before, *::after` and the Tailwind-
+ * compiled `*, :before, :after, ::backdrop` forms. Any comma-separated list
+ * whose parts are all universal-equivalent qualifies.
+ */
+const UNIVERSAL_PARTS: ReadonlySet<string> = new Set([
+  "*",
+  "*::before",
+  "*::after",
+  "*::backdrop",
+  "*:root",
+  "::before",
+  "::after",
+  "::backdrop",
+  ":before",
+  ":after",
+]);
+
 function isUniversalSelector(selector: string): boolean {
   const parts = selector.split(",").map((s) => s.trim());
   if (parts.length === 0) return false;
-  return parts.every((p) => p === "*" || p === "*::before" || p === "*::after" || p === "*:root");
+  return parts.every((p) => UNIVERSAL_PARTS.has(p));
 }
 
 /** True if the rule zeroes out animation-duration or transition-duration. */
@@ -172,14 +191,22 @@ function disablesAnimationOrTransition(rule: CssRule): boolean {
   return false;
 }
 
-/** MDN's canonical value is 0.01ms; accept anything effectively instantaneous. */
+/**
+ * Accepts any value that disables animation for practical purposes:
+ * 0, 0s, 0ms, .01ms, 0.01ms, etc. The `!important` suffix is tolerated.
+ */
 function isNearZeroDuration(value: string): boolean {
-  const trimmed = value
+  const clean = value
     .trim()
     .toLowerCase()
-    .replace(/!important$/i, "")
+    .replace(/\s*!important\s*$/, "")
     .trim();
-  return /^0*\.?0*\d*ms$/.test(trimmed) && Number.parseFloat(trimmed) < 1;
+  // `0` alone counts. Otherwise require a number < 1 followed by `ms` or `s`.
+  if (clean === "0") return true;
+  const match = /^(\d*\.?\d+)(ms|s)$/.exec(clean);
+  if (!match) return false;
+  const n = Number.parseFloat(match[1] ?? "0");
+  return match[2] === "ms" ? n < 1 : n < 0.001;
 }
 
 function* walkAtRuleChildren(atRule: CssAtRule): Iterable<CssRule> {
