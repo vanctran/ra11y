@@ -18,6 +18,12 @@ import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseCss, parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { BUILTIN_FORMATTERS } from "../../output/formatters/index.ts";
+import {
+  buildChecklist,
+  buildCoverageReport,
+  renderChecklistMarkdown,
+} from "../../reports/index.ts";
+import { BUILTIN_CANDIDATE_FINDERS } from "../../review/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
@@ -101,6 +107,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     rules: activeRules,
     enabled: effectiveStandards,
     files: parsed,
+    finders: BUILTIN_CANDIDATE_FINDERS,
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
   });
 
@@ -110,13 +117,19 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     return handleBaselineMode(options, cwd, result);
   }
 
-  // options.format is the CliOptions union "terminal" | "plain" | "json",
-  // which exactly matches BuiltinFormatters keys, so indexing is total
-  // and no fallback is needed.
   const formatter = BUILTIN_FORMATTERS[options.format];
   const output = formatter.format(result, report);
-
   const exitCode = shouldFail(result, options.failOn) ? 1 : 0;
+
+  // When --checklist is passed, append the manual review checklist
+  // after the violations report so the user gets one complete document.
+  if (options.command === "checklist") {
+    const coverage = buildCoverageReport(result, LOADED_STANDARDS);
+    const checklist = buildChecklist(coverage, LOADED_STANDARDS, report.candidates ?? []);
+    const markdown = renderChecklistMarkdown(checklist);
+    return { stdout: `${output}\n\n---\n\n${markdown}`, stderr: "", exitCode };
+  }
+
   return { stdout: `${output}\n`, stderr: "", exitCode };
 }
 

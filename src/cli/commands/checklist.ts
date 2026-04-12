@@ -42,11 +42,19 @@ export async function runChecklist(options: CliOptions): Promise<ScanExit> {
     finders: BUILTIN_CANDIDATE_FINDERS,
   });
 
+  // Format violations using the user's chosen format (default: markdown).
+  const { BUILTIN_FORMATTERS } = await import("../../output/formatters/index.ts");
+  const formatter = BUILTIN_FORMATTERS[options.format];
+  const violationsOutput = formatter.format(result, report);
+
+  // Build and render the manual review checklist with candidate locations.
   const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);
   const checklist = buildChecklist(coverage, BUILTIN_STANDARDS, report.candidates ?? []);
   const markdown = renderChecklistMarkdown(checklist);
 
-  return { stdout: markdown, stderr: "", exitCode: 0 };
+  // Combine: violations report first, then the manual checklist.
+  const combined = `${violationsOutput}\n\n---\n\n${markdown}`;
+  return { stdout: combined, stderr: "", exitCode: 0 };
 }
 
 function parseFor(filePath: string, source: string): Ast | null {
