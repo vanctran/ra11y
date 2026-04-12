@@ -18,11 +18,13 @@ import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
+import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
   autocompleteMissing,
+  buttonName,
   contrastMinimum,
   duplicateId,
   handlerMissing,
@@ -39,6 +41,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
 export {
   altTextMissing,
   autocompleteMissing,
+  buttonName,
   contrastMinimum,
   duplicateId,
   handlerMissing,
