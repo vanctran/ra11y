@@ -6,7 +6,7 @@
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { filesChangedSince, stagedFiles } from "../utils/git.ts";
+import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import {
   type McpTool,
@@ -62,9 +62,14 @@ export const scanProjectTool: McpTool = {
   },
   async handler(params, session) {
     const explicitCwd = strParam(params, "cwd");
-    const root = explicitCwd ?? process.cwd();
+    // When cwd isn't passed, prefer the git root over the MCP server's
+    // spawn directory — that's almost always the project the user means.
+    // Falls through to process.cwd() for non-git scans (tmp fixtures, etc.).
+    const spawnCwd = process.cwd();
+    const root = explicitCwd ?? gitRoot(spawnCwd) ?? spawnCwd;
+    const autoPromoted = explicitCwd === undefined && root !== spawnCwd;
     const projectConfig = await session.loadProjectConfig(root);
-    const configHint = buildConfigHint(projectConfig.sourcePath, explicitCwd, root);
+    const configHint = buildConfigHint(projectConfig.sourcePath, explicitCwd, root, autoPromoted);
     const standards = resolveStandards(strParam(params, "standard"), session);
     const roots = resolveScanRoots(params, root);
     const t0 = performance.now();
@@ -122,9 +127,13 @@ function buildConfigHint(
   sourcePath: string | null,
   explicitCwd: string | undefined,
   resolvedCwd: string,
+  autoPromoted: boolean,
 ): string | null {
   if (sourcePath !== null) return null;
   if (explicitCwd !== undefined) return null;
+  // If we auto-promoted to the git root and still didn't find a config,
+  // the project simply doesn't have one — that's fine, not a misconfig.
+  if (autoPromoted) return null;
   const nearby = findNearbyConfig(resolvedCwd);
   if (nearby !== null) {
     return `No ra11y.config found walking up from ${resolvedCwd} (the MCP server's spawn directory). A config exists at ${nearby} — retry with \`cwd: "${dirname(nearby)}"\` to load it.`;
