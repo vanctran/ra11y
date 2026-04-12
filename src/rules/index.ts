@@ -6,6 +6,7 @@
  */
 
 import type { Rule } from "../types/rule.ts";
+import { rule as hiddenFocus } from "./aria/hidden-focus.ts";
 import { rule as invalidRole } from "./aria/invalid-role.ts";
 import { rule as requiredAttrs } from "./aria/required-attrs.ts";
 import { rule as validAttr } from "./aria/valid-attr.ts";
@@ -33,6 +34,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   duplicateId,
   handlerMissing,
   headingHierarchy,
+  hiddenFocus,
   invalidRole,
   labelsRequired,
   langAttribute,
@@ -54,6 +56,7 @@ export {
   duplicateId,
   handlerMissing,
   headingHierarchy,
+  hiddenFocus,
   invalidRole,
   labelsRequired,
   langAttribute,
