@@ -20,7 +20,7 @@ export interface CliOptions {
     | "help"
     | "version";
   readonly positionals: readonly string[];
-  readonly format: "terminal" | "plain" | "json" | "sarif" | "junit" | "markdown";
+  readonly format: "terminal" | "plain" | "json" | "sarif" | "junit" | "markdown" | "agent";
   readonly standards: readonly string[];
   readonly level: "A" | "AA" | "AAA";
   readonly exclude: readonly string[];
@@ -224,6 +224,7 @@ function normalizeFormat(value: string | undefined): CliOptions["format"] {
   if (value === "sarif") return "sarif";
   if (value === "junit") return "junit";
   if (value === "markdown") return "markdown";
+  if (value === "agent") return "agent";
   return "terminal";
 }
 
