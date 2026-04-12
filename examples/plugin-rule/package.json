@@ -1,0 +1,12 @@
+{
+  "name": "ra11y-plugin-example-no-title-attribute",
+  "version": "0.0.1",
+  "description": "Example ra11y rule plugin that flags `title` attributes used as the only accessible name.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./rule.ts",
+  "peerDependencies": {
+    "@ra11y/core": "*"
+  }
+}

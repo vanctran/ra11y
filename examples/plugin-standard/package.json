@@ -1,0 +1,12 @@
+{
+  "name": "ra11y-plugin-example-acme-corp",
+  "version": "0.0.1",
+  "description": "Example ra11y standard plugin demonstrating a small corporate accessibility guideline that reuses existing WCAG rules via equivalentTo.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./standard.ts",
+  "peerDependencies": {
+    "@ra11y/core": "*"
+  }
+}
