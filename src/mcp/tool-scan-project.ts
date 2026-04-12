@@ -4,6 +4,8 @@
  * reused by other tools.
  */
 
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { filesChangedSince, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import {
@@ -111,9 +113,10 @@ export const scanProjectTool: McpTool = {
 /**
  * When config discovery failed AND the caller didn't pass `cwd` explicitly,
  * warn that the server's spawn directory is almost certainly the wrong
- * place to look. Silent null had repeatedly caused agents to add
- * ra11y.config.ts at the project root and then spend minutes wondering
- * why it wasn't being picked up.
+ * place to look. If a ra11y.config.* file is reachable by walking up the
+ * filesystem from the spawn dir (past the .git barrier that stops the
+ * loader), name its exact path so agents can retry with the right cwd in
+ * one step instead of spelunking.
  */
 function buildConfigHint(
   sourcePath: string | null,
@@ -122,7 +125,39 @@ function buildConfigHint(
 ): string | null {
   if (sourcePath !== null) return null;
   if (explicitCwd !== undefined) return null;
-  return `No ra11y.config.ts was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
+  const nearby = findNearbyConfig(resolvedCwd);
+  if (nearby !== null) {
+    return `No ra11y.config found walking up from ${resolvedCwd} (the MCP server's spawn directory). A config exists at ${nearby} — retry with \`cwd: "${dirname(nearby)}"\` to load it.`;
+  }
+  return `No ra11y.config was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
+}
+
+const CONFIG_FILENAMES = [
+  "ra11y.config.ts",
+  "ra11y.config.js",
+  "ra11y.config.mjs",
+  "ra11y.config.json",
+] as const;
+
+const MAX_ANCESTORS_TO_SEARCH = 6;
+
+/**
+ * Searches ancestor directories (past .git, which the normal loader
+ * stops at) for a ra11y.config.* file. Bounded to a few levels so we
+ * don't crawl the entire filesystem on every scan.
+ */
+function findNearbyConfig(startDir: string): string | null {
+  let dir = startDir;
+  for (let i = 0; i < MAX_ANCESTORS_TO_SEARCH; i += 1) {
+    for (const filename of CONFIG_FILENAMES) {
+      const candidate = join(dir, filename);
+      if (existsSync(candidate)) return candidate;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
 }
 
 /**
