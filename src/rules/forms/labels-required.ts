@@ -27,6 +27,7 @@ import { defineRule } from "../../api/plugin.ts";
 import {
   findHtmlElementsByTag,
   getHtmlAttribute,
+  getJsxAttribute,
   getJsxAttributeString,
   hasHtmlAttribute,
   hasJsxAttribute,
@@ -256,6 +257,10 @@ function jsxHasLabel(
 ): boolean {
   const ariaLabel = getJsxAttributeString(el, "aria-label");
   if (ariaLabel && ariaLabel.trim().length > 0) return true;
+  // Expression-valued aria-label like aria-label={t('slider')} — trust the
+  // developer is computing a name at runtime. Same tradeoff as alt-text-missing.
+  const ariaLabelAttr = getJsxAttribute(el, "aria-label");
+  if (ariaLabelAttr?.value?.kind === "Expression") return true;
   if (hasJsxAttribute(el, "aria-labelledby")) return true;
   if (hasJsxAttribute(el, "title")) {
     const title = getJsxAttributeString(el, "title");

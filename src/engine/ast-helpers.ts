@@ -184,6 +184,20 @@ export function jsxTextContent(element: JsxElement): string {
   return chunks.join("").trim();
 }
 
+/**
+ * True if the JSX element has any content that likely produces text
+ * at runtime — literal text OR expression children like `{label}`.
+ * Used by name-checking rules to avoid false-flagging `<button>{label}</button>`.
+ */
+export function jsxHasContentChildren(element: JsxElement): boolean {
+  for (const child of element.children) {
+    if (child.kind === "JsxText" && child.value.trim().length > 0) return true;
+    if (child.kind === "JsxExpression") return true;
+    if (child.kind === "JsxElement") return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // CSS walkers
 // ---------------------------------------------------------------------------

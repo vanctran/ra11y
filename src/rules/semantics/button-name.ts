@@ -32,6 +32,7 @@ import {
   hasHtmlAttribute,
   hasJsxAttribute,
   htmlTextContent,
+  jsxHasContentChildren,
   jsxTextContent,
   walkHtmlElements,
   walkJsxElements,
@@ -201,6 +202,9 @@ function checkJsxRoleButtons(module: TsxModule, emit: Emit): void {
 
 function hasAccessibleNameJsx(element: JsxElement): boolean {
   if (jsxTextContent(element).length > 0) return true;
+  // Expression children like {label} likely produce text at runtime.
+  // Flagging <button>{label}</button> as "no name" is a false positive.
+  if (jsxHasContentChildren(element)) return true;
   if (hasJsxAriaName(element)) return true;
   if (hasJsxChildNameSource(element)) return true;
   return false;

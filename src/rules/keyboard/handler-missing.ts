@@ -156,7 +156,7 @@ function checkJsx(module: TsxModule, emit: Emit): void {
 }
 
 function checkOneJsxElement(el: import("../../types/ast.ts").JsxElement): {
-  severity: "error";
+  severity: "error" | "warning";
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
@@ -164,6 +164,18 @@ function checkOneJsxElement(el: import("../../types/ast.ts").JsxElement): {
   if (!hasJsxAttribute(el, "onClick")) return null;
   if (isNativelyInteractive(el.tagName.toLowerCase())) return null;
   if (hasJsxAttribute(el, "onKeyDown") || hasJsxAttribute(el, "onKeyUp")) return null;
+  // PascalCase components (ActionButton, ResetButton, etc.) likely wrap
+  // a native interactive element internally. We can't see through the
+  // component boundary, so we downgrade to warning instead of error —
+  // the component MAY handle keyboard natively.
+  if (isPascalCaseComponent(el.tagName)) {
+    return {
+      severity: "warning",
+      location: { filePath: "", line: el.loc.start.line, column: el.loc.start.column },
+      message: `<${el.tagName}> has onClick but no visible keyboard handler — verify the component renders a native interactive element internally.`,
+      suggestion: `If <${el.tagName}> renders a <button> or <a> internally, this is fine. If it renders a <div> or <span>, add onKeyDown/onKeyUp handling and tabIndex={0}.`,
+    };
+  }
   return {
     severity: "error",
     location: { filePath: "", line: el.loc.start.line, column: el.loc.start.column },
@@ -196,6 +208,11 @@ function checkOneJsxAnchor(anchor: import("../../types/ast.ts").JsxElement): {
 
 function isNativelyInteractive(tagName: string): boolean {
   return NATIVELY_INTERACTIVE_TAGS.has(tagName);
+}
+
+function isPascalCaseComponent(tagName: string): boolean {
+  const first = tagName[0];
+  return first !== undefined && first >= "A" && first <= "Z";
 }
 
 function buildSuggestion(tagName: string, role: string | null): string {
