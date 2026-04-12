@@ -11,6 +11,7 @@ import { rule as requiredAttrs } from "./aria/required-attrs.ts";
 import { rule as contrastMinimum } from "./contrast/minimum.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
+import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
@@ -20,6 +21,7 @@ import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
+  autocompleteMissing,
   contrastMinimum,
   duplicateId,
   handlerMissing,
@@ -34,6 +36,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
 
 export {
   altTextMissing,
+  autocompleteMissing,
   contrastMinimum,
   duplicateId,
   handlerMissing,
