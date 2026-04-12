@@ -65,6 +65,11 @@ export function parseHtml(source: string): HtmlParseResult {
 class HtmlParser {
   #source: string;
   #pos = 0;
+  // Line/column are maintained incrementally so #position() is O(1).
+  // Rescanning from offset 0 every call turned a 2MB HTML file into an
+  // O(n²) parse that never returned in practice — see docs/performance.md.
+  #line = 1;
+  #col = 1;
   #errors: ParseError[] = [];
 
   constructor(source: string) {
@@ -361,7 +366,16 @@ class HtmlParser {
   }
 
   #advance(n: number): void {
-    this.#pos += n;
+    const end = Math.min(this.#pos + n, this.#source.length);
+    for (let i = this.#pos; i < end; i++) {
+      if (this.#source[i] === "\n") {
+        this.#line += 1;
+        this.#col = 1;
+      } else {
+        this.#col += 1;
+      }
+    }
+    this.#pos = end;
   }
 
   #startsWith(s: string): boolean {
@@ -430,17 +444,7 @@ class HtmlParser {
   }
 
   #position(): SourcePosition {
-    let line = 1;
-    let col = 1;
-    for (let i = 0; i < this.#pos; i++) {
-      if (this.#source[i] === "\n") {
-        line += 1;
-        col = 1;
-      } else {
-        col += 1;
-      }
-    }
-    return { line, column: col, offset: this.#pos };
+    return { line: this.#line, column: this.#col, offset: this.#pos };
   }
 }
 

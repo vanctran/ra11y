@@ -46,6 +46,9 @@ export function parseCss(source: string): CssParseResult {
 class CssParser {
   #source: string;
   #pos = 0;
+  // Line/column tracked incrementally — see HtmlParser for the why.
+  #line = 1;
+  #col = 1;
   #errors: ParseError[] = [];
 
   constructor(source: string) {
@@ -322,7 +325,16 @@ class CssParser {
   }
 
   #advance(n: number): void {
-    this.#pos += n;
+    const end = Math.min(this.#pos + n, this.#source.length);
+    for (let i = this.#pos; i < end; i++) {
+      if (this.#source[i] === "\n") {
+        this.#line += 1;
+        this.#col = 1;
+      } else {
+        this.#col += 1;
+      }
+    }
+    this.#pos = end;
   }
 
   #eof(): boolean {
@@ -338,17 +350,7 @@ class CssParser {
   }
 
   #position(): SourcePosition {
-    let line = 1;
-    let col = 1;
-    for (let i = 0; i < this.#pos; i++) {
-      if (this.#source[i] === "\n") {
-        line += 1;
-        col = 1;
-      } else {
-        col += 1;
-      }
-    }
-    return { line, column: col, offset: this.#pos };
+    return { line: this.#line, column: this.#col, offset: this.#pos };
   }
 }
 
