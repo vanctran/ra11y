@@ -175,7 +175,7 @@ function buildFinding(v: Violation): AgentFinding {
     fix: hasSuggestion ? buildFix(v) : null,
     effort: "trivial",
     category,
-    suppressWith: `// ra11y-disable-next-line ${v.ruleId}`,
+    suppressWith: buildSuppressPragma(v.location.filePath, v.ruleId),
   };
 
   return finding;
@@ -196,6 +196,16 @@ function buildFix(v: Violation): AgentFix {
     safety: "safe",
     description: v.suggestion ?? "",
   };
+}
+
+/** Comment syntax depends on the file — CSS needs /* *\/, HTML needs <!-- -->. */
+function buildSuppressPragma(filePath: string, ruleId: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return `<!-- ra11y-disable-next-line ${ruleId} -->`;
+  }
+  return `// ra11y-disable-next-line ${ruleId}`;
 }
 
 function severityToConfidence(severity: Severity): Confidence {

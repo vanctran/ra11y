@@ -226,6 +226,50 @@ describe("formatter: agent — files", () => {
     }
   });
 
+  it("suppressWith uses CSS comment syntax for .css files", () => {
+    const cssResult: ScanResult = {
+      ...RESULT,
+      violations: [
+        {
+          ruleId: "focus/outline-visible",
+          criteria: ["wcag22:2.4.7"],
+          severity: "warning",
+          location: { filePath: "src/app.css", line: 12, column: 3 },
+          message: "outline: none removes focus indicator",
+          suggestion: "Provide a replacement focus indicator.",
+        },
+      ],
+    };
+    const parsed = JSON.parse(agentFormatter.format(cssResult, REPORT)) as {
+      files: Array<{ findings: Array<{ suppressWith: string }> }>;
+    };
+    expect(parsed.files[0]?.findings[0]?.suppressWith).toBe(
+      "/* ra11y-disable-next-line focus/outline-visible */",
+    );
+  });
+
+  it("suppressWith uses HTML comment syntax for .html files", () => {
+    const htmlResult: ScanResult = {
+      ...RESULT,
+      violations: [
+        {
+          ruleId: "media/alt-text-missing",
+          criteria: ["wcag22:1.1.1"],
+          severity: "error",
+          location: { filePath: "index.html", line: 5, column: 3 },
+          message: "<img> missing alt",
+          suggestion: "Add alt attribute.",
+        },
+      ],
+    };
+    const parsed = JSON.parse(agentFormatter.format(htmlResult, REPORT)) as {
+      files: Array<{ findings: Array<{ suppressWith: string }> }>;
+    };
+    expect(parsed.files[0]?.findings[0]?.suppressWith).toBe(
+      "<!-- ra11y-disable-next-line media/alt-text-missing -->",
+    );
+  });
+
   it("finding.fix is populated when suggestion exists", () => {
     const { files } = parse();
     const buttonFile = files.find((f) => f.path === "src/ui/Button.tsx");

@@ -302,8 +302,18 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     message: v.message,
     ...(v.suggestion ? { fix: v.suggestion } : {}),
     criteria: [...v.criteria],
-    suppressWith: `// ra11y-disable-next-line ${v.ruleId}`,
+    suppressWith: suppressPragma(v.location.filePath, v.ruleId),
   };
+}
+
+/** Comment syntax depends on the file — CSS needs /* *\/, HTML needs <!-- -->. */
+function suppressPragma(filePath: string, ruleId: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return `<!-- ra11y-disable-next-line ${ruleId} -->`;
+  }
+  return `// ra11y-disable-next-line ${ruleId}`;
 }
 
 export function groupViolationsByFile(violations: readonly Violation[]): Map<string, Violation[]> {
