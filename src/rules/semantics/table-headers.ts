@@ -173,7 +173,8 @@ function checkJsx(module: TsxModule, emit: Emit): void {
 function isLayoutJsxTable(table: JsxElement): boolean {
   const role = getJsxAttributeString(table, "role");
   if (role === null) return false;
-  return role === "presentation" || role === "none";
+  const lowered = role.toLowerCase();
+  return lowered === "presentation" || lowered === "none";
 }
 
 function countJsxCells(table: JsxElement): CellCounts {

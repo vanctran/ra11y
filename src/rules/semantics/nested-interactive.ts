@@ -247,7 +247,7 @@ function isInteractiveJsx(element: JsxElement): boolean {
   if (isJsxPascalCase(tag)) return false;
   if (isInteractiveJsxTag(element, tag)) return true;
   const role = getJsxAttributeString(element, "role");
-  if (role !== null && INTERACTIVE_ROLES.has(role)) return true;
+  if (role !== null && INTERACTIVE_ROLES.has(role.toLowerCase())) return true;
   return false;
 }
 
@@ -267,9 +267,9 @@ function isInteractiveJsxTag(element: JsxElement, tag: string): boolean {
 function describeJsx(element: JsxElement): string {
   const tag = element.tagName;
   const role = getJsxAttributeString(element, "role");
-  if (role !== null && INTERACTIVE_ROLES.has(role)) {
+  if (role !== null && INTERACTIVE_ROLES.has(role.toLowerCase())) {
     if (!(INTERACTIVE_TAGS.has(tag) && isInteractiveJsxTag(element, tag))) {
-      return `<${tag} role="${role}">`;
+      return `<${tag} role="${role.toLowerCase()}">`;
     }
   }
   if (tag === "a") return `<a href>`;

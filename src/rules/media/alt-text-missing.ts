@@ -130,6 +130,13 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     if (hasAccessibleNameJsx(element)) continue;
     emitJsxViolation(element, emit);
   }
+  for (const input of findJsxElementsByTag(module, "input")) {
+    const type = getJsxAttributeString(input, "type");
+    if (type?.toLowerCase() !== "image") continue;
+    if (isDecorativeJsxElement(input)) continue;
+    if (hasAccessibleNameJsx(input)) continue;
+    emitJsxViolation(input, emit);
+  }
 }
 
 function hasAccessibleNameJsx(element: JsxElement): boolean {

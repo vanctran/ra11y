@@ -205,6 +205,18 @@ describe("rule semantics/table-headers", () => {
       );
       expect(violations).toHaveLength(0);
     });
+
+    it('a JSX table with role="Presentation" (mixed case) is treated as layout', () => {
+      const violations = runRule(
+        rule,
+        `const X = (
+          <table role="Presentation">
+            <tr><td>Logo</td><td>Nav</td></tr>
+          </table>
+        );`,
+      );
+      expect(violations).toHaveLength(0);
+    });
   });
 
   describe("rule metadata", () => {

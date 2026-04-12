@@ -82,6 +82,12 @@ describe("rule media/alt-text-missing", () => {
       const violations = runRule(rule, src);
       expect(violations).toHaveLength(1);
     });
+
+    it("<input type='image'> without alt fires", () => {
+      const violations = runRule(rule, `const X = <input type="image" src="submit.png" />;`);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.ruleId).toBe("media/alt-text-missing");
+    });
   });
 
   describe("JSX: does not fire when", () => {
@@ -99,6 +105,11 @@ describe("rule media/alt-text-missing", () => {
 
     it("img has alt='' (explicitly decorative)", () => {
       const violations = runRule(rule, `const X = <img src="x.png" alt="" />;`);
+      expect(violations).toHaveLength(0);
+    });
+
+    it("<input type='image'> with alt does not fire", () => {
+      const violations = runRule(rule, `const X = <input type="image" alt="Submit" />;`);
       expect(violations).toHaveLength(0);
     });
   });

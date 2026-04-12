@@ -134,6 +134,12 @@ describe("rule semantics/nested-interactive", () => {
       expect(violations).toHaveLength(1);
       expect(violations[0]?.message).toContain(`role="button"`);
     });
+
+    it("role=Button (PascalCase) span is nested inside an a[href] — case-insensitive", () => {
+      const violations = runRule(rule, `const X = <a href="/x"><span role="Button">Go</span></a>;`);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.message).toContain(`role="button"`);
+    });
   });
 
   describe("JSX: does not fire when", () => {
