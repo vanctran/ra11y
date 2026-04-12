@@ -30,7 +30,8 @@ export const plainFormatter = defineFormatter({
 
 function renderLine(v: Violation): string {
   const loc = `${v.location.filePath}:${v.location.line}:${v.location.column}`;
-  const parts = [loc, v.severity, v.ruleId, v.message];
+  const displaySeverity = v.severity === "info" ? "note" : v.severity;
+  const parts = [loc, displaySeverity, v.ruleId, v.message];
   if (v.suggestion) parts.push(`fix: ${v.suggestion}`);
   return parts.join("  ");
 }

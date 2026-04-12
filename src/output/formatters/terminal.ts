@@ -87,7 +87,7 @@ function severityGlyph(severity: Violation["severity"]): string {
     case "warning":
       return brightYellow(GLYPHS.warning);
     case "info":
-      return brightCyan(GLYPHS.info);
+      return brightCyan(GLYPHS.note);
   }
 }
 
@@ -115,15 +115,15 @@ function labelForCriterion(id: string): string {
 function renderSummary(result: ScanResult): string {
   let errors = 0;
   let warnings = 0;
-  let infos = 0;
+  let notes = 0;
   for (const v of result.violations) {
     if (v.severity === "error") errors += 1;
     else if (v.severity === "warning") warnings += 1;
-    else infos += 1;
+    else notes += 1;
   }
   const e = `${red(GLYPHS.error)} ${errors} ${pluralize("error", errors)}`;
   const w = `${brightYellow(GLYPHS.warning)} ${warnings} ${pluralize("warning", warnings)}`;
-  const i = `${brightCyan(GLYPHS.info)} ${infos} ${pluralize("info", infos)}`;
+  const i = `${brightCyan(GLYPHS.note)} ${notes} ${pluralize("note", notes)}`;
   const duration = `${dim(`in ${result.filesScanned} ${pluralize("file", result.filesScanned)} · ${Math.round(result.durationMs)}ms`)}`;
   return `  ${e}   ${w}   ${i}   ${duration}`;
 }

@@ -53,10 +53,10 @@ export const markdownFormatter = defineFormatter({
 function renderSummary(result: ScanResult): string {
   const errors = result.violations.filter((v) => v.severity === "error").length;
   const warnings = result.violations.filter((v) => v.severity === "warning").length;
-  const infos = result.violations.filter((v) => v.severity === "info").length;
+  const notes = result.violations.filter((v) => v.severity === "info").length;
   const standards = result.enabledStandards.map(labelForStandard).join(", ");
   return (
-    `**${errors}** errors · **${warnings}** warnings · **${infos}** info  ` +
+    `**${errors}** errors · **${warnings}** warnings · **${notes}** notes  ` +
     `\nScanned ${result.filesScanned} files in ${Math.round(result.durationMs)}ms against ${standards}.`
   );
 }

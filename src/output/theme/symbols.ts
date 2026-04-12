@@ -10,7 +10,7 @@
 export const GLYPHS = {
   error: "✗",
   warning: "⚠",
-  info: "ℹ",
+  note: "✎",
   ok: "✓",
   bullet: "•",
 } as const;
