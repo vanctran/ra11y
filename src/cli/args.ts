@@ -17,6 +17,7 @@ export interface CliOptions {
     | "checklist"
     | "vpat"
     | "certification"
+    | "mcp"
     | "help"
     | "version";
   readonly positionals: readonly string[];
@@ -68,6 +69,7 @@ interface RawCliOptions {
   readonly checklist: boolean | undefined;
   readonly vpat: boolean | undefined;
   readonly certification: boolean | undefined;
+  readonly mcp: boolean | undefined;
   readonly explain: string | undefined;
   readonly format: string | undefined;
   readonly standard: string | undefined;
@@ -94,6 +96,7 @@ const FLAGS = [
   "checklist",
   "vpat",
   "certification",
+  "mcp",
   "changed",
 ];
 
@@ -118,6 +121,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   if (opts.checklist === true) return baseOpts(parsed.positionals, "checklist", opts);
   if (opts.vpat === true) return baseOpts(parsed.positionals, "vpat", opts);
   if (opts.certification === true) return baseOpts(parsed.positionals, "certification", opts);
+  if (opts.mcp === true) return baseOpts(parsed.positionals, "mcp");
 
   if (typeof opts.explain === "string") {
     return { ...baseOpts(parsed.positionals, "explain"), ruleId: opts.explain };
@@ -149,6 +153,7 @@ function translate(
     checklist: boolAt(raw, "checklist"),
     vpat: boolAt(raw, "vpat"),
     certification: boolAt(raw, "certification"),
+    mcp: boolAt(raw, "mcp"),
     explain: stringAt(raw, "explain"),
     format: stringAt(raw, "format"),
     standard: stringAt(raw, "standard"),

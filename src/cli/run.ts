@@ -3,6 +3,7 @@
  * the matching command, writes stdout/stderr, and returns the exit code.
  */
 
+import { startMcpServer } from "../mcp/server.ts";
 import { setColorEnabled } from "../utils/ansi.ts";
 import { setLogLevel } from "../utils/logger.ts";
 import { parseCliArgs } from "./args.ts";
@@ -16,7 +17,6 @@ import { runScanCommand, type ScanExit } from "./commands/scan.ts";
 import { runVpat } from "./commands/vpat.ts";
 import { renderHelp, VERSION } from "./help.ts";
 
-// biome-ignore lint/suspicious/useAwait: dispatcher returns command promises directly; adding await would be a no-op
 export async function runCli(argv: readonly string[]): Promise<ScanExit> {
   const options = parseCliArgs(argv);
 
@@ -42,6 +42,9 @@ export async function runCli(argv: readonly string[]): Promise<ScanExit> {
       return runVpat(options);
     case "certification":
       return runCertification(options);
+    case "mcp":
+      await startMcpServer();
+      return { stdout: "", stderr: "", exitCode: 0 };
     case "scan":
       return runScanCommand(options);
   }
