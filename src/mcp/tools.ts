@@ -42,7 +42,7 @@ const scanTool: McpTool = {
   def: {
     name: "scan",
     description:
-      "Scan files or directories for accessibility violations. Returns findings grouped by file with fix suggestions. Start here to find issues.",
+      "Scan files or directories for accessibility violations. Returns findings grouped by file with fix suggestions. Start here to find issues. Keep the default minSeverity: 'info' — info findings are high-value signals the tool can't verify alone (PascalCase component wrappers, cross-file CSS/JSX, etc.) and are exactly what you can resolve by reading the code.",
     inputSchema: {
       type: "object",
       properties: {
@@ -64,7 +64,7 @@ const scanTool: McpTool = {
           type: "string",
           enum: ["error", "warning", "info"],
           description:
-            "Minimum severity to include. 'warning' skips info notes, 'error' shows only errors. Default: 'info' (all).",
+            "Minimum severity to include. Default is 'info' and you should keep it — info findings are low-confidence cases where static analysis can't resolve a component boundary or cross-file reference, but you CAN by reading the source. Skipping them ships false negatives on real issues. Only raise to 'warning' for CI gates where no human is in the loop.",
         },
         cwd: {
           type: "string",
@@ -113,7 +113,7 @@ const scanProjectTool: McpTool = {
   def: {
     name: "scan_project",
     description:
-      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files). Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage.",
+      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files). Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage. Keep the default minSeverity: 'info' — info findings are things the tool flagged but couldn't verify alone (component wrappers, cross-file references); you should read the source to resolve them. Filtering them out upfront will miss real issues.",
     inputSchema: {
       type: "object",
       properties: {
@@ -134,7 +134,8 @@ const scanProjectTool: McpTool = {
         minSeverity: {
           type: "string",
           enum: ["error", "warning", "info"],
-          description: "Minimum severity to include. Default: 'info' (all).",
+          description:
+            "Minimum severity to include. Default 'info' is recommended — info findings are cases static analysis can't resolve but you can (by reading component source / cross-file references). Only raise to 'warning' for unattended CI gates.",
         },
       },
     },
@@ -186,7 +187,8 @@ const scanFileTool: McpTool = {
         minSeverity: {
           type: "string",
           enum: ["error", "warning", "info"],
-          description: "Minimum severity to include. Default: 'info' (all).",
+          description:
+            "Minimum severity to include. Default 'info' is recommended — info findings are cases static analysis can't resolve but you can (by reading component source / cross-file references). Only raise to 'warning' for unattended CI gates.",
         },
         cwd: {
           type: "string",

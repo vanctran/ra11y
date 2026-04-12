@@ -52,14 +52,17 @@ const SERVER_NAME = "ra11y";
 const SERVER_VERSION = "0.1.0";
 
 const SERVER_INSTRUCTIONS =
-  "Start with `scan` to find accessibility violations. Use `explain_rule` if a finding is unclear. " +
-  "Use `suggest_fix` to get a code patch. Re-scan with `scan_file` to verify. " +
-  "Use `coverage` to check overall compliance. " +
+  "Start with `scan_project` for a full sweep, or `scan` for specific paths. Use `explain_rule` if a " +
+  "finding is unclear. Use `suggest_fix` to get a code patch. Re-scan with `scan_file` to verify. " +
+  "Use `coverage` to check overall compliance.\n\n" +
   "Scope: ra11y is a static analysis tool — it checks markup structure, ARIA usage, keyboard handlers, " +
   "contrast, and focus indicators. It cannot verify runtime behavior (live regions, focus trapping, " +
-  "ARIA state changes). Findings on PascalCase React components are informational (severity: info) " +
-  "because the tool cannot resolve component internals — verify these by reading the component source. " +
-  "Use `minSeverity: 'warning'` to filter out info notes when you only need actionable violations.";
+  "ARIA state changes).\n\n" +
+  "Info findings are the whole point of using an agent: they mark cases where static analysis can't " +
+  "decide on its own — a PascalCase component with onClick (does it wrap a <button>?), CSS outline: none " +
+  "(does the JSX have Tailwind focus-visible:ring-*?), etc. You can resolve them by reading the source; " +
+  "a pure CI gate cannot. Keep minSeverity at the default 'info' when you're driving the scan, and only " +
+  "raise it to 'warning' when handing off to unattended automation.";
 
 // ─── Tool index ─────────────────────────────────────────────────────────────
 
