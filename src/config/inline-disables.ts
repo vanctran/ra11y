@@ -71,8 +71,15 @@ function findPragma(line: string): PragmaMatch | null {
     if (!directive) return null;
     return { kind: pragmaKind(directive), ruleIds: parseRuleList(tail) };
   }
+  // Recognize eslint-disable-next-line jsx-a11y/* as a wildcard suppress.
+  // If a developer already triaged an a11y issue with eslint, trust their
+  // judgment rather than re-flagging the same thing.
+  if (ESLINT_A11Y_DISABLE.test(line)) return { kind: "disable-next-line", ruleIds: ["*"] };
   return null;
 }
+
+/** Matches eslint-disable-next-line with any jsx-a11y rule. */
+const ESLINT_A11Y_DISABLE = /eslint-disable(?:-next-line)?\s+.*jsx-a11y\//;
 
 function pragmaKind(directive: string): PragmaMatch["kind"] {
   if (directive === "ra11y-disable-next-line") return "disable-next-line";

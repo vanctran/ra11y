@@ -207,11 +207,19 @@ function checkJsx(module: TsxModule, emit: Emit): void {
   }
 }
 
-function collectJsxLabelHtmlFors(module: TsxModule): Set<string> {
+function collectJsxLabelHtmlFors(module: TsxModule): ReadonlySet<string> {
   const fors = new Set<string>();
   for (const label of findJsxElementsByTag(module, "label")) {
     const htmlFor = getJsxAttributeString(label, "htmlFor") ?? getJsxAttributeString(label, "for");
-    if (htmlFor && htmlFor.length > 0) fors.add(htmlFor);
+    if (htmlFor && htmlFor.length > 0) {
+      fors.add(htmlFor);
+      continue;
+    }
+    // Expression-valued htmlFor like htmlFor={selectId} — we can't resolve
+    // the value but we know a label intends to reference a control. Add a
+    // sentinel so jsxHasLabel can detect that expression-valued labels exist.
+    const htmlForAttr = getJsxAttribute(label, "htmlFor") ?? getJsxAttribute(label, "for");
+    if (htmlForAttr?.value?.kind === "Expression") fors.add("__expr__");
   }
   return fors;
 }
@@ -268,6 +276,11 @@ function jsxHasLabel(
   }
   const id = getJsxAttributeString(el, "id");
   if (id && labelHtmlFors.has(id)) return true;
+  // Expression-valued id like id={selectId} paired with a label that has
+  // expression-valued htmlFor — we can't verify the match statically
+  // but the developer clearly intended the association. Trust it.
+  const idAttr = getJsxAttribute(el, "id");
+  if (idAttr?.value?.kind === "Expression" && labelHtmlFors.has("__expr__")) return true;
   if (implicitIds.has(el.range.start)) return true;
   return false;
 }
