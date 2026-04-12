@@ -188,9 +188,10 @@ export function runScanAndFormat(
   readonly filesScanned: number;
 } {
   const effective = ruleSettings ?? session.config.rules;
+  const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
   const { result } = runScan({
     standards: BUILTIN_STANDARDS,
-    rules: applyRuleSettings(BUILTIN_RULES, effective),
+    rules: activeRules,
     enabled,
     files,
     finders: BUILTIN_CANDIDATE_FINDERS,
@@ -226,8 +227,20 @@ export function runScanAndFormat(
     files: fileEntries,
     meta: {
       filesScanned: result.filesScanned,
+      // Count of rules that actually ran after "off" filtering. Without
+      // this, a "pass: true" with no findings is indistinguishable from
+      // "no applicable rules matched" — agents need to know whether the
+      // scan had teeth.
+      rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
+      ...(wrappers.length > 0
+        ? {
+            activeNativeWrappers: [...wrappers],
+            nativeWrappersNote:
+              "Info findings on these PascalCase components were suppressed. The list is additive across configure() calls and your ra11y.config.ts.",
+          }
+        : {}),
     },
   };
 

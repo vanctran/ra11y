@@ -59,8 +59,10 @@ export const scanProjectTool: McpTool = {
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   async handler(params, session) {
-    const root = strParam(params, "cwd") ?? process.cwd();
+    const explicitCwd = strParam(params, "cwd");
+    const root = explicitCwd ?? process.cwd();
     const projectConfig = await session.loadProjectConfig(root);
+    const configHint = buildConfigHint(projectConfig.sourcePath, explicitCwd, root);
     const standards = resolveStandards(strParam(params, "standard"), session);
     const roots = resolveScanRoots(params, root);
     const t0 = performance.now();
@@ -99,11 +101,29 @@ export const scanProjectTool: McpTool = {
         scanMode: describeMode(params),
         configSource: projectConfig.sourcePath,
         configSearchedFrom: root,
+        ...(configHint === null ? {} : { configHint }),
         nextStep,
       },
     });
   },
 };
+
+/**
+ * When config discovery failed AND the caller didn't pass `cwd` explicitly,
+ * warn that the server's spawn directory is almost certainly the wrong
+ * place to look. Silent null had repeatedly caused agents to add
+ * ra11y.config.ts at the project root and then spend minutes wondering
+ * why it wasn't being picked up.
+ */
+function buildConfigHint(
+  sourcePath: string | null,
+  explicitCwd: string | undefined,
+  resolvedCwd: string,
+): string | null {
+  if (sourcePath !== null) return null;
+  if (explicitCwd !== undefined) return null;
+  return `No ra11y.config.ts was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
+}
 
 /**
  * Points agents at the next tool in the workflow. Static analysis is only
