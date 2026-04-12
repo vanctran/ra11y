@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ra11y": {
+      "command": "npx",
+      "args": ["@ra11y/core", "--mcp"],
+      "type": "stdio"
+    }
+  }
+}

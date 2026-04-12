@@ -190,6 +190,40 @@ export default defineRule({
 
 End-to-end templates: [`examples/plugin-rule/`](./examples/plugin-rule/) and [`examples/plugin-standard/`](./examples/plugin-standard/). Architecture deep-dive: [`docs/architecture.md`](./docs/architecture.md).
 
+## MCP Server (AI Agent Integration)
+
+ra11y ships a built-in [MCP](https://modelcontextprotocol.io) server so AI coding agents (Claude Code, Cursor, etc.) can scan, explain, and fix accessibility issues interactively.
+
+**Setup** — add this to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ra11y": {
+      "command": "npx",
+      "args": ["@ra11y/core", "--mcp"]
+    }
+  }
+}
+```
+
+Or start the server directly: `ra11y --mcp`
+
+**Available tools:**
+
+| Tool | Purpose |
+|------|---------|
+| `scan` | Scan files/directories for violations |
+| `scan_file` | Fast single-file re-scan (cached ASTs) |
+| `explain_rule` | Full rule docs, WCAG quote, examples |
+| `suggest_fix` | Concrete fix suggestion for a violation |
+| `coverage` | Per-standard compliance scorecard |
+| `checklist` | Manual review items with evaluation prompts |
+| `list_rules` | Discover available rules |
+| `configure` | Set session defaults (standard, level) |
+
+**Typical agent workflow:** `scan` → read findings → `explain_rule` for unclear ones → apply fix → `scan_file` to verify → `coverage` to check overall compliance.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md). TL;DR: TypeScript only, Bun-first, zero runtime deps, every rule cites WCAG, conventional commits, `bun run verify` before committing. Claude Code users: see [`CLAUDE.md`](./CLAUDE.md) for the autonomous-development workflow and the Orchestrator-Workers pattern the project is built around.
