@@ -1,8 +1,7 @@
 /**
  * Built-in rules barrel. Every rule ra11y ships out of the box is
- * registered here. v0.1.0 targets ~30 rules covering every "auto"
- * and "partial" criterion under WCAG 2.1 A+AA + WCAG 2.2 A+AA
- * additions.
+ * registered here. v0.1.0 ships 36 rules covering the auto/partial
+ * criteria under WCAG 2.1 A+AA + WCAG 2.2 A+AA additions.
  */
 
 import type { Rule } from "../types/rule.ts";
@@ -16,6 +15,7 @@ import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as metaRefresh } from "./document/meta-refresh.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as viewportZoom } from "./document/viewport-zoom.ts";
+import { rule as outlineVisible } from "./focus/outline-visible.ts";
 import { rule as tabindexPositive } from "./focus/tabindex-positive.ts";
 import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
 import { rule as fieldsetLegend } from "./forms/fieldset-legend.ts";
@@ -23,15 +23,21 @@ import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
+import { rule as orientationLock } from "./layout/orientation-lock.ts";
+import { rule as textSpacing } from "./layout/text-spacing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as autoplaySound } from "./media/autoplay-sound.ts";
 import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts";
+import { rule as pauseStopHide } from "./motion/pause-stop-hide.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as linkNoHref } from "./navigation/link-no-href.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as htmlHasLang } from "./parsing/html-has-lang.ts";
+import { rule as cancellation } from "./pointer/cancellation.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
+import { rule as emptyHeading } from "./semantics/empty-heading.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
+import { rule as labelInName } from "./semantics/label-in-name.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
 import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 import { rule as tableHeaders } from "./semantics/table-headers.ts";
@@ -42,8 +48,10 @@ export const BUILTIN_RULES: readonly Rule[] = [
   autocompleteMissing,
   autoplaySound,
   buttonName,
+  cancellation,
   contrastMinimum,
   duplicateId,
+  emptyHeading,
   fieldsetLegend,
   handlerMissing,
   headingHierarchy,
@@ -52,6 +60,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   iframeTitle,
   invalidRole,
   labelForIdMismatch,
+  labelInName,
   labelsRequired,
   langAttribute,
   linkDescriptiveText,
@@ -59,10 +68,14 @@ export const BUILTIN_RULES: readonly Rule[] = [
   listStructure,
   metaRefresh,
   nestedInteractive,
+  orientationLock,
+  outlineVisible,
   pageTitled,
+  pauseStopHide,
   requiredAttrs,
   tabindexPositive,
   tableHeaders,
+  textSpacing,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
@@ -74,8 +87,10 @@ export {
   autocompleteMissing,
   autoplaySound,
   buttonName,
+  cancellation,
   contrastMinimum,
   duplicateId,
+  emptyHeading,
   fieldsetLegend,
   handlerMissing,
   headingHierarchy,
@@ -84,6 +99,7 @@ export {
   iframeTitle,
   invalidRole,
   labelForIdMismatch,
+  labelInName,
   labelsRequired,
   langAttribute,
   linkDescriptiveText,
@@ -91,10 +107,14 @@ export {
   listStructure,
   metaRefresh,
   nestedInteractive,
+  orientationLock,
+  outlineVisible,
   pageTitled,
+  pauseStopHide,
   requiredAttrs,
   tabindexPositive,
   tableHeaders,
+  textSpacing,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
