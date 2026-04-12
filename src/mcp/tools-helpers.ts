@@ -199,7 +199,7 @@ export function runScanAndFormat(
 
   const violations = filtered.filter((v) => v.severity !== "info");
   const notes = filtered.filter((v) => v.severity === "info");
-  const autoFixable = violations.filter(
+  const fixSuggestions = violations.filter(
     (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
   ).length;
 
@@ -209,9 +209,9 @@ export function runScanAndFormat(
       totalFindings: filtered.length,
       violations: violations.length,
       notes: notes.length,
-      autoFixable,
-      reviewNeeded: violations.length - autoFixable,
-      summary: buildPlanSummary(violations.length, notes.length, autoFixable),
+      fixSuggestionAvailable: fixSuggestions,
+      reviewNeeded: violations.length - fixSuggestions,
+      summary: buildPlanSummary(violations.length, notes.length, fixSuggestions),
     },
     files: fileEntries,
     meta: {
@@ -312,11 +312,15 @@ export function groupViolationsByFile(violations: readonly Violation[]): Map<str
   return map;
 }
 
-export function buildPlanSummary(violations: number, notes: number, autoFixable: number): string {
+export function buildPlanSummary(
+  violations: number,
+  notes: number,
+  fixSuggestions: number,
+): string {
   if (violations === 0 && notes === 0) return "No accessibility issues found.";
   const parts: string[] = [];
   if (violations > 0) {
-    const fixPart = autoFixable > 0 ? ` (${autoFixable} auto-fixable)` : "";
+    const fixPart = fixSuggestions > 0 ? ` (${fixSuggestions} with fix suggestions)` : "";
     parts.push(`${violations} violation${violations === 1 ? "" : "s"}${fixPart}`);
   }
   if (notes > 0) {

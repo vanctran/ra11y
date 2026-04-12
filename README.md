@@ -100,7 +100,7 @@ The output includes:
 
 ```json
 {
-  "plan": { "totalFindings": 15, "autoFixable": 12, "summary": "..." },
+  "plan": { "totalFindings": 15, "fixSuggestionAvailable": 12, "summary": "..." },
   "files": [{ "path": "src/Button.tsx", "findings": [{ "fix": { "confidence": "high" }, ... }] }],
   "reviewCandidates": [{ "question": "Does this text rely solely on sensory characteristics?", ... }]
 }

@@ -83,7 +83,7 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
   return JSON.parse(raw) as {
     plan: {
       totalFindings: number;
-      autoFixable: number;
+      fixSuggestionAvailable: number;
       reviewNeeded: number;
       manualOnly: number;
       estimatedEffort: string;
@@ -173,10 +173,10 @@ describe("formatter: agent — plan", () => {
     expect(plan.summary).toContain("keyboard/handler-missing");
   });
 
-  it("plan.autoFixable counts violations with a suggestion", () => {
+  it("plan.fixSuggestionAvailable counts violations with a suggestion", () => {
     const { plan } = parse();
     // All 4 violations have suggestions
-    expect(plan.autoFixable).toBe(4);
+    expect(plan.fixSuggestionAvailable).toBe(4);
     expect(plan.reviewNeeded).toBe(0);
   });
 

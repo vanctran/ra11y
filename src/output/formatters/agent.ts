@@ -78,7 +78,7 @@ interface AgentReviewCandidate {
 
 interface AgentPlan {
   readonly totalFindings: number;
-  readonly autoFixable: number;
+  readonly fixSuggestionAvailable: number;
   readonly reviewNeeded: number;
   readonly manualOnly: number;
   readonly estimatedEffort: Effort;
@@ -205,7 +205,7 @@ function severityToConfidence(severity: Severity): Confidence {
 }
 
 function buildPlan(files: readonly AgentFile[], totalFindings: number): AgentPlan {
-  let autoFixable = 0;
+  let fixSuggestionAvailable = 0;
   let reviewNeeded = 0;
   let manualOnly = 0;
 
@@ -213,7 +213,7 @@ function buildPlan(files: readonly AgentFile[], totalFindings: number): AgentPla
 
   for (const file of files) {
     for (const finding of file.findings) {
-      if (finding.category === "auto-fix") autoFixable += 1;
+      if (finding.category === "auto-fix") fixSuggestionAvailable += 1;
       else if (finding.category === "review") reviewNeeded += 1;
       else manualOnly += 1;
 
@@ -222,16 +222,29 @@ function buildPlan(files: readonly AgentFile[], totalFindings: number): AgentPla
     }
   }
 
-  const effort = computeEffort(totalFindings, autoFixable);
-  const summary = buildSummary(totalFindings, autoFixable, reviewNeeded, manualOnly, ruleCounts);
+  const effort = computeEffort(totalFindings, fixSuggestionAvailable);
+  const summary = buildSummary(
+    totalFindings,
+    fixSuggestionAvailable,
+    reviewNeeded,
+    manualOnly,
+    ruleCounts,
+  );
 
-  return { totalFindings, autoFixable, reviewNeeded, manualOnly, estimatedEffort: effort, summary };
+  return {
+    totalFindings,
+    fixSuggestionAvailable,
+    reviewNeeded,
+    manualOnly,
+    estimatedEffort: effort,
+    summary,
+  };
 }
 
-function computeEffort(total: number, autoFixable: number): Effort {
+function computeEffort(total: number, fixSuggestions: number): Effort {
   if (total === 0) return "trivial";
-  if (autoFixable === 0) return "trivial"; // all notes/review — nothing to fix
-  if (autoFixable > MODERATE_THRESHOLD) return "moderate";
+  if (fixSuggestions === 0) return "trivial"; // all notes/review — nothing to fix
+  if (fixSuggestions > MODERATE_THRESHOLD) return "moderate";
   return "trivial";
 }
 
@@ -239,7 +252,7 @@ const MODERATE_THRESHOLD = 5;
 
 function buildSummary(
   total: number,
-  autoFixable: number,
+  fixSuggestions: number,
   reviewNeeded: number,
   manualOnly: number,
   ruleCounts: Map<string, number>,
@@ -247,7 +260,7 @@ function buildSummary(
   if (total === 0) return "No accessibility violations found.";
 
   const parts: string[] = [];
-  if (autoFixable > 0) parts.push(`${autoFixable} auto-fixable`);
+  if (fixSuggestions > 0) parts.push(`${fixSuggestions} with fix suggestions`);
   if (reviewNeeded > 0) parts.push(`${reviewNeeded} need review`);
   if (manualOnly > 0) parts.push(`${manualOnly} manual`);
 
