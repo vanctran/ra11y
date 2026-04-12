@@ -16,7 +16,8 @@ INPUT
   --exclude <pattern>    Alias for --ignore
 
 OUTPUT
-  -f, --format <type>    terminal | plain | json  (default: terminal)
+  -f, --format <type>    terminal | plain | json | sarif | junit | markdown
+                         (default: terminal)
   --no-color             Disable ANSI colors
   --verbose              Show all violations with context
   --quiet                Errors only

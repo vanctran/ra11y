@@ -8,19 +8,35 @@
 
 import type { Formatter } from "../../api/plugin.ts";
 import { jsonFormatter } from "./json.ts";
+import { junitFormatter } from "./junit.ts";
+import { markdownFormatter } from "./markdown.ts";
 import { plainFormatter } from "./plain.ts";
+import { sarifFormatter } from "./sarif.ts";
 import { terminalFormatter } from "./terminal.ts";
 
 export interface BuiltinFormatters {
   readonly terminal: Formatter;
   readonly json: Formatter;
   readonly plain: Formatter;
+  readonly sarif: Formatter;
+  readonly junit: Formatter;
+  readonly markdown: Formatter;
 }
 
 export const BUILTIN_FORMATTERS: BuiltinFormatters = {
   terminal: terminalFormatter,
   json: jsonFormatter,
   plain: plainFormatter,
+  sarif: sarifFormatter,
+  junit: junitFormatter,
+  markdown: markdownFormatter,
 };
 
-export { jsonFormatter, plainFormatter, terminalFormatter };
+export {
+  jsonFormatter,
+  junitFormatter,
+  markdownFormatter,
+  plainFormatter,
+  sarifFormatter,
+  terminalFormatter,
+};
