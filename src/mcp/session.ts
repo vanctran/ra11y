@@ -70,14 +70,6 @@ export class McpSession {
     return { ...projectConfig.rules, ...this.config.rules };
   }
 
-  /**
-   * Merges session-level nativeWrappers with the project config's list.
-   * Both lists are additive — unioning them is what users expect.
-   */
-  effectiveNativeWrappers(projectConfig: LoadedConfig): readonly string[] {
-    return [...new Set([...projectConfig.nativeWrappers, ...this.config.nativeWrappers])];
-  }
-
   /** Update session defaults. Returns the new active config. */
   configure(opts: {
     standard?: string;

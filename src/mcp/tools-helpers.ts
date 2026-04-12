@@ -207,13 +207,20 @@ export interface ScanFormatted {
  * into the agent-facing shape (plan, files, meta). Factored out so both
  * `scan` and `scan_project` share identical semantics.
  */
+export interface NativeWrapperSources {
+  /** From ra11y.config.ts. */
+  readonly fromFile: readonly string[];
+  /** Added via configure() calls this session. */
+  readonly fromSession: readonly string[];
+}
+
 export function runScanAndFormat(
   files: readonly ParsedFile[],
   session: McpSession,
   enabled: readonly string[],
   minSeverity: string | undefined,
   ruleSettings?: Readonly<Record<string, string>>,
-  nativeWrappers?: readonly string[],
+  wrapperSources?: NativeWrapperSources,
 ): {
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
@@ -229,12 +236,20 @@ export function runScanAndFormat(
     finders: BUILTIN_CANDIDATE_FINDERS,
   });
 
-  const wrappers = nativeWrappers ?? session.config.nativeWrappers;
+  const sources = wrapperSources ?? {
+    fromFile: [],
+    fromSession: session.config.nativeWrappers,
+  };
+  const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession])];
   const { violations: withoutWrapperNoise, usedWrappers } = dropWrapperNoise(
     result.violations,
     wrappers,
   );
   const unusedWrappers = wrappers.filter((w) => !usedWrappers.has(w));
+  // Names in session but not in file — flag so agents notice their ad-hoc
+  // overrides masking the on-disk config. This is exactly the "edit the
+  // file, session state silently keeps old entries" footgun.
+  const sessionOnly = sources.fromSession.filter((w) => !sources.fromFile.includes(w));
   const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
   const grouped = groupViolationsByFile(filtered);
   const fileEntries = [...grouped.entries()]
@@ -280,6 +295,16 @@ export function runScanAndFormat(
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
       ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
+      // Split visibility: agents editing ra11y.config.ts need to see when
+      // a session configure() call is layering extras on top of the file.
+      // Without this, an ad-hoc "add Button for this session" persists
+      // silently even after the file is edited to remove it.
+      ...(sessionOnly.length > 0
+        ? {
+            sessionNativeWrappers: sessionOnly,
+            sessionOverridesNote: `${sessionOnly.length} wrapper${sessionOnly.length === 1 ? "" : "s"} added by this session's configure() call, not in ra11y.config.ts. If you've since removed these from the file, the session additions still apply for this connection — restart the MCP server or call configure() again to sync.`,
+          }
+        : {}),
       // Surface wrappers registered in config that didn't match any component
       // this run. Helps catch config rot — a renamed/deleted component whose
       // allowlist entry lingers and silently does nothing.

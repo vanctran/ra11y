@@ -57,6 +57,7 @@ export const detectNativeWrappersTool: McpTool = {
     }
 
     const standards = resolveStandards(strParam(params, "standard"), session);
+    const projectConfig = await session.loadProjectConfig(root);
     const files = await parseFiles([root], session, root);
     if (files.length === 0) {
       return textResult({
@@ -74,16 +75,41 @@ export const detectNativeWrappersTool: McpTool = {
     });
 
     const candidates = collectCandidates(result.violations);
+    const detectedNames = new Set(candidates.map((c) => c.component));
+    const declared = [
+      ...new Set([...projectConfig.nativeWrappers, ...session.config.nativeWrappers]),
+    ];
+    const absent = declared.filter((name) => !detectedNames.has(name));
+
     return textResult({
       scannedRoot: root,
       candidates,
-      nextStep:
-        candidates.length === 0
-          ? "No PascalCase onClick components detected — nothing to register."
-          : `Found ${candidates.length} unique candidate${candidates.length === 1 ? "" : "s"}. Add the ones that truly wrap a native interactive element to \`nativeWrappers\` in ra11y.config.ts:\n\nexport default {\n  nativeWrappers: [${candidates.map((c) => `"${c.component}"`).join(", ")}],\n};\n\nRemove any from the list that render a <div> or <span> internally — those are real bugs to fix.`,
+      ...(absent.length > 0 ? { absentDeclaredWrappers: absent } : {}),
+      nextStep: buildNextStep(candidates, absent),
     });
   },
 };
+
+function buildNextStep(
+  candidates: readonly { component: string }[],
+  absent: readonly string[],
+): string {
+  const parts: string[] = [];
+  if (candidates.length === 0) {
+    parts.push("No PascalCase onClick components detected — nothing to register.");
+  } else {
+    const names = candidates.map((c) => `"${c.component}"`).join(", ");
+    parts.push(
+      `Found ${candidates.length} unique candidate${candidates.length === 1 ? "" : "s"}. Add the ones that truly wrap a native interactive element to \`nativeWrappers\` in ra11y.config.ts:\n\nexport default {\n  nativeWrappers: [${names}],\n};\n\nRemove any from the list that render a <div> or <span> internally — those are real bugs to fix.`,
+    );
+  }
+  if (absent.length > 0) {
+    parts.push(
+      `\n\nDeclared but absent from JSX: [${absent.map((n) => `"${n}"`).join(", ")}]. These wrappers appear in your config but no component by that name was found in this scan — consider removing them from \`nativeWrappers\` unless you're about to add a usage.`,
+    );
+  }
+  return parts.join("");
+}
 
 interface Candidate {
   readonly component: string;

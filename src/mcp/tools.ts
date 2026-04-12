@@ -103,7 +103,10 @@ const scanTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
-      session.effectiveNativeWrappers(projectConfig),
+      {
+        fromFile: projectConfig.nativeWrappers,
+        fromSession: session.config.nativeWrappers,
+      },
     );
 
     return textResult({
@@ -357,8 +360,8 @@ const coverageTool: McpTool = {
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,
         criteriaManualReviewRequired: c.manualCriteria.length,
-        automatedGaps: c.failingCriteria,
-        manualReview: c.manualCriteria,
+        automatedGaps: withTitles(c.failingCriteria),
+        manualReview: withTitles(c.manualCriteria),
         summary:
           `${c.passing}/${c.automatable} automatable criteria passing (${c.automatedPassRate}%). ` +
           `${c.manualCriteria.length} of ${c.total} criteria in ${c.standardId} are manual-only ` +
@@ -536,3 +539,20 @@ export const MCP_TOOLS: readonly McpTool[] = [
   listRulesTool,
   configureTool,
 ];
+
+/**
+ * Enriches bare criterion IDs (e.g. "wcag22:2.4.11") with their titles
+ * ("Focus Not Obscured (Minimum)") so agents don't have to look them up.
+ * Falls back to ID-only if a criterion isn't found in any loaded standard.
+ */
+function withTitles(
+  criterionIds: readonly string[],
+): readonly { readonly id: string; readonly title: string; readonly level: string }[] {
+  return criterionIds.map((id) => {
+    for (const std of BUILTIN_STANDARDS) {
+      const c = std.criteria.find((cr) => cr.id === id);
+      if (c) return { id, title: c.title, level: c.level };
+    }
+    return { id, title: "", level: "" };
+  });
+}
