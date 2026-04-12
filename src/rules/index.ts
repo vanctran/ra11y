@@ -15,6 +15,7 @@ import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
+import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
@@ -32,6 +33,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   linkDescriptiveText,
   pageTitled,
   requiredAttrs,
+  videoCaptionsMissing,
 ];
 
 export {
@@ -47,4 +49,5 @@ export {
   linkDescriptiveText,
   pageTitled,
   requiredAttrs,
+  videoCaptionsMissing,
 };
