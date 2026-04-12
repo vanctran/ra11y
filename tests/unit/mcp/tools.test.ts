@@ -169,6 +169,29 @@ describe("MCP tool: configure", () => {
     expect(session.config.standard).toBe("wcag21");
     expect(session.config.level).toBe("A");
   });
+
+  it("applies per-rule severity overrides to subsequent scans", async () => {
+    const configureTool = findTool("configure");
+    const scanFileTool = findTool("scan_file");
+    const session = new McpSession();
+
+    // First, scan without overrides to confirm alt-text-missing fires.
+    const before = await scanFileTool.handler({ path: BAD_ALT }, session);
+    const beforeData = JSON.parse(before.content[0].text) as {
+      findings: Array<{ ruleId: string }>;
+    };
+    const hadAltFinding = beforeData.findings.some((f) => f.ruleId === "media/alt-text-missing");
+    expect(hadAltFinding).toBe(true);
+
+    // Disable the rule via configure, then re-scan.
+    await configureTool.handler({ rules: { "media/alt-text-missing": "off" } }, session);
+    const after = await scanFileTool.handler({ path: BAD_ALT }, session);
+    const afterData = JSON.parse(after.content[0].text) as {
+      findings: Array<{ ruleId: string }>;
+    };
+    const stillFires = afterData.findings.some((f) => f.ruleId === "media/alt-text-missing");
+    expect(stillFires).toBe(false);
+  });
 });
 
 describe("MCP tool: coverage", () => {

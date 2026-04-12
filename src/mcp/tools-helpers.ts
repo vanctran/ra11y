@@ -6,6 +6,7 @@
  * on tool schemas and handler logic.
  */
 
+import { isAbsolute, resolve } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
@@ -88,17 +89,45 @@ export function resolveLevel(level: string | undefined, session: McpSession): "A
   return "AA";
 }
 
+/**
+ * Resolves input paths, discovers files, and parses them. Relative paths
+ * resolve against `cwd` if provided — the server's own cwd is fixed at
+ * spawn time, which breaks when agents work in git worktrees.
+ */
 export async function parseFiles(
   paths: readonly string[],
   session: McpSession,
+  cwd?: string,
 ): Promise<readonly ParsedFile[]> {
-  const discovered = await discoverFiles(paths, { excludes: session.config.exclude });
+  const base = cwd ?? process.cwd();
+  const absPaths = paths.map((p) => (isAbsolute(p) ? p : resolve(base, p)));
+  const discovered = await discoverFiles(absPaths, { excludes: session.config.exclude });
   const parsed: ParsedFile[] = [];
   for (const filePath of discovered) {
-    const result = await session.parseFile(filePath);
+    const result = await session.parseFile(filePath, cwd);
     if (result) parsed.push(result);
   }
   return parsed;
+}
+
+/**
+ * Applies per-session rule settings: drops rules set to "off" and
+ * overrides severity for rules set to "error", "warning", or "info".
+ * Mirrors the config-file behavior in runScanCommand.
+ */
+export function applyRuleSettings(
+  rules: readonly Rule[],
+  settings: Readonly<Record<string, string>>,
+): readonly Rule[] {
+  return rules
+    .filter((r) => settings[r.id] !== "off")
+    .map((r) => {
+      const override = settings[r.id];
+      if (override === "error" || override === "warning" || override === "info") {
+        return { ...r, severity: override };
+      }
+      return r;
+    });
 }
 
 // ─── Registry lookups ───────────────────────────────────────────────────────

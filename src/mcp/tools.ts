@@ -15,6 +15,7 @@ import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import {
+  applyRuleSettings,
   buildPlanSummary,
   buildSourceContext,
   errorResult,
@@ -65,6 +66,11 @@ const scanTool: McpTool = {
           description:
             "Minimum severity to include. 'warning' skips info notes, 'error' shows only errors. Default: 'info' (all).",
         },
+        cwd: {
+          type: "string",
+          description:
+            "Base directory for resolving relative paths. Pass your current working directory (e.g. a git worktree) to avoid picking up the server's spawn-time cwd.",
+        },
       },
       required: ["paths"],
     },
@@ -77,7 +83,7 @@ const scanTool: McpTool = {
     }
 
     const standards = resolveStandards(strParam(params, "standard"), session);
-    const files = await parseFiles(paths, session);
+    const files = await parseFiles(paths, session, strParam(params, "cwd"));
     if (files.length === 0) {
       return textResult({
         plan: { totalFindings: 0, summary: "No parseable files found." },
@@ -88,7 +94,7 @@ const scanTool: McpTool = {
 
     const { result } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: BUILTIN_RULES,
+      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
@@ -149,6 +155,10 @@ const scanFileTool: McpTool = {
           enum: ["error", "warning", "info"],
           description: "Minimum severity to include. Default: 'info' (all).",
         },
+        cwd: {
+          type: "string",
+          description: "Base directory for resolving the path if it is relative.",
+        },
       },
       required: ["path"],
     },
@@ -160,7 +170,7 @@ const scanFileTool: McpTool = {
       return errorResult("path must be a non-empty string.");
     }
 
-    const parsed = await session.parseFile(filePath);
+    const parsed = await session.parseFile(filePath, strParam(params, "cwd"));
     if (!parsed) {
       return errorResult(`Unsupported or unreadable file: ${filePath}`);
     }
@@ -168,7 +178,7 @@ const scanFileTool: McpTool = {
     const standards = resolveStandards(strParam(params, "standard"), session);
     const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: BUILTIN_RULES,
+      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files: [parsed],
       finders: BUILTIN_CANDIDATE_FINDERS,
@@ -245,6 +255,10 @@ const suggestFixTool: McpTool = {
           type: "string",
           description: "Source code around the violation (±3 lines). If omitted, read from file.",
         },
+        cwd: {
+          type: "string",
+          description: "Base directory for resolving the file path if relative.",
+        },
       },
       required: ["ruleId", "file", "line"],
     },
@@ -264,7 +278,7 @@ const suggestFixTool: McpTool = {
     }
 
     // Parse the file to find the specific violation and its suggestion.
-    const parsed = await session.parseFile(filePath);
+    const parsed = await session.parseFile(filePath, strParam(params, "cwd"));
     if (!parsed) {
       return errorResult(`Unsupported or unreadable file: ${filePath}`);
     }
@@ -272,7 +286,7 @@ const suggestFixTool: McpTool = {
     const standards = resolveStandards(undefined, session);
     const { result } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: BUILTIN_RULES,
+      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files: [parsed],
     });
@@ -321,6 +335,10 @@ const coverageTool: McpTool = {
         },
         standard: { type: "string", description: "Standard ID." },
         level: { type: "string", enum: ["A", "AA", "AAA"], description: "Conformance level." },
+        cwd: {
+          type: "string",
+          description: "Base directory for resolving relative paths.",
+        },
       },
       required: ["paths"],
     },
@@ -334,11 +352,11 @@ const coverageTool: McpTool = {
 
     const standards = resolveStandards(strParam(params, "standard"), session);
     const level = resolveLevel(strParam(params, "level"), session);
-    const files = await parseFiles(paths, session);
+    const files = await parseFiles(paths, session, strParam(params, "cwd"));
 
     const { result } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: BUILTIN_RULES,
+      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files,
     });
@@ -375,6 +393,10 @@ const checklistTool: McpTool = {
         },
         standard: { type: "string", description: "Standard ID." },
         level: { type: "string", enum: ["A", "AA", "AAA"], description: "Conformance level." },
+        cwd: {
+          type: "string",
+          description: "Base directory for resolving relative paths.",
+        },
       },
       required: ["paths"],
     },
@@ -388,11 +410,11 @@ const checklistTool: McpTool = {
 
     const standards = resolveStandards(strParam(params, "standard"), session);
     const level = resolveLevel(strParam(params, "level"), session);
-    const files = await parseFiles(paths, session);
+    const files = await parseFiles(paths, session, strParam(params, "cwd"));
 
     const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: BUILTIN_RULES,
+      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
@@ -469,7 +491,7 @@ const configureTool: McpTool = {
   def: {
     name: "configure",
     description:
-      "Set session defaults for standard, level, and excludes so subsequent tool calls don't repeat these parameters.",
+      'Set session defaults for standard, level, excludes, and per-rule severity so subsequent tool calls don\'t repeat these parameters. Use `rules` to disable or demote specific rules (e.g. {"keyboard/handler-missing": "off"}) for component libraries with known-safe wrappers.',
     inputSchema: {
       type: "object",
       properties: {
@@ -480,6 +502,12 @@ const configureTool: McpTool = {
           items: { type: "string" },
           description: "Glob patterns to exclude from scanning.",
         },
+        rules: {
+          type: "object",
+          description:
+            "Per-rule severity overrides. Values: 'error', 'warning', 'info', or 'off'. Example: {\"keyboard/handler-missing\": \"off\"}.",
+          additionalProperties: { type: "string", enum: ["error", "warning", "info", "off"] },
+        },
       },
     },
     annotations: { idempotentHint: true },
@@ -488,11 +516,18 @@ const configureTool: McpTool = {
     const standard = strParam(params, "standard");
     const level = strParam(params, "level") as "A" | "AA" | "AAA" | undefined;
     const exclude = strArrayParam(params, "exclude");
+    const rules = readRuleSettings(params);
 
-    const opts: { standard?: string; level?: "A" | "AA" | "AAA"; exclude?: readonly string[] } = {};
+    const opts: {
+      standard?: string;
+      level?: "A" | "AA" | "AAA";
+      exclude?: readonly string[];
+      rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
+    } = {};
     if (standard !== undefined) opts.standard = standard;
     if (level !== undefined) opts.level = level;
     if (exclude !== undefined) opts.exclude = exclude;
+    if (rules !== undefined) opts.rules = rules;
 
     const config = session.configure(opts);
 
@@ -509,6 +544,25 @@ const configureTool: McpTool = {
     });
   },
 };
+
+/**
+ * Extracts `{ [ruleId]: "error"|"warning"|"info"|"off" }` from the configure
+ * tool's params. Keeps the `configure` handler pure over its Record input
+ * while narrowing to the RuleSetting union.
+ */
+function readRuleSettings(
+  params: Record<string, unknown>,
+): Readonly<Record<string, "error" | "warning" | "info" | "off">> | undefined {
+  const raw = params["rules"];
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const out: Record<string, "error" | "warning" | "info" | "off"> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === "error" || value === "warning" || value === "info" || value === "off") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
 
 // ─── Export ─────────────────────────────────────────────────────────────────
 

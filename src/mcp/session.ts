@@ -8,11 +8,12 @@
  */
 
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { parseInlineDisables } from "../config/index.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../input/parsers/index.ts";
 import type { Ast } from "../types/ast.ts";
+import type { RuleSetting } from "../types/config.ts";
 
 /** Cached entry: AST + metadata keyed by absolute path. */
 interface CacheEntry {
@@ -24,6 +25,8 @@ export interface SessionConfig {
   standard: string;
   level: "A" | "AA" | "AAA";
   exclude: readonly string[];
+  /** Per-rule severity overrides. "off" disables the rule entirely. */
+  rules: Record<string, RuleSetting>;
 }
 
 export class McpSession {
@@ -35,6 +38,7 @@ export class McpSession {
       standard: "wcag22",
       level: "AA",
       exclude: [],
+      rules: {},
     };
   }
 
@@ -43,19 +47,28 @@ export class McpSession {
     standard?: string;
     level?: "A" | "AA" | "AAA";
     exclude?: readonly string[];
+    rules?: Readonly<Record<string, RuleSetting>>;
   }): SessionConfig {
     if (opts.standard !== undefined) this.config.standard = opts.standard;
     if (opts.level !== undefined) this.config.level = opts.level;
     if (opts.exclude !== undefined) this.config.exclude = opts.exclude;
-    return { ...this.config };
+    if (opts.rules !== undefined) {
+      // Merge: new overrides replace per key, existing keep.
+      this.config.rules = { ...this.config.rules, ...opts.rules };
+    }
+    return { ...this.config, rules: { ...this.config.rules } };
   }
 
   /**
    * Parses a file, returning a cached result when the file hasn't changed.
    * Returns null for unsupported extensions.
+   *
+   * Relative paths resolve against `cwd` (or `process.cwd()` if omitted).
+   * Callers can pass a `cwd` per scan so agents working in git worktrees
+   * don't collide with the server's spawn-time working directory.
    */
-  async parseFile(filePath: string): Promise<ParsedFile | null> {
-    const abs = resolve(filePath);
+  async parseFile(filePath: string, cwd?: string): Promise<ParsedFile | null> {
+    const abs = isAbsolute(filePath) ? filePath : resolve(cwd ?? process.cwd(), filePath);
     const info = await stat(abs);
     const cached = this.cache.get(abs);
     if (cached && cached.mtimeMs === info.mtimeMs) {
