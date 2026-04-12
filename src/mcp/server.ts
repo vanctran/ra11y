@@ -52,24 +52,9 @@ const SERVER_NAME = "ra11y";
 const SERVER_VERSION = "0.1.0";
 
 const SERVER_INSTRUCTIONS =
-  "Two entry paths depending on project state:\n\n" +
-  "  * New or noisy codebase: `scan_project` for a full sweep, then `explain_rule` / " +
-  "`suggest_fix` on findings. If the first scan floods with info-level keyboard/handler-missing " +
-  "on PascalCase components, call `detect_native_wrappers` to get a candidate list for " +
-  "`ra11y.config.ts`'s `nativeWrappers`. Re-scan with `scan_file` to verify fixes.\n" +
-  "  * Maintained codebase with clean automated scans: go straight to `coverage` to see how " +
-  "many WCAG criteria static analysis can't evaluate (typically ~half of WCAG 2.2), then " +
-  "`checklist` for the manual-review items with evaluation prompts and candidate source " +
-  "locations. That's where the real audit work is.\n\n" +
-  "Either way, automated clean ≠ WCAG compliant — ra11y stops at what source-level analysis " +
-  "can decide. Runtime checks (live regions, focus traps, ARIA state transitions) need a real " +
-  "rendered DOM and typically run via axe-core inside a Playwright/Jest-DOM suite — orthogonal " +
-  "to ra11y, not a plugin.\n\n" +
-  "Info findings are the whole point of using an agent: they mark cases where static analysis can't " +
-  "decide on its own — a PascalCase component with onClick (does it wrap a <button>?), CSS outline: none " +
-  "(does the JSX have Tailwind focus-visible:ring-*?), etc. You can resolve them by reading the source; " +
-  "a pure CI gate cannot. Keep minSeverity at the default 'info' when you're driving the scan, and only " +
-  "raise it to 'warning' when handing off to unattended automation.";
+  "New or noisy repo → `scan_project`. Clean repo → `coverage` + `checklist` for the manual-review half. " +
+  "Automated clean ≠ WCAG compliant; runtime checks (live regions, focus traps, ARIA state) live in " +
+  "your Playwright/Jest-DOM suite via axe-core, not here.";
 
 // ─── Tool index ─────────────────────────────────────────────────────────────
 

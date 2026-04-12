@@ -14,6 +14,7 @@ import { buildCoverageReport } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { checklistTool } from "./tool-checklist.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import {
@@ -23,7 +24,6 @@ import {
   errorResult,
   filterBySeverity,
   findRule,
-  findStandard,
   formatFinding,
   type McpTool,
   numParam,
@@ -370,76 +370,6 @@ const coverageTool: McpTool = {
     });
 
     return textResult(entries.length === 1 ? entries[0] : entries);
-  },
-};
-
-// ─── Tool: checklist ────────────────────────────────────────────────────────
-
-const checklistTool: McpTool = {
-  def: {
-    name: "checklist",
-    description:
-      "Get the manual review checklist — criteria that can't be fully automated. Includes evaluation prompts and candidate source locations. Call without `paths` for a project-wide checklist rooted at `cwd`.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        paths: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Optional. File or directory paths to scan. Omit for a project-wide checklist rooted at `cwd`.",
-        },
-        standard: { type: "string", description: "Standard ID." },
-        level: { type: "string", enum: ["A", "AA", "AAA"], description: "Conformance level." },
-        cwd: {
-          type: "string",
-          description:
-            "Base directory. Used as the scan root when `paths` is omitted, and for resolving relative `paths` when given.",
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
-  async handler(params, session) {
-    const cwd = strParam(params, "cwd") ?? process.cwd();
-    const paths = strArrayParam(params, "paths") ?? [cwd];
-
-    const standards = resolveStandards(strParam(params, "standard"), session);
-    const level = resolveLevel(strParam(params, "level"), session);
-    const files = await parseFiles(paths, session, cwd);
-
-    const { result, report } = runScan({
-      standards: BUILTIN_STANDARDS,
-      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
-      enabled: standards,
-      files,
-      finders: BUILTIN_CANDIDATE_FINDERS,
-    });
-
-    const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
-
-    const items: Record<string, unknown>[] = [];
-    for (const entry of coverage) {
-      const standard = findStandard(entry.standardId);
-      if (!standard) continue;
-      for (const criterionId of entry.manualCriteria) {
-        const criterion = standard.criteria.find((c) => c.id === criterionId);
-        if (!criterion) continue;
-        const candidates = (report.candidates ?? []).filter((c) => c.criterionId === criterionId);
-        items.push({
-          criterionId: criterion.id,
-          title: criterion.title,
-          level: criterion.level,
-          candidates: candidates.map((c) => ({
-            path: c.location.filePath,
-            line: c.location.line,
-            reason: c.reason,
-          })),
-        });
-      }
-    }
-
-    return textResult({ items });
   },
 };
 
