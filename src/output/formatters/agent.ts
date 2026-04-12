@@ -175,7 +175,7 @@ function buildFinding(v: Violation): AgentFinding {
     fix: hasSuggestion ? buildFix(v) : null,
     effort: "trivial",
     category,
-    suppressWith: `// ra11y-ignore ${v.ruleId}`,
+    suppressWith: `// ra11y-disable-next-line ${v.ruleId}`,
   };
 
   return finding;

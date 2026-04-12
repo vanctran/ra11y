@@ -217,11 +217,11 @@ describe("formatter: agent — files", () => {
     expect(finding!.id).toBe(`${finding!.ruleId}:${files[0]?.path}:${finding!.line}`);
   });
 
-  it("finding.suppressWith has the ra11y-ignore format", () => {
+  it("finding.suppressWith has the ra11y-disable-next-line format", () => {
     const { files } = parse();
     for (const file of files) {
       for (const finding of file.findings) {
-        expect(finding.suppressWith).toBe(`// ra11y-ignore ${finding.ruleId}`);
+        expect(finding.suppressWith).toBe(`// ra11y-disable-next-line ${finding.ruleId}`);
       }
     }
   });
