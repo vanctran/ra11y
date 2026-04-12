@@ -10,6 +10,7 @@ export const DEFAULT_CONFIG: LoadedConfig = {
   level: "AA",
   rules: {},
   exclude: [],
+  nativeWrappers: [],
   overrides: [],
   projects: [],
   sourcePath: null,

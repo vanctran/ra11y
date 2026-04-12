@@ -27,6 +27,11 @@ export interface SessionConfig {
   exclude: readonly string[];
   /** Per-rule severity overrides. "off" disables the rule entirely. */
   rules: Record<string, RuleSetting>;
+  /**
+   * PascalCase components the session has verified wrap native interactive
+   * elements. `keyboard/handler-missing` skips info notes on these.
+   */
+  nativeWrappers: readonly string[];
 }
 
 export class McpSession {
@@ -42,6 +47,7 @@ export class McpSession {
       level: "AA",
       exclude: [],
       rules: {},
+      nativeWrappers: [],
     };
   }
 
@@ -67,12 +73,21 @@ export class McpSession {
     return { ...projectConfig.rules, ...this.config.rules };
   }
 
+  /**
+   * Merges session-level nativeWrappers with the project config's list.
+   * Both lists are additive — unioning them is what users expect.
+   */
+  effectiveNativeWrappers(projectConfig: LoadedConfig): readonly string[] {
+    return [...new Set([...projectConfig.nativeWrappers, ...this.config.nativeWrappers])];
+  }
+
   /** Update session defaults. Returns the new active config. */
   configure(opts: {
     standard?: string;
     level?: "A" | "AA" | "AAA";
     exclude?: readonly string[];
     rules?: Readonly<Record<string, RuleSetting>>;
+    nativeWrappers?: readonly string[];
   }): SessionConfig {
     if (opts.standard !== undefined) this.config.standard = opts.standard;
     if (opts.level !== undefined) this.config.level = opts.level;
@@ -80,6 +95,12 @@ export class McpSession {
     if (opts.rules !== undefined) {
       // Merge: new overrides replace per key, existing keep.
       this.config.rules = { ...this.config.rules, ...opts.rules };
+    }
+    if (opts.nativeWrappers !== undefined) {
+      // Union with existing so repeated configure() calls accumulate.
+      this.config.nativeWrappers = [
+        ...new Set([...this.config.nativeWrappers, ...opts.nativeWrappers]),
+      ];
     }
     return { ...this.config, rules: { ...this.config.rules } };
   }

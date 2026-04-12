@@ -71,6 +71,7 @@ export const scanProjectTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
+      session.effectiveNativeWrappers(projectConfig),
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,

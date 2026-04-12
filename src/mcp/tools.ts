@@ -102,6 +102,7 @@ const scanTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
+      session.effectiveNativeWrappers(projectConfig),
     );
 
     return textResult({
@@ -470,7 +471,7 @@ const configureTool: McpTool = {
   def: {
     name: "configure",
     description:
-      'Set session defaults for standard, level, excludes, and per-rule severity so subsequent tool calls don\'t repeat these parameters. Use `rules` to disable or demote specific rules (e.g. {"keyboard/handler-missing": "off"}) for component libraries with known-safe wrappers.',
+      'Set session defaults for standard, level, excludes, per-rule severity, and native-wrapper components so subsequent tool calls don\'t repeat these parameters. Prefer `nativeWrappers` over `rules: { "keyboard/handler-missing": "off" }` when you just want to quiet a known-safe design-system component — it keeps the rule firing on real `<div onClick>` bugs. For persistent project-level config, put the same fields in `ra11y.config.ts`.',
     inputSchema: {
       type: "object",
       properties: {
@@ -486,6 +487,12 @@ const configureTool: McpTool = {
           description:
             "Per-rule severity overrides. Values: 'error', 'warning', 'info', or 'off'. Example: {\"keyboard/handler-missing\": \"off\"}.",
           additionalProperties: { type: "string", enum: ["error", "warning", "info", "off"] },
+        },
+        nativeWrappers: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'PascalCase components you\'ve verified wrap a native interactive element (<button>, <a>, etc.). Info-level keyboard/handler-missing notes on these components will be suppressed. Example: ["Button", "ActionButton", "IconButton"]. Additive across calls.',
         },
       },
     },

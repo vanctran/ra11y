@@ -124,6 +124,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
 
   const rules: Readonly<Record<string, RuleSetting>> = user.rules ?? DEFAULT_CONFIG.rules;
   const exclude: readonly string[] = user.exclude ?? DEFAULT_CONFIG.exclude;
+  const nativeWrappers: readonly string[] = user.nativeWrappers ?? DEFAULT_CONFIG.nativeWrappers;
   const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
   const projects = user.projects ?? DEFAULT_CONFIG.projects;
 
@@ -132,6 +133,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
     level: user.level ?? DEFAULT_CONFIG.level,
     rules,
     exclude,
+    nativeWrappers,
     overrides,
     projects,
     sourcePath,

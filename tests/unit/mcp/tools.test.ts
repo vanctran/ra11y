@@ -242,6 +242,48 @@ describe("MCP tool: configure", () => {
     );
     expect(fires).toBe(false);
   });
+
+  it("nativeWrappers suppresses info keyboard/handler-missing on listed components", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-native-wrappers-"));
+    // JSX with two PascalCase wrappers + one real <div onClick> bug so we
+    // can see the allowlist only silences the wrapper, not real violations.
+    const fixture = joinPath(dir, "app.tsx");
+    await writeFile(
+      fixture,
+      [
+        "export function App() {",
+        "  return (",
+        "    <>",
+        "      <ActionButton onClick={a} />",
+        "      <OtherWidget onClick={b} />",
+        "      <div onClick={c}>click</div>",
+        "    </>",
+        "  );",
+        "}",
+      ].join("\n"),
+    );
+
+    const scanTool = findTool("scan");
+    const configureTool = findTool("configure");
+    const session = new McpSession();
+    await configureTool.handler({ nativeWrappers: ["ActionButton"] }, session);
+    const result = await scanTool.handler({ paths: [fixture], cwd: dir }, session);
+
+    const data = JSON.parse(result.content[0].text) as {
+      files: Array<{ findings: Array<{ ruleId: string; message: string; severity: string }> }>;
+    };
+    const khm = data.files.flatMap((f) =>
+      f.findings.filter((v) => v.ruleId === "keyboard/handler-missing"),
+    );
+    // ActionButton suppressed; OtherWidget still emits (info); <div> still an error.
+    expect(khm.some((v) => v.message.includes("ActionButton"))).toBe(false);
+    expect(khm.some((v) => v.message.includes("OtherWidget"))).toBe(true);
+    expect(khm.some((v) => v.severity === "error")).toBe(true);
+  });
 });
 
 describe("MCP tool: coverage", () => {

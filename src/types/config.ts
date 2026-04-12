@@ -45,6 +45,14 @@ export interface Config {
   readonly rules?: Readonly<Record<string, RuleSetting>>;
   /** Glob patterns to exclude from scanning. */
   readonly exclude?: readonly string[];
+  /**
+   * PascalCase components this project has verified wrap a native interactive
+   * element (`<button>`, `<a>`, etc.). Rules like `keyboard/handler-missing`
+   * use this list to skip emitting low-confidence info notes on them.
+   * Project-level acknowledgment that replaces sprinkling inline pragmas at
+   * every call site. Example: `["Button", "ActionButton", "IconButton"]`.
+   */
+  readonly nativeWrappers?: readonly string[];
   /** Per-directory overrides (last match wins). */
   readonly overrides?: readonly ConfigOverride[];
   /** Monorepo/workspace projects. */
@@ -57,6 +65,7 @@ export interface LoadedConfig {
   readonly level: "A" | "AA" | "AAA";
   readonly rules: Readonly<Record<string, RuleSetting>>;
   readonly exclude: readonly string[];
+  readonly nativeWrappers: readonly string[];
   readonly overrides: readonly ConfigOverride[];
   readonly projects: readonly ProjectConfig[];
   readonly sourcePath: string | null;

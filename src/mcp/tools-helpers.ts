@@ -132,26 +132,26 @@ function readRuleSettings(
 }
 
 /** Builds the opts object for McpSession.configure from the configure tool's params. */
-export function buildConfigureOpts(params: Record<string, unknown>): {
+export interface ConfigureOpts {
   standard?: string;
   level?: "A" | "AA" | "AAA";
   exclude?: readonly string[];
   rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
-} {
-  const opts: {
-    standard?: string;
-    level?: "A" | "AA" | "AAA";
-    exclude?: readonly string[];
-    rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
-  } = {};
+  nativeWrappers?: readonly string[];
+}
+
+export function buildConfigureOpts(params: Record<string, unknown>): ConfigureOpts {
+  const opts: ConfigureOpts = {};
   const standard = strParam(params, "standard");
   const level = strParam(params, "level") as "A" | "AA" | "AAA" | undefined;
   const exclude = strArrayParam(params, "exclude");
   const rules = readRuleSettings(params);
+  const nativeWrappers = strArrayParam(params, "nativeWrappers");
   if (standard !== undefined) opts.standard = standard;
   if (level !== undefined) opts.level = level;
   if (exclude !== undefined) opts.exclude = exclude;
   if (rules !== undefined) opts.rules = rules;
+  if (nativeWrappers !== undefined) opts.nativeWrappers = nativeWrappers;
   return opts;
 }
 
@@ -181,6 +181,7 @@ export function runScanAndFormat(
   enabled: readonly string[],
   minSeverity: string | undefined,
   ruleSettings?: Readonly<Record<string, string>>,
+  nativeWrappers?: readonly string[],
 ): {
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
@@ -195,7 +196,9 @@ export function runScanAndFormat(
     finders: BUILTIN_CANDIDATE_FINDERS,
   });
 
-  const filtered = filterBySeverity(result.violations, minSeverity);
+  const wrappers = nativeWrappers ?? session.config.nativeWrappers;
+  const withoutWrapperNoise = dropWrapperNoise(result.violations, wrappers);
+  const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
   const grouped = groupViolationsByFile(filtered);
   const fileEntries = [...grouped.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -259,6 +262,28 @@ export function findRule(ruleId: string): Rule | undefined {
 
 export function findStandard(standardId: string): Standard | undefined {
   return BUILTIN_STANDARDS.find((s) => s.id === standardId);
+}
+
+/**
+ * Drops info-level keyboard/handler-missing findings whose target component
+ * is in the allowlist. The rule's message starts with `<ComponentName>`, so
+ * we pull the name from the message rather than adding a new Violation field.
+ * If the message shape ever drifts, the list stops working — fail-safe: we
+ * keep the finding rather than dropping a real bug.
+ */
+function dropWrapperNoise(
+  violations: readonly Violation[],
+  nativeWrappers: readonly string[],
+): readonly Violation[] {
+  if (nativeWrappers.length === 0) return violations;
+  const allow = new Set(nativeWrappers);
+  return violations.filter((v) => {
+    if (v.ruleId !== "keyboard/handler-missing") return true;
+    if (v.severity !== "info") return true;
+    const match = /^<([A-Z][A-Za-z0-9]*)>/.exec(v.message);
+    if (!match) return true;
+    return !allow.has(match[1] ?? "");
+  });
 }
 
 // ─── Severity filtering ─────────────────────────────────────────────────────
