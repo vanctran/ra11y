@@ -17,6 +17,7 @@ import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
+import { rule as linkNoHref } from "./navigation/link-no-href.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
@@ -33,6 +34,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   labelsRequired,
   langAttribute,
   linkDescriptiveText,
+  linkNoHref,
   pageTitled,
   requiredAttrs,
   videoCaptionsMissing,
@@ -50,6 +52,7 @@ export {
   labelsRequired,
   langAttribute,
   linkDescriptiveText,
+  linkNoHref,
   pageTitled,
   requiredAttrs,
   videoCaptionsMissing,
