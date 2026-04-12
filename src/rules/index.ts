@@ -8,6 +8,7 @@
 import type { Rule } from "../types/rule.ts";
 import { rule as invalidRole } from "./aria/invalid-role.ts";
 import { rule as requiredAttrs } from "./aria/required-attrs.ts";
+import { rule as validAttr } from "./aria/valid-attr.ts";
 import { rule as contrastMinimum } from "./contrast/minimum.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
@@ -40,6 +41,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   listStructure,
   pageTitled,
   requiredAttrs,
+  validAttr,
   videoCaptionsMissing,
   viewportZoom,
 ];
@@ -60,6 +62,7 @@ export {
   listStructure,
   pageTitled,
   requiredAttrs,
+  validAttr,
   videoCaptionsMissing,
   viewportZoom,
 };
