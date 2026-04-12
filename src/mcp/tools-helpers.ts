@@ -160,6 +160,27 @@ export function ms(since: number): string {
   return (performance.now() - since).toFixed(0);
 }
 
+/**
+ * Counts criteria across the enabled standards that can't be evaluated by
+ * static analysis. Shown in scan output so agents don't stop at green —
+ * "0 automated findings AND N manual criteria" is the full picture.
+ */
+function countManualCriteria(enabledStandardIds: readonly string[]): number {
+  const enabled = new Set(enabledStandardIds);
+  const seen = new Set<string>();
+  let count = 0;
+  for (const std of BUILTIN_STANDARDS) {
+    if (!enabled.has(std.id)) continue;
+    for (const c of std.criteria) {
+      if (c.automatable !== "manual") continue;
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      count += 1;
+    }
+  }
+  return count;
+}
+
 /** Tally parseable files by extension — surfaces coverage gaps at a glance. */
 function countByExtension(files: readonly ParsedFile[]): Record<string, number> {
   const counts = new Map<string, number>();
@@ -209,7 +230,11 @@ export function runScanAndFormat(
   });
 
   const wrappers = nativeWrappers ?? session.config.nativeWrappers;
-  const withoutWrapperNoise = dropWrapperNoise(result.violations, wrappers);
+  const { violations: withoutWrapperNoise, usedWrappers } = dropWrapperNoise(
+    result.violations,
+    wrappers,
+  );
+  const unusedWrappers = wrappers.filter((w) => !usedWrappers.has(w));
   const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
   const grouped = groupViolationsByFile(filtered);
   const fileEntries = [...grouped.entries()]
@@ -225,6 +250,7 @@ export function runScanAndFormat(
     (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
   ).length;
 
+  const manualCount = countManualCriteria(enabled);
   const formatted: ScanFormatted = {
     pass: violations.length === 0,
     plan: {
@@ -233,7 +259,11 @@ export function runScanAndFormat(
       notes: notes.length,
       fixSuggestionAvailable: fixSuggestions,
       reviewNeeded: violations.length - fixSuggestions,
-      summary: buildPlanSummary(violations.length, notes.length, fixSuggestions),
+      // Manual-review count is visible inline so a clean scan doesn't read
+      // as "compliant" — the full picture is "automated clean AND N manual
+      // criteria still need human review."
+      manualReviewRequired: manualCount,
+      summary: buildPlanSummary(violations.length, notes.length, fixSuggestions, manualCount),
     },
     files: fileEntries,
     meta: {
@@ -250,6 +280,10 @@ export function runScanAndFormat(
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
       ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
+      // Surface wrappers registered in config that didn't match any component
+      // this run. Helps catch config rot — a renamed/deleted component whose
+      // allowlist entry lingers and silently does nothing.
+      ...(unusedWrappers.length > 0 ? { unusedNativeWrappers: unusedWrappers } : {}),
     },
   };
 
@@ -292,20 +326,32 @@ export function findStandard(standardId: string): Standard | undefined {
  * we pull the name from the message rather than adding a new Violation field.
  * If the message shape ever drifts, the list stops working — fail-safe: we
  * keep the finding rather than dropping a real bug.
+ *
+ * Also reports which wrappers actually matched something, so callers can
+ * surface stale entries that no longer correspond to any component in the
+ * codebase.
  */
 function dropWrapperNoise(
   violations: readonly Violation[],
   nativeWrappers: readonly string[],
-): readonly Violation[] {
-  if (nativeWrappers.length === 0) return violations;
+): { readonly violations: readonly Violation[]; readonly usedWrappers: ReadonlySet<string> } {
+  if (nativeWrappers.length === 0) {
+    return { violations, usedWrappers: new Set() };
+  }
   const allow = new Set(nativeWrappers);
-  return violations.filter((v) => {
+  const used = new Set<string>();
+  const filtered = violations.filter((v) => {
     if (v.ruleId !== "keyboard/handler-missing") return true;
     if (v.severity !== "info") return true;
     const match = /^<([A-Z][A-Za-z0-9]*)>/.exec(v.message);
-    if (!match) return true;
-    return !allow.has(match[1] ?? "");
+    const name = match?.[1];
+    if (name && allow.has(name)) {
+      used.add(name);
+      return false;
+    }
+    return true;
   });
+  return { violations: filtered, usedWrappers: used };
 }
 
 // ─── Severity filtering ─────────────────────────────────────────────────────
@@ -390,15 +436,23 @@ export function buildPlanSummary(
   violations: number,
   notes: number,
   fixSuggestions: number,
+  manualReviewRequired = 0,
 ): string {
-  if (violations === 0 && notes === 0) return "No accessibility issues found.";
+  const parts = buildFindingParts(violations, notes, fixSuggestions);
+  if (manualReviewRequired > 0) {
+    const noun = manualReviewRequired === 1 ? "criterion" : "criteria";
+    parts.push(`${manualReviewRequired} WCAG ${noun} still need human review — call \`checklist\``);
+  }
+  return `${parts.join(". ")}.`;
+}
+
+function buildFindingParts(violations: number, notes: number, fixSuggestions: number): string[] {
+  if (violations === 0 && notes === 0) return ["No automated findings"];
   const parts: string[] = [];
   if (violations > 0) {
     const fixPart = fixSuggestions > 0 ? ` (${fixSuggestions} with fix suggestions)` : "";
     parts.push(`${violations} violation${violations === 1 ? "" : "s"}${fixPart}`);
   }
-  if (notes > 0) {
-    parts.push(`${notes} note${notes === 1 ? "" : "s"} to review`);
-  }
-  return `${parts.join(", ")}.`;
+  if (notes > 0) parts.push(`${notes} note${notes === 1 ? "" : "s"} to review`);
+  return parts;
 }

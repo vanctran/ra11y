@@ -97,7 +97,7 @@ export const scanProjectTool: McpTool = {
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
     );
-    const nextStep = suggestNextStep(formatted.pass);
+    const nextStep = suggestNextStep(formatted.pass, describeMode(params));
     return textResult({
       ...formatted,
       scannedRoot: root,
@@ -174,11 +174,15 @@ function findNearbyConfig(startDir: string): string | null {
  * half of WCAG; a clean scan should nudge toward the manual-review path
  * rather than implying conformance.
  */
-function suggestNextStep(pass: boolean): string {
+function suggestNextStep(pass: boolean, mode: string): string {
+  const iterativeTip =
+    mode === "full"
+      ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
+      : "";
   if (pass) {
-    return "Automated checks clean. Call `coverage` to see how many WCAG criteria are inherently manual, then `checklist` for the evaluation prompts and candidate source locations.";
+    return `Automated checks clean. Call \`coverage\` to see how many WCAG criteria are inherently manual, then \`checklist\` for the evaluation prompts and candidate source locations.${iterativeTip}`;
   }
-  return "Use `explain_rule` on unclear findings, `suggest_fix` for a concrete patch, and `scan_file` to verify each file after editing.";
+  return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${iterativeTip}`;
 }
 
 /**
