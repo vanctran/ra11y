@@ -110,8 +110,8 @@ describe("runCli", () => {
     expect(r.stderr).toContain("unknown standard");
   });
 
-  it("--exclude skips matching files", async () => {
-    const r = await runCli(["bad/alt-text-missing", "--format", "plain", "--exclude", "jsx-img"]);
+  it("--exclude skips matching files (gitignore-style glob)", async () => {
+    const r = await runCli(["bad/alt-text-missing", "--format", "plain", "--exclude", "jsx-img*"]);
     expect(r.exitCode).toBe(1);
     // jsx file should be filtered out; still fails on HTML violations.
     expect(r.stdout).not.toContain("jsx-img-no-alt.tsx");
