@@ -14,6 +14,7 @@ import { buildCoverageReport } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { scanProjectTool } from "./tool-scan-project.ts";
 import {
   applyRuleSettings,
   buildConfigureOpts,
@@ -103,70 +104,6 @@ const scanTool: McpTool = {
     return textResult({
       ...formatted,
       meta: { ...formatted.meta, scannedPaths: paths },
-    });
-  },
-};
-
-// ─── Tool: scan_project ─────────────────────────────────────────────────────
-
-const scanProjectTool: McpTool = {
-  def: {
-    name: "scan_project",
-    description:
-      "Scan the entire project from the repo root. Auto-discovers every HTML/CSS/JSX/TSX/Vue/Svelte file, respecting default ignores (node_modules, dist, test files). Use this for a complete compliance check instead of `scan` when you want to be sure nothing is missed. Returns the scanned root so you can verify coverage. Keep the default minSeverity: 'info' — info findings are things the tool flagged but couldn't verify alone (component wrappers, cross-file references); you should read the source to resolve them. Filtering them out upfront will miss real issues.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cwd: {
-          type: "string",
-          description:
-            "Root directory to scan. Defaults to the current working directory. Pass your repo root to scan every parseable file.",
-        },
-        standard: {
-          type: "string",
-          description: "Standard ID (e.g. wcag22). Defaults to session config.",
-        },
-        level: {
-          type: "string",
-          enum: ["A", "AA", "AAA"],
-          description: "Conformance level. Defaults to session config.",
-        },
-        minSeverity: {
-          type: "string",
-          enum: ["error", "warning", "info"],
-          description:
-            "Minimum severity to include. Default 'info' is recommended — info findings are cases static analysis can't resolve but you can (by reading component source / cross-file references). Only raise to 'warning' for unattended CI gates.",
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
-  async handler(params, session) {
-    const root = strParam(params, "cwd") ?? process.cwd();
-    const standards = resolveStandards(strParam(params, "standard"), session);
-    const files = await parseFiles([root], session, root);
-
-    if (files.length === 0) {
-      return textResult({
-        pass: true,
-        scannedRoot: root,
-        plan: { totalFindings: 0, summary: "No parseable files found." },
-        files: [],
-        meta: { filesScanned: 0, scannedRoot: root },
-      });
-    }
-
-    const { formatted } = runScanAndFormat(
-      files,
-      session,
-      standards,
-      strParam(params, "minSeverity"),
-    );
-
-    return textResult({
-      ...formatted,
-      scannedRoot: root,
-      meta: { ...formatted.meta, scannedRoot: root },
     });
   },
 };

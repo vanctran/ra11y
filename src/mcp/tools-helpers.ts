@@ -155,6 +155,11 @@ export function buildConfigureOpts(params: Record<string, unknown>): {
   return opts;
 }
 
+/** Millisecond elapsed since a performance.now() timestamp, formatted. */
+export function ms(since: number): string {
+  return (performance.now() - since).toFixed(0);
+}
+
 // ─── Shared scan+format ─────────────────────────────────────────────────────
 
 /** Shape of the scan output used by both `scan` and `scan_project`. */
