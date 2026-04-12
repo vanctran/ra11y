@@ -21,6 +21,7 @@ import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
 import { rule as fieldsetLegend } from "./forms/fieldset-legend.ts";
 import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
+import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as autoplaySound } from "./media/autoplay-sound.ts";
@@ -35,6 +36,7 @@ import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 import { rule as tableHeaders } from "./semantics/table-headers.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
+  accesskeyDuplicate,
   altTextMissing,
   autocompleteMissing,
   autoplaySound,
@@ -65,6 +67,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
 ];
 
 export {
+  accesskeyDuplicate,
   altTextMissing,
   autocompleteMissing,
   autoplaySound,
