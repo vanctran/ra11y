@@ -12,6 +12,7 @@
  */
 
 import { defineFormatter } from "../../api/plugin.ts";
+import { EVALUATION_PROMPTS } from "../../review/evaluation-prompts.ts";
 import type { ReviewCandidate } from "../../types/review.ts";
 import type { ReportData, ScanResult, Severity, Violation } from "../../types/violation.ts";
 
@@ -63,12 +64,16 @@ interface AgentFile {
 
 interface AgentReviewCandidate {
   readonly criterionId: string;
+  readonly tier?: 1 | 2 | 3;
   readonly path: string;
   readonly line: number;
   readonly reason: string;
   readonly snippet?: string;
   readonly question?: string;
   readonly passCriteria?: string;
+  readonly failExample?: string;
+  readonly passExample?: string;
+  readonly suggestedFix?: string;
 }
 
 interface AgentPlan {
@@ -274,13 +279,22 @@ function buildReviewCandidates(
       if (fp !== 0) return fp;
       return a.location.line - b.location.line;
     })
-    .map((c) => ({
-      criterionId: c.criterionId,
-      path: c.location.filePath,
-      line: c.location.line,
-      reason: c.reason,
-      ...(c.snippet !== undefined && { snippet: c.snippet }),
-    }));
+    .map((c) => {
+      const prompt = EVALUATION_PROMPTS.get(c.criterionId);
+      return {
+        criterionId: c.criterionId,
+        ...(prompt !== undefined && { tier: prompt.tier }),
+        path: c.location.filePath,
+        line: c.location.line,
+        reason: c.reason,
+        ...(c.snippet !== undefined && { snippet: c.snippet }),
+        ...(prompt !== undefined && { question: prompt.question }),
+        ...(prompt !== undefined && { passCriteria: prompt.passCriteria }),
+        ...(prompt?.failExample !== undefined && { failExample: prompt.failExample }),
+        ...(prompt?.passExample !== undefined && { passExample: prompt.passExample }),
+        ...(prompt !== undefined && { suggestedFix: prompt.suggestedFix }),
+      };
+    });
 }
 
 function buildMeta(result: ScanResult): AgentMeta {
