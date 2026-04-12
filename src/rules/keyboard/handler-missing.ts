@@ -164,6 +164,10 @@ function checkOneJsxElement(el: import("../../types/ast.ts").JsxElement): {
   if (!hasJsxAttribute(el, "onClick")) return null;
   if (isNativelyInteractive(el.tagName.toLowerCase())) return null;
   if (hasJsxAttribute(el, "onKeyDown") || hasJsxAttribute(el, "onKeyUp")) return null;
+  // Backdrop pattern: a div/span with onClick but no text content, no
+  // aria-label, no role — this is a click-to-dismiss overlay, not a
+  // button. Keyboard dismiss is via Escape on the parent dialog.
+  if (isBackdropPattern(el)) return null;
   // PascalCase components (ActionButton, ResetButton, etc.) likely wrap
   // a native interactive element internally. We can't see through the
   // component boundary — emit as "info" (not error/warning) so it's
@@ -173,8 +177,8 @@ function checkOneJsxElement(el: import("../../types/ast.ts").JsxElement): {
     return {
       severity: "info",
       location: { filePath: "", line: el.loc.start.line, column: el.loc.start.column },
-      message: `<${el.tagName}> has onClick — verify it renders a native interactive element (button/a) internally.`,
-      suggestion: `If <${el.tagName}> renders a <button> or <a> internally, this is fine. If it renders a <div> or <span>, add onKeyDown/onKeyUp handling and tabIndex={0}.`,
+      message: `<${el.tagName}> has onClick — looks good if it renders a <button> or <a> internally.`,
+      suggestion: `No action needed if <${el.tagName}> wraps a native interactive element. If it renders a <div> or <span>, consider adding onKeyDown/onKeyUp and tabIndex={0}.`,
     };
   }
   return {
@@ -214,6 +218,30 @@ function isNativelyInteractive(tagName: string): boolean {
 function isPascalCaseComponent(tagName: string): boolean {
   const first = tagName[0];
   return first !== undefined && first >= "A" && first <= "Z";
+}
+
+/**
+ * Detects the modal backdrop pattern: a div with onClick that wraps a
+ * dialog element. The onClick is click-to-dismiss on the backdrop
+ * overlay — keyboard users close via Escape on the dialog itself.
+ * This is a standard ARIA modal pattern, not a keyboard-operability gap.
+ */
+function isBackdropPattern(el: import("../../types/ast.ts").JsxElement): boolean {
+  const tag = el.tagName.toLowerCase();
+  if (tag !== "div" && tag !== "span") return false;
+  if (hasJsxAttribute(el, "role")) return false;
+  // Check if any child has role="dialog" or role="alertdialog"
+  return hasDialogChild(el);
+}
+
+function hasDialogChild(el: import("../../types/ast.ts").JsxElement): boolean {
+  for (const child of el.children) {
+    if (child.kind !== "JsxElement") continue;
+    const role = getJsxAttributeString(child, "role");
+    if (role === "dialog" || role === "alertdialog") return true;
+    if (child.tagName === "dialog") return true;
+  }
+  return false;
 }
 
 function buildSuggestion(tagName: string, role: string | null): string {
