@@ -102,9 +102,15 @@ function buildOne(standard: Standard, failingSet: ReadonlySet<string>): PerStand
   };
 }
 
+/**
+ * Indexes criteria that have real violations (error/warning severity).
+ * Info-severity findings are notes for review, not failures — a criterion
+ * with only info-level findings is "passing with notes", not a gap.
+ */
 function indexFailingCriteria(result: ScanResult): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
   for (const violation of result.violations) {
+    if (violation.severity === "info") continue;
     for (const criterionId of violation.criteria) {
       const colonIndex = criterionId.indexOf(":");
       if (colonIndex < 0) continue;
