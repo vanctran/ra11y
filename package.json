@@ -45,8 +45,8 @@
     "check-network-isolation": "bun scripts/check-network-isolation.ts",
     "docs:check": "bun scripts/check-tsdoc.ts && bun scripts/check-mermaid.ts && bun scripts/check-docs-links.ts && bun scripts/check-api-docs-drift.ts",
     "bench": "bun scripts/bench.ts",
-    "verify": "bun run typecheck && bun run lint && bun test && bun run check-deps && bun run check-limits",
-    "verify:precommit": "bun run typecheck && bun run lint && bun test && bun run check-deps && bun run check-network-isolation && bun run check-limits",
+    "verify": "bun run typecheck && bun run lint && bun test && bun run check-deps && bun run check-limits && bun run check-cycles",
+    "verify:precommit": "bun run typecheck && bun run lint && bun test && bun run check-deps && bun run check-network-isolation && bun run check-limits && bun run check-cycles",
     "prepublishOnly": "bun run verify && bun run build"
   },
   "dependencies": {},
