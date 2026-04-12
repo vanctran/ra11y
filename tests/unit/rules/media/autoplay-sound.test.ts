@@ -92,8 +92,18 @@ describe("rule media/autoplay-sound", () => {
       expect(violations[0]?.severity).toBe("error");
     });
 
-    it("video autoPlay={true} with no muted or controls", () => {
+    it("video autoplay={true} lowercase with no muted or controls", () => {
       const violations = runRule(rule, `const X = <video autoplay={true} src="v.mp4" />;`);
+      expect(violations).toHaveLength(1);
+    });
+
+    it("video autoPlay (React canonical camelCase) with no muted or controls", () => {
+      const violations = runRule(rule, `const X = <video autoPlay src="v.mp4" />;`);
+      expect(violations).toHaveLength(1);
+    });
+
+    it("audio autoPlay={true} (React canonical) fires", () => {
+      const violations = runRule(rule, `const X = <audio autoPlay={true} src="bgm.mp3" />;`);
       expect(violations).toHaveLength(1);
     });
 

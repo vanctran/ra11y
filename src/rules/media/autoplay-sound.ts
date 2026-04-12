@@ -98,12 +98,18 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
 function checkJsx(module: TsxModule, emit: Emit): void {
   for (const tagName of ["audio", "video"] as const) {
     for (const element of findJsxElementsByTag(module, tagName)) {
-      if (!hasTruthyJsxAttribute(element, "autoplay")) continue;
-      if (hasTruthyJsxAttribute(element, "muted")) continue;
-      if (hasTruthyJsxAttribute(element, "controls")) continue;
+      // React uses autoPlay (camelCase); HTML-style autoplay also accepted.
+      if (!hasAnyTruthyJsxAttribute(element, "autoPlay", "autoplay")) continue;
+      if (hasAnyTruthyJsxAttribute(element, "muted")) continue;
+      if (hasAnyTruthyJsxAttribute(element, "controls")) continue;
       emitViolation(tagName, element.loc.start, emit);
     }
   }
+}
+
+/** True if the element has a truthy value for ANY of the given attribute names. */
+function hasAnyTruthyJsxAttribute(element: JsxElement, ...names: string[]): boolean {
+  return names.some((name) => hasTruthyJsxAttribute(element, name));
 }
 
 /**
