@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
-import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
+import { parseCss, parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { BUILTIN_FORMATTERS } from "../../output/formatters/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
@@ -85,6 +85,10 @@ function parseFor(filePath: string, source: string): Ast | null {
   if (filePath.endsWith(".html") || filePath.endsWith(".htm")) {
     const r = parseHtml(source);
     return { language: "html", root: r.root, errors: r.errors };
+  }
+  if (filePath.endsWith(".css")) {
+    const r = parseCss(source);
+    return { language: "css", root: r.root, errors: r.errors };
   }
   if (
     filePath.endsWith(".tsx") ||

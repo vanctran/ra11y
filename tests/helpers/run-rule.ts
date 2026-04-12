@@ -9,7 +9,7 @@
  */
 
 import { buildContext } from "../../src/engine/context-builder.ts";
-import { parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
+import { parseCss, parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
 import type { EmittedViolation, Rule } from "../../src/types/rule.ts";
 import type { Violation } from "../../src/types/violation.ts";
@@ -78,6 +78,10 @@ function parseSource(filePath: string, source: string): Ast {
   if (filePath.endsWith(".html") || filePath.endsWith(".htm")) {
     const result = parseHtml(source);
     return { language: "html", root: result.root, errors: result.errors };
+  }
+  if (filePath.endsWith(".css")) {
+    const result = parseCss(source);
+    return { language: "css", root: result.root, errors: result.errors };
   }
   const result = parseTsx(source);
   return { language: "tsx", root: result.root, errors: result.errors };

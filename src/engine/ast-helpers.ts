@@ -11,6 +11,11 @@
  */
 
 import type {
+  CssAtRule,
+  CssDeclaration,
+  CssNode,
+  CssRule,
+  CssStylesheet,
   HtmlDocument,
   HtmlElement,
   HtmlNode,
@@ -177,4 +182,54 @@ export function jsxTextContent(element: JsxElement): string {
   };
   for (const child of element.children) visit(child);
   return chunks.join("").trim();
+}
+
+// ---------------------------------------------------------------------------
+// CSS walkers
+// ---------------------------------------------------------------------------
+
+/**
+ * Yields every CssRule in the stylesheet, flattened through any
+ * nested at-rule containers (@media, @supports, @keyframes, etc.).
+ * Rules are yielded in document order.
+ */
+export function* walkCssRules(stylesheet: CssStylesheet): Iterable<CssRule> {
+  yield* walkCssNodesForRules(stylesheet.rules);
+}
+
+function* walkCssNodesForRules(nodes: readonly CssNode[]): Iterable<CssRule> {
+  for (const node of nodes) {
+    if (node.kind === "CssRule") {
+      yield node;
+      continue;
+    }
+    if (node.kind === "CssAtRule") {
+      yield* walkCssNodesForRules(node.children);
+    }
+  }
+}
+
+/** Yields every CssAtRule in the stylesheet (depth-first). */
+export function* walkCssAtRules(stylesheet: CssStylesheet): Iterable<CssAtRule> {
+  yield* walkCssNodesForAtRules(stylesheet.rules);
+}
+
+function* walkCssNodesForAtRules(nodes: readonly CssNode[]): Iterable<CssAtRule> {
+  for (const node of nodes) {
+    if (node.kind === "CssAtRule") {
+      yield node;
+      yield* walkCssNodesForAtRules(node.children);
+    }
+  }
+}
+
+/** Returns the first declaration whose property matches (case-insensitive). */
+export function findCssDeclaration(rule: CssRule, property: string): CssDeclaration | undefined {
+  const target = property.toLowerCase();
+  return rule.declarations.find((d) => d.property.toLowerCase() === target);
+}
+
+/** True if any declaration in the rule matches the property. */
+export function hasCssDeclaration(rule: CssRule, property: string): boolean {
+  return findCssDeclaration(rule, property) !== undefined;
 }

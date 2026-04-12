@@ -6,6 +6,7 @@
  */
 
 import type { Rule } from "../types/rule.ts";
+import { rule as contrastMinimum } from "./contrast/minimum.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
@@ -13,9 +14,10 @@ import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.
 
 export const BUILTIN_RULES: readonly Rule[] = [
   altTextMissing,
+  contrastMinimum,
   langAttribute,
   linkDescriptiveText,
   pageTitled,
 ];
 
-export { altTextMissing, langAttribute, linkDescriptiveText, pageTitled };
+export { altTextMissing, contrastMinimum, langAttribute, linkDescriptiveText, pageTitled };
