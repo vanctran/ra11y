@@ -1,0 +1,13 @@
+/* Bad: sticky header at the top of the viewport with no
+   scroll-padding-top on html/body/:root. Focused elements scrolled
+   into view will be entirely hidden underneath the header. WCAG 2.2
+   SC 2.4.11 Focus Not Obscured (Minimum). */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  height: 64px;
+  width: 100%;
+  background: white;
+  z-index: 10;
+}

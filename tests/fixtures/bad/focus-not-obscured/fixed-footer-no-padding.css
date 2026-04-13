@@ -1,0 +1,13 @@
+/* Bad: fixed cookie banner pinned to the bottom with no
+   scroll-padding-bottom on a scroll container. Anything the user
+   tabs to near the bottom of the page is hidden under the banner. */
+
+.cookie-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: #222;
+  color: white;
+}

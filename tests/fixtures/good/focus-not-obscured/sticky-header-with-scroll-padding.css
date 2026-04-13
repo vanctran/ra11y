@@ -1,0 +1,16 @@
+/* Good: sticky header is paired with scroll-padding-top on the
+   scroll container so focused elements scrolled into view stay
+   visible above the bar. WCAG 2.2 SC 2.4.11. */
+
+html {
+  scroll-padding-top: 64px;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  height: 64px;
+  width: 100%;
+  background: white;
+  z-index: 10;
+}

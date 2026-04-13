@@ -1,0 +1,19 @@
+/* Good: scroll-padding shorthand on :root reserves space for both
+   the sticky header AND the fixed footer. */
+
+:root {
+  scroll-padding: 72px 0 96px 0;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  height: 72px;
+}
+
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  height: 96px;
+  width: 100%;
+}
