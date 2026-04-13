@@ -67,7 +67,8 @@ export const checklistTool: McpTool = {
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const presence = detectElementPresence(files);
 
-    const items: Record<string, unknown>[] = [];
+    const needsReview: Record<string, unknown>[] = [];
+    const likelyIrrelevant: Record<string, unknown>[] = [];
     for (const entry of coverage) {
       const standard = findStandard(entry.standardId);
       if (!standard) continue;
@@ -76,29 +77,39 @@ export const checklistTool: McpTool = {
         if (!criterion) continue;
         const candidates = (report.candidates ?? []).filter((c) => c.criterionId === criterionId);
         const relevance = assessRelevance(criterion.id, presence);
-        items.push({
+        const item: Record<string, unknown> = {
           criterionId: criterion.id,
           title: criterion.title,
           level: criterion.level,
-          ...(relevance.likelyRelevant === false
-            ? { likelyRelevant: false, relevanceReason: relevance.reason }
-            : {}),
           candidates: candidates.map((c) => ({
             path: c.location.filePath,
             line: c.location.line,
             reason: c.reason,
           })),
-        });
+        };
+        if (relevance.likelyRelevant === false) {
+          item["likelyRelevant"] = false;
+          item["relevanceReason"] = relevance.reason;
+          likelyIrrelevant.push(item);
+        } else {
+          needsReview.push(item);
+        }
       }
     }
 
-    return textResult({ items, detectedElements: presence.detectedElements });
+    const items = [...needsReview, ...likelyIrrelevant];
+    const summary = {
+      total: items.length,
+      needsReview: needsReview.length,
+      likelyIrrelevant: likelyIrrelevant.length,
+    };
+
+    return textResult({ summary, items });
   },
 };
 
 interface ElementPresence {
   readonly hasMedia: boolean;
-  readonly detectedElements: readonly string[];
 }
 
 /**
@@ -110,19 +121,15 @@ interface ElementPresence {
  * string literal that happens to contain "<video".
  */
 function detectElementPresence(files: readonly ParsedFile[]): ElementPresence {
-  const seen = new Set<string>();
-  const markers = ["video", "audio", "marquee", "canvas", "iframe"];
+  let hasMedia = false;
   for (const f of files) {
     const lower = f.source.toLowerCase();
-    for (const tag of markers) {
-      if (seen.has(tag)) continue;
-      if (lower.includes(`<${tag}`)) seen.add(tag);
+    if (lower.includes("<video") || lower.includes("<audio")) {
+      hasMedia = true;
+      break;
     }
   }
-  return {
-    hasMedia: seen.has("video") || seen.has("audio"),
-    detectedElements: [...seen].sort(),
-  };
+  return { hasMedia };
 }
 
 const MEDIA_ONLY_CRITERIA: ReadonlySet<string> = new Set([

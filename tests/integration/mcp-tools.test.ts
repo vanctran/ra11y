@@ -172,18 +172,20 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(typeof body.automatedPassRate).toBe("number");
   });
 
-  it("checklist returns manual-review items with a detectedElements hint", async () => {
+  it("checklist returns manual-review items bucketed by relevance", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
     ]);
     const body = bodyOf(responses[1]) as {
       items: Array<{ criterionId: string }>;
-      detectedElements: string[];
+      summary: { total: number; needsReview: number; likelyIrrelevant: number };
     };
     expect(Array.isArray(body.items)).toBe(true);
     expect(body.items.length).toBeGreaterThan(0);
-    expect(Array.isArray(body.detectedElements)).toBe(true);
+    expect(typeof body.summary.total).toBe("number");
+    expect(body.summary.total).toBe(body.items.length);
+    expect(body.summary.needsReview + body.summary.likelyIrrelevant).toBe(body.summary.total);
   });
 
   it("review_candidates returns a candidateCount with the active level echoed", async () => {
