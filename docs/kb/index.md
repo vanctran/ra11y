@@ -144,8 +144,22 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 ## architecture
 
+- [Input parsers](./architecture/input-parsers.md)
+- [MCP server architecture](./architecture/mcp-server.md)
+- [Output formatters](./architecture/output-formatters.md)
+- [Registries: the standards / criteria / rules index chain](./architecture/registries.md)
+- [Reports: coverage, checklist, VPAT, certification](./architecture/reports.md)
 - [Rule engine](./architecture/rule-engine.md)
+- [Three-layer model: standards, criteria, rules](./architecture/three-layer-model.md)
 
 ## patterns
 
+- [Using AST helpers](./patterns/using-ast-helpers.md)
+- [Using the ra11y MCP server from an agent](./patterns/using-mcp-from-agents.md)
+- [Writing a formatter](./patterns/writing-a-formatter.md)
 - [Writing a rule](./patterns/writing-a-rule.md)
+- [Writing a standard](./patterns/writing-a-standard.md)
+
+## glossary.md
+
+- [Glossary](./glossary.md)

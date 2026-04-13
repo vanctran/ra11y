@@ -135,21 +135,21 @@ User-facing guides + architecture KB + authoring guides + ADRs. These are all st
 - [ ] `docs/cli.md`
 - [ ] `docs/configuration.md`
 - [ ] `docs/architecture.md`
-- [ ] `docs/kb/architecture/three-layer-model.md`
-- [ ] `docs/kb/architecture/rule-engine.md`
-- [ ] `docs/kb/architecture/registries.md`
-- [ ] `docs/kb/architecture/input-parsers.md`
-- [ ] `docs/kb/architecture/output-formatters.md`
-- [ ] `docs/kb/architecture/reports.md`
-- [ ] `docs/kb/architecture/mcp-server.md`  ← **new for MCP**
-- [ ] `docs/kb/patterns/writing-a-rule.md`
-- [ ] `docs/kb/patterns/writing-a-standard.md`
-- [ ] `docs/kb/patterns/writing-a-formatter.md`
+- [x] `docs/kb/architecture/three-layer-model.md`
+- [x] `docs/kb/architecture/rule-engine.md`
+- [x] `docs/kb/architecture/registries.md`
+- [x] `docs/kb/architecture/input-parsers.md`
+- [x] `docs/kb/architecture/output-formatters.md`
+- [x] `docs/kb/architecture/reports.md`
+- [x] `docs/kb/architecture/mcp-server.md`
+- [x] `docs/kb/patterns/writing-a-rule.md` (pre-existing)
+- [x] `docs/kb/patterns/writing-a-standard.md`
+- [x] `docs/kb/patterns/writing-a-formatter.md`
 - [ ] `docs/kb/patterns/writing-a-test.md`
-- [ ] `docs/kb/patterns/using-ast-helpers.md`
+- [x] `docs/kb/patterns/using-ast-helpers.md`
 - [ ] `docs/kb/patterns/adding-a-fixture.md`
 - [ ] `docs/kb/patterns/evaluator-optimizer-loop.md`
-- [ ] `docs/kb/patterns/using-mcp-from-agents.md`  ← **new for MCP**
+- [x] `docs/kb/patterns/using-mcp-from-agents.md`
 - [ ] `docs/kb/concepts/accessible-name-computation.md`
 - [ ] `docs/kb/concepts/interactive-elements.md`
 - [ ] `docs/kb/concepts/focus-visible-semantics.md`
@@ -161,20 +161,20 @@ User-facing guides + architecture KB + authoring guides + ADRs. These are all st
 - [ ] `docs/kb/gotchas/typescript-compiler-gotchas.md`
 - [ ] `docs/kb/gotchas/wcag-edge-cases.md`
 - [ ] `docs/kb/gotchas/test-flakiness.md`
-- [ ] `docs/kb/glossary.md`
-- [ ] `docs/certification/vpat-mapping.md`
-- [ ] `docs/certification/readiness-scoring.md`
-- [ ] `docs/certification/wcag-certification-guide.md`
-- [ ] `docs/plugins/authoring-a-rule.md`
-- [ ] `docs/plugins/authoring-a-standard.md`
-- [ ] `docs/plugins/authoring-a-formatter.md`
-- [ ] `docs/mcp/server-setup.md`  ← **new for MCP**
-- [ ] `docs/mcp/tool-reference.md`  ← **new for MCP**
-- [ ] `docs/adr/0001-zero-runtime-dependencies.md`
-- [ ] `docs/adr/0002-three-layer-standards-criteria-rules.md`
-- [ ] `docs/adr/0003-typescript-peer-for-tsx-parsing.md`
-- [ ] `docs/adr/0004-bun-test-over-vitest.md`
-- [ ] `docs/adr/0005-in-house-mcp-server.md`  ← **new for MCP**
+- [x] `docs/kb/glossary.md`
+- [x] `docs/certification/vpat-mapping.md`
+- [x] `docs/certification/readiness-scoring.md`
+- [x] `docs/certification/wcag-certification-guide.md`
+- [x] `docs/plugins/authoring-a-rule.md`
+- [x] `docs/plugins/authoring-a-standard.md`
+- [x] `docs/plugins/authoring-a-formatter.md`
+- [x] `docs/mcp/server-setup.md`
+- [x] `docs/mcp/tool-reference.md`
+- [x] `docs/adr/0001-zero-runtime-dependencies.md`
+- [x] `docs/adr/0002-three-layer-standards-criteria-rules.md`
+- [x] `docs/adr/0003-typescript-peer-for-tsx-parsing.md`
+- [x] `docs/adr/0004-bun-test-over-vitest.md`
+- [x] `docs/adr/0005-in-house-mcp-server.md`
 
 ## Phase 17 — CI workflows
 

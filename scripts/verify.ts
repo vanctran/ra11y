@@ -48,6 +48,7 @@ const CHECKS: readonly Check[] = [
   },
   { name: "tsdoc", cmd: ["bun", "scripts/check-tsdoc.ts"], precommit: true, full: true },
   { name: "mermaid", cmd: ["bun", "scripts/check-mermaid.ts"], precommit: true, full: true },
+  { name: "docs-links", cmd: ["bun", "scripts/check-docs-links.ts"], precommit: false, full: true },
   { name: "kb-drift", cmd: ["bun", "scripts/check-kb-drift.ts"], precommit: false, full: true },
 ];
 
