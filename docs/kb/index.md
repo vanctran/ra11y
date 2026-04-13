@@ -105,6 +105,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [document/meta-refresh](./rules/document__meta-refresh.md)
 - [document/page-titled](./rules/document__page-titled.md)
 - [document/viewport-zoom](./rules/document__viewport-zoom.md)
+- [focus/not-obscured](./rules/focus__not-obscured.md)
 - [focus/outline-visible](./rules/focus__outline-visible.md)
 - [focus/tabindex-positive](./rules/focus__tabindex-positive.md)
 - [forms/autocomplete-missing](./rules/forms__autocomplete-missing.md)
