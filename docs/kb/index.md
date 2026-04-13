@@ -121,6 +121,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [motion/pause-stop-hide](./rules/motion__pause-stop-hide.md)
 - [navigation/link-descriptive-text](./rules/navigation__link-descriptive-text.md)
 - [navigation/link-no-href](./rules/navigation__link-no-href.md)
+- [navigation/skip-link](./rules/navigation__skip-link.md)
 - [parsing/duplicate-id](./rules/parsing__duplicate-id.md)
 - [parsing/html-has-lang](./rules/parsing__html-has-lang.md)
 - [pointer/cancellation](./rules/pointer__cancellation.md)

@@ -94,7 +94,7 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 - [x] forms/non-empty-label (2.4.6) — label elements must have text content
 - [ ] pointer/drag-alternative (2.5.7 WCAG 2.2)
 - [ ] pointer/target-size (2.5.8 WCAG 2.2)
-- [ ] navigation/skip-link (2.4.1)
+- [x] navigation/skip-link (2.4.1) — validates a skip link precedes the primary nav and points at a real id
 - [ ] layout/reflow-hardcoded-width (1.4.10)
 - [ ] tooltip/dismissable (1.4.13)
 - [ ] document/lang-on-parts (3.1.2)

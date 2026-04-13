@@ -33,6 +33,7 @@ import { rule as videoCaptionsMissing } from "./media/video-captions-missing.ts"
 import { rule as pauseStopHide } from "./motion/pause-stop-hide.ts";
 import { rule as linkDescriptiveText } from "./navigation/link-descriptive-text.ts";
 import { rule as linkNoHref } from "./navigation/link-no-href.ts";
+import { rule as skipLink } from "./navigation/skip-link.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as htmlHasLang } from "./parsing/html-has-lang.ts";
 import { rule as cancellation } from "./pointer/cancellation.ts";
@@ -79,6 +80,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   pageTitled,
   pauseStopHide,
   requiredAttrs,
+  skipLink,
   tabindexPositive,
   tableHeaders,
   textSpacing,
@@ -121,6 +123,7 @@ export {
   pageTitled,
   pauseStopHide,
   requiredAttrs,
+  skipLink,
   tabindexPositive,
   tableHeaders,
   textSpacing,
