@@ -26,6 +26,7 @@ import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as nonEmptyLabel } from "./forms/non-empty-label.ts";
 import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
+import { rule as characterShortcuts } from "./keyboard/character-shortcuts.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as orientationLock } from "./layout/orientation-lock.ts";
 import { rule as reflowHardcodedWidth } from "./layout/reflow-hardcoded-width.ts";
@@ -56,6 +57,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   autoplaySound,
   buttonName,
   cancellation,
+  characterShortcuts,
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
@@ -102,6 +104,7 @@ export {
   autoplaySound,
   buttonName,
   cancellation,
+  characterShortcuts,
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
