@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Non-canonical casing</title>
+  </head>
+  <body>
+    <!-- Browsers tolerate uppercase, but BCP 47 §2.1.1 specifies
+         lowercase for the language subtag. Rule emits a warning. -->
+    <p lang="EN">An uppercase primary subtag.</p>
+    <p lang="FR-ca">Mixed casing across multiple subtags.</p>
+  </body>
+</html>

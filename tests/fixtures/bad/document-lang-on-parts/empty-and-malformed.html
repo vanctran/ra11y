@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Bad lang attributes</title>
+  </head>
+  <body>
+    <p>
+      An empty lang says nothing:
+      <span lang="">word</span>.
+    </p>
+    <p>
+      An underscore separator was copy-pasted from a POSIX locale:
+      <span lang="en_US">color</span>.
+    </p>
+    <p>
+      A made-up tag:
+      <cite lang="english">"Hamlet"</cite>.
+    </p>
+    <blockquote lang="xyz_123">Garbage tag.</blockquote>
+  </body>
+</html>
