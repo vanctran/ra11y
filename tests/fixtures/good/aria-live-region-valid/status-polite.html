@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live region — good</title>
+  </head>
+  <body>
+    <main>
+      <h1>Settings</h1>
+      <button type="button">Save</button>
+      <!--
+        role="status" already implies aria-live="polite", so we don't
+        repeat it. aria-atomic="true" makes the screen reader announce
+        the entire message on each update instead of just the changed
+        text node.
+      -->
+      <div role="status" aria-atomic="true" id="save-status"></div>
+    </main>
+  </body>
+</html>

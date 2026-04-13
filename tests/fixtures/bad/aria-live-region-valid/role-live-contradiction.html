@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live region — bad (contradiction)</title>
+  </head>
+  <body>
+    <!--
+      role="status" implies polite, but the explicit aria-live overrides
+      with assertive. Different screen readers resolve this conflict
+      differently — pick one or the other, not both.
+    -->
+    <div role="status" aria-live="assertive">Saved.</div>
+  </body>
+</html>
