@@ -272,7 +272,7 @@ export function runScanAndFormat(
       totalFindings: filtered.length,
       violations: violations.length,
       notes: notes.length,
-      fixSuggestionAvailable: fixSuggestions,
+      ...(fixSuggestions > 0 ? { fixSuggestionAvailable: fixSuggestions } : {}),
       reviewNeeded: violations.length - fixSuggestions,
       // Manual-review count is visible inline so a clean scan doesn't read
       // as "compliant" — the full picture is "automated clean AND N manual
