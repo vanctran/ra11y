@@ -12,6 +12,7 @@
 
 import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
 import type { Language } from "../types/rule.ts";
+import { extensionMatches } from "../utils/path.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 
 /** Per-file input to the candidate runner. */
@@ -43,7 +44,7 @@ function isFinderActive(finder: CandidateFinder, activeCriterionIds: ReadonlySet
 function appliesFinder(finder: CandidateFinder, fileExt: string, _language: Language): boolean {
   const extensions = finder.appliesTo?.fileExtensions;
   if (!extensions || extensions.length === 0) return true;
-  return extensions.includes(fileExt);
+  return extensionMatches(fileExt, extensions);
 }
 
 function runOneFinder(

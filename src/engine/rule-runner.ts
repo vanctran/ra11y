@@ -11,6 +11,7 @@
 
 import type { EmittedViolation, Language, Rule } from "../types/rule.ts";
 import type { Severity, Violation } from "../types/violation.ts";
+import { extensionMatches } from "../utils/path.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 import type { StandardFilter } from "./standard-filter.ts";
 
@@ -110,7 +111,7 @@ function extractExtension(filePath: string): string {
 function applies(rule: Rule, fileExt: string, _language: Language): boolean {
   const extensions = rule.appliesTo?.fileExtensions;
   if (!extensions || extensions.length === 0) return true;
-  return extensions.includes(fileExt);
+  return extensionMatches(fileExt, extensions);
 }
 
 function ruleCrashViolation(ruleId: string, filePath: string, err: unknown): Violation {
