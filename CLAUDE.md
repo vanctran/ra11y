@@ -56,20 +56,13 @@ These are non-negotiable. A PR that breaks any of them is rejected before review
 Run in this order on any change. All must pass before committing.
 
 ```bash
-bun run typecheck          # Strict TypeScript (tsc --noEmit)
-bun run lint               # Biome check (lint + format check)
-bun test                   # Unit + integration + snapshot + CLI tests
-bun run test:coverage      # Must stay ≥95% on engine, rules, standards, parsers, reports, utils
-bun run check-deps         # scripts/check-zero-deps.ts — dependencies: {} invariant
-bun run check-limits       # function size, file size, complexity, nesting
-bun run check-cycles       # no circular dependencies
-bun run check-network-isolation  # no fetch/http/dns/net from src/
-bun run check-kb-drift     # docs/kb/ in sync with rule/standard metadata
-bun run docs:check         # TSDoc + Mermaid + link + API docs drift
+bun run verify             # Single entrypoint — runs the full check sequence
+bun run verify:precommit   # Same, but filtered to checks that gate commits
+bun run test:coverage      # Coverage report (≥95% on engine/rules/standards/parsers/reports/utils)
 bun run build              # Transpile src/ → dist/
 ```
 
-Convenience: `bun run verify` runs typecheck + lint + test + check-deps in one shot. The precommit hook runs the full suite (see `.claude/hooks/pre-commit.ts`).
+`scripts/verify.ts` is the one place that names the check sequence (typecheck, lint, tests, zero-deps, network-isolation, limits, cycles, error-messages, tsdoc, mermaid, kb-drift). CI, the pre-commit hook, and the `/verify` skill all call `bun run verify`. To run one check directly, invoke its script: `bun scripts/check-cycles.ts`. Don't add package.json aliases per-check.
 
 ## 5. Project layout
 

@@ -27,7 +27,7 @@ and architectural invariants.
 
 - [ ] `dependencies: {}` in package.json is still empty
 - [ ] No runtime imports of `node:http`, `node:https`, `node:net`, `node:dns`, `fetch`, or `Bun.fetch` from `src/`
-- [ ] `bun run verify:precommit` passes locally (runs typecheck + lint + test + check-deps + check-network-isolation)
+- [ ] `bun run verify` passes locally (single entrypoint; runs typecheck, lint, tests, and all invariant checks)
 
 ## Rule-specific checklist (if adding a rule)
 

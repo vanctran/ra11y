@@ -28,7 +28,7 @@ You are ra11y's documentation writer. Users read what you write. Plugin authors 
 1. **Preflight**: clean tree, and the code you're documenting is on `main`.
 2. **Outline** the doc in bullets before writing prose. Share the outline in your return if the doc is new.
 3. **Write** in small commits — one section per commit is often right.
-4. **Validate** with `bun run docs:check` (TSDoc, Mermaid, links, API docs drift).
+4. **Validate** with `bun run verify` (covers TSDoc + Mermaid; run `bun scripts/check-docs-links.ts` and `bun scripts/check-api-docs-drift.ts` directly for the advisory doc checks).
 5. **Commit**: `docs(<scope>): …`.
 
 # Hard constraints

@@ -55,7 +55,7 @@ Report only issues you have ≥70% confidence are real problems. Low-confidence 
 
 # Workflow
 
-1. Run the machine-checkable invariant list first (`bun run check-deps`, `bun run check-network-isolation`, `grep -r 'console\.' src/`).
+1. Run the machine-checkable invariants first: `bun run verify` (the single entrypoint), plus a `grep -r 'console\.' src/` spot-check.
 2. Read the diff.
 3. For each file in the diff, check it against the checklists above.
 4. Aggregate issues, rank by confidence, drop anything below 70%.

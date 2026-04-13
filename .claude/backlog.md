@@ -74,10 +74,10 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [x] `scripts/check-docs-links.ts` (advisory — 2 pending links to Phase 16 docs)
 - [x] `scripts/check-api-docs-drift.ts` (advisory — 9 symbols pending docs/api/ pages)
 - [x] `scripts/check-kb-drift.ts`
-- [ ] `scripts/generate-wcag-kb.ts`
-- [ ] `scripts/generate-rule-kb.ts`
-- [ ] `scripts/generate-kb-index.ts`
-- [ ] `scripts/generate-changelog.ts`
+- [x] `scripts/generate-wcag-kb.ts` (86 WCAG 2.2 pages)
+- [x] `scripts/generate-rule-kb.ts` (36 rule + 4 standard pages)
+- [x] `scripts/generate-kb-index.ts`
+- [x] `scripts/generate-changelog.ts` (stdout → review, splice into CHANGELOG.md by hand)
 - [x] `scripts/build.ts` (bun-driven build)
 - [x] `scripts/bench.ts`
 
