@@ -7,10 +7,11 @@
 
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
-import { buildCoverageReport } from "../reports/coverage.ts";
+import { buildCoverageReport, type PerStandardCoverage } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import type { ReviewCandidate } from "../types/review.ts";
 import {
   applyRuleSettings,
   findStandard,
@@ -22,6 +23,21 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+
+interface ChecklistCandidateOut {
+  readonly path: string;
+  readonly line: number;
+  readonly reason: string;
+}
+
+interface ChecklistItemOut {
+  readonly criterionId: string;
+  readonly title: string;
+  readonly level: string;
+  readonly candidates: readonly ChecklistCandidateOut[];
+  readonly likelyRelevant?: false;
+  readonly relevanceReason?: string;
+}
 
 export const checklistTool: McpTool = {
   def: {
@@ -67,36 +83,11 @@ export const checklistTool: McpTool = {
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const presence = detectElementPresence(files);
 
-    const needsReview: Record<string, unknown>[] = [];
-    const likelyIrrelevant: Record<string, unknown>[] = [];
-    for (const entry of coverage) {
-      const standard = findStandard(entry.standardId);
-      if (!standard) continue;
-      for (const criterionId of entry.manualCriteria) {
-        const criterion = standard.criteria.find((c) => c.id === criterionId);
-        if (!criterion) continue;
-        const candidates = (report.candidates ?? []).filter((c) => c.criterionId === criterionId);
-        const relevance = assessRelevance(criterion.id, presence);
-        const item: Record<string, unknown> = {
-          criterionId: criterion.id,
-          title: criterion.title,
-          level: criterion.level,
-          candidates: candidates.map((c) => ({
-            path: c.location.filePath,
-            line: c.location.line,
-            reason: c.reason,
-          })),
-        };
-        if (relevance.likelyRelevant === false) {
-          item["likelyRelevant"] = false;
-          item["relevanceReason"] = relevance.reason;
-          likelyIrrelevant.push(item);
-        } else {
-          needsReview.push(item);
-        }
-      }
-    }
-
+    const { needsReview, likelyIrrelevant } = bucketChecklistItems(
+      coverage,
+      report.candidates ?? [],
+      presence,
+    );
     const items = [...needsReview, ...likelyIrrelevant];
     const summary = {
       total: items.length,
@@ -172,4 +163,52 @@ function assessRelevance(
     };
   }
   return { likelyRelevant: true };
+}
+
+function mapCandidates(
+  criterionId: string,
+  candidates: readonly ReviewCandidate[],
+): ChecklistCandidateOut[] {
+  return candidates
+    .filter((c) => c.criterionId === criterionId)
+    .map((c) => ({ path: c.location.filePath, line: c.location.line, reason: c.reason }));
+}
+
+function buildChecklistItem(
+  criterion: { id: string; title: string; level: string },
+  candidates: readonly ReviewCandidate[],
+  presence: ElementPresence,
+): { item: ChecklistItemOut; relevant: boolean } {
+  const relevance = assessRelevance(criterion.id, presence);
+  const base = {
+    criterionId: criterion.id,
+    title: criterion.title,
+    level: criterion.level,
+    candidates: mapCandidates(criterion.id, candidates),
+  };
+  if (relevance.likelyRelevant !== false) return { item: base, relevant: true };
+  const item = relevance.reason
+    ? { ...base, likelyRelevant: false as const, relevanceReason: relevance.reason }
+    : { ...base, likelyRelevant: false as const };
+  return { item, relevant: false };
+}
+
+function bucketChecklistItems(
+  coverage: readonly PerStandardCoverage[],
+  candidates: readonly ReviewCandidate[],
+  presence: ElementPresence,
+): { needsReview: ChecklistItemOut[]; likelyIrrelevant: ChecklistItemOut[] } {
+  const needsReview: ChecklistItemOut[] = [];
+  const likelyIrrelevant: ChecklistItemOut[] = [];
+  for (const entry of coverage) {
+    const standard = findStandard(entry.standardId);
+    if (!standard) continue;
+    for (const criterionId of entry.manualCriteria) {
+      const criterion = standard.criteria.find((c) => c.id === criterionId);
+      if (!criterion) continue;
+      const { item, relevant } = buildChecklistItem(criterion, candidates, presence);
+      (relevant ? needsReview : likelyIrrelevant).push(item);
+    }
+  }
+  return { needsReview, likelyIrrelevant };
 }

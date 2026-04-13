@@ -165,20 +165,32 @@ export function ms(since: number): string {
  * static analysis. Shown in scan output so agents don't stop at green —
  * "0 automated findings AND N manual criteria" is the full picture.
  */
-function countManualCriteria(enabledStandardIds: readonly string[]): number {
+const LEVEL_ORDER: Readonly<Record<string, number>> = { A: 1, AA: 2, AAA: 3, base: 1 };
+
+function isCountableManual(
+  c: { readonly automatable: string; readonly level: string; readonly id: string },
+  maxRank: number,
+  seen: ReadonlySet<string>,
+): boolean {
+  if (c.automatable !== "manual") return false;
+  if ((LEVEL_ORDER[c.level] ?? 3) > maxRank) return false;
+  return !seen.has(c.id);
+}
+
+function countManualCriteria(
+  enabledStandardIds: readonly string[],
+  maxLevel: "A" | "AA" | "AAA" = "AAA",
+): number {
   const enabled = new Set(enabledStandardIds);
+  const maxRank = LEVEL_ORDER[maxLevel] ?? 3;
   const seen = new Set<string>();
-  let count = 0;
   for (const std of BUILTIN_STANDARDS) {
     if (!enabled.has(std.id)) continue;
     for (const c of std.criteria) {
-      if (c.automatable !== "manual") continue;
-      if (seen.has(c.id)) continue;
-      seen.add(c.id);
-      count += 1;
+      if (isCountableManual(c, maxRank, seen)) seen.add(c.id);
     }
   }
-  return count;
+  return seen.size;
 }
 
 /** Tally parseable files by extension — surfaces coverage gaps at a glance. */
@@ -265,7 +277,7 @@ export function runScanAndFormat(
     (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
   ).length;
 
-  const manualCount = countManualCriteria(enabled);
+  const manualCount = countManualCriteria(enabled, session.config.level);
   const formatted: ScanFormatted = {
     pass: violations.length === 0,
     plan: {
