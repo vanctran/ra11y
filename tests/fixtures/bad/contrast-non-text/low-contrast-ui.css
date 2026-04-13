@@ -1,0 +1,22 @@
+/* WCAG 1.4.11 violations — borders / outlines / svg strokes < 3:1 */
+
+button.primary {
+  background: #ffffff;
+  border: 1px solid #d0d0d0; /* ~1.6:1 */
+}
+
+input.email {
+  background-color: #ffffff;
+  border-color: #e0e0e0; /* ~1.4:1 */
+}
+
+[role="button"].pill {
+  background: #ffffff;
+  outline: 2px solid #e8e8e8; /* ~1.3:1 */
+}
+
+svg.warning-icon {
+  background: #ffffff;
+  stroke: #d8d8d8; /* ~1.5:1 */
+  fill: #efefef; /* ~1.2:1 */
+}
