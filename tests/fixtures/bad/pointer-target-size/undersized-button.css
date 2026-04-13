@@ -1,0 +1,16 @@
+/* Buttons sized below 24x24 CSS pixels with no padding compensation —
+   fails WCAG 2.2 SC 2.5.8. */
+.icon-btn {
+  width: 20px;
+  height: 20px;
+}
+
+button.compact {
+  min-width: 16px;
+  min-height: 16px;
+}
+
+input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+}

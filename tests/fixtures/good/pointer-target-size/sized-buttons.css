@@ -1,0 +1,17 @@
+/* Buttons meet the WCAG 2.2 SC 2.5.8 24x24 minimum. */
+.icon-button {
+  width: 24px;
+  height: 24px;
+}
+
+button.compact {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Padding compensates for an undersized inner box. */
+.toolbar-btn {
+  width: 16px;
+  height: 16px;
+  padding: 6px;
+}
