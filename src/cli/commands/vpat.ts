@@ -8,6 +8,7 @@ import { type ParsedFile, runScan } from "../../engine/scanner.ts";
 import { discoverFiles } from "../../input/discover.ts";
 import { parseHtml, parseTsx } from "../../input/parsers/index.ts";
 import { buildVpatReport, renderVpatMarkdown } from "../../reports/index.ts";
+import { BUILTIN_CANDIDATE_FINDERS } from "../../review/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
@@ -27,14 +28,20 @@ export async function runVpat(options: CliOptions): Promise<ScanExit> {
     parsed.push({ filePath: relative(cwd, filePath), source, ast });
   }
 
-  const { result } = runScan({
+  const { result, report: scanReport } = runScan({
     standards: BUILTIN_STANDARDS,
     rules: BUILTIN_RULES,
     enabled: options.standards,
     files: parsed,
+    finders: BUILTIN_CANDIDATE_FINDERS,
   });
 
-  const report = buildVpatReport(result, BUILTIN_STANDARDS, FIXED_TIMESTAMP);
+  const report = buildVpatReport(
+    result,
+    BUILTIN_STANDARDS,
+    FIXED_TIMESTAMP,
+    scanReport.candidates ?? [],
+  );
   const markdown = renderVpatMarkdown(report);
   return { stdout: markdown, stderr: "", exitCode: 0 };
 }

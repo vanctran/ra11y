@@ -19,6 +19,7 @@
  *   - "Supports" — zero violations on an automatable criterion
  */
 
+import type { ReviewCandidate } from "../types/review.ts";
 import type { Criterion, Standard } from "../types/standard.ts";
 import type { ScanResult, Violation } from "../types/violation.ts";
 
@@ -66,14 +67,16 @@ export function buildVpatReport(
   result: ScanResult,
   loadedStandards: readonly Standard[],
   generatedAt: string = new Date().toISOString(),
+  candidates: readonly ReviewCandidate[] = [],
 ): VpatReport {
   const enabledSet = new Set(result.enabledStandards);
   const violationsByCriterion = indexViolationsByCriterion(result.violations);
+  const candidatesByCriterion = indexCandidatesByCriterion(candidates);
 
   const standardSections: VpatStandardSection[] = [];
   for (const standard of loadedStandards) {
     if (!enabledSet.has(standard.id)) continue;
-    standardSections.push(buildSection(standard, violationsByCriterion));
+    standardSections.push(buildSection(standard, violationsByCriterion, candidatesByCriterion));
   }
 
   return {
@@ -86,6 +89,7 @@ export function buildVpatReport(
 function buildSection(
   standard: Standard,
   violationsByCriterion: ReadonlyMap<string, readonly Violation[]>,
+  candidatesByCriterion: ReadonlyMap<string, readonly ReviewCandidate[]>,
 ): VpatStandardSection {
   const entries: VpatEntry[] = [];
   const summary = {
@@ -97,7 +101,11 @@ function buildSection(
   };
 
   for (const criterion of standard.criteria) {
-    const entry = buildEntry(criterion, violationsByCriterion.get(criterion.id) ?? []);
+    const entry = buildEntry(
+      criterion,
+      violationsByCriterion.get(criterion.id) ?? [],
+      candidatesByCriterion.get(criterion.id) ?? [],
+    );
     entries.push(entry);
     switch (entry.conformance) {
       case "Supports":
@@ -127,7 +135,11 @@ function buildSection(
   };
 }
 
-function buildEntry(criterion: Criterion, violations: readonly Violation[]): VpatEntry {
+function buildEntry(
+  criterion: Criterion,
+  violations: readonly Violation[],
+  candidates: readonly ReviewCandidate[],
+): VpatEntry {
   const automated = criterion.automatable !== "manual";
 
   if (!automated) {
@@ -137,7 +149,7 @@ function buildEntry(criterion: Criterion, violations: readonly Violation[]): Vpa
       title: criterion.title,
       level: criterion.level,
       conformance: "Not Evaluated",
-      remarks: "Manual review required — this criterion cannot be statically checked.",
+      remarks: buildManualRemarks(candidates),
       violationCount: 0,
       automated: false,
     };
@@ -175,6 +187,48 @@ function buildEntry(criterion: Criterion, violations: readonly Violation[]): Vpa
     violationCount: violations.length,
     automated: true,
   };
+}
+
+/**
+ * Remark for a manual criterion. If finders have surfaced candidate
+ * locations, point the reviewer at them with a count and top-level
+ * file/line so the VPAT carries real evidence instead of boilerplate.
+ *
+ * Kept intentionally factual — no pass/fail language, since a candidate
+ * is "go look here," not a violation.
+ */
+function buildManualRemarks(candidates: readonly ReviewCandidate[]): string {
+  if (candidates.length === 0) {
+    return "Manual review required — this criterion cannot be statically checked.";
+  }
+  const locations = new Set<string>();
+  for (const c of candidates) locations.add(`${c.location.filePath}:${c.location.line}`);
+  const preview: string[] = [];
+  const MAX_PREVIEW = 3;
+  for (const loc of locations) {
+    if (preview.length >= MAX_PREVIEW) break;
+    preview.push(loc);
+  }
+  const total = locations.size;
+  const extra = total > preview.length ? ` (+${total - preview.length} more)` : "";
+  return `Manual review required. ${total} candidate location(s) surfaced by finders: ${preview.join(
+    ", ",
+  )}${extra}. See --checklist output for the full list and review guidance.`;
+}
+
+function indexCandidatesByCriterion(
+  candidates: readonly ReviewCandidate[],
+): Map<string, ReviewCandidate[]> {
+  const map = new Map<string, ReviewCandidate[]>();
+  for (const c of candidates) {
+    let list = map.get(c.criterionId);
+    if (!list) {
+      list = [];
+      map.set(c.criterionId, list);
+    }
+    list.push(c);
+  }
+  return map;
 }
 
 function indexViolationsByCriterion(violations: readonly Violation[]): Map<string, Violation[]> {

@@ -139,6 +139,66 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
     expect(md).toContain("| Criterion | Level | Conformance | Remarks |");
     expect(md).toContain("Does Not Support");
   });
+
+  it("falls back to generic manual-review remark when no candidates supplied", () => {
+    const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z");
+    const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
+    const entry = wcag22?.entries.find((e) => e.criterionId === "wcag22:1.2.1");
+    expect(entry?.remarks).toContain("Manual review required");
+    expect(entry?.remarks).not.toContain("candidate location(s)");
+  });
+
+  it("injects candidate locations into the manual-review remark", () => {
+    const candidates = [
+      {
+        criterionId: "wcag22:1.2.1",
+        location: { filePath: "src/ui/Player.tsx", line: 42, column: 3 },
+        reason: "video without transcript link",
+      },
+      {
+        criterionId: "wcag22:1.2.1",
+        location: { filePath: "src/ui/Intro.tsx", line: 7, column: 1 },
+        reason: "audio element detected",
+      },
+    ];
+    const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
+    const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
+    const entry = wcag22?.entries.find((e) => e.criterionId === "wcag22:1.2.1");
+    expect(entry?.remarks).toContain("2 candidate location(s)");
+    expect(entry?.remarks).toContain("src/ui/Player.tsx:42");
+    expect(entry?.remarks).toContain("src/ui/Intro.tsx:7");
+  });
+
+  it("caps remark preview and summarizes overflow", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => ({
+      criterionId: "wcag22:1.2.1",
+      location: { filePath: `src/f${i}.tsx`, line: i + 1, column: 1 },
+      reason: "x",
+    }));
+    const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
+    const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
+    const entry = wcag22?.entries.find((e) => e.criterionId === "wcag22:1.2.1");
+    expect(entry?.remarks).toContain("8 candidate location(s)");
+    expect(entry?.remarks).toContain("+5 more");
+  });
+
+  it("leaves automated criteria remarks untouched when candidates attach", () => {
+    // Candidates targeting the same criterion that already has violations
+    // should not overwrite the violation-based remark, because the
+    // criterion is "Does Not Support," not "Not Evaluated."
+    const candidates = [
+      {
+        criterionId: "wcag22:1.1.1",
+        location: { filePath: "src/weird.tsx", line: 1, column: 1 },
+        reason: "should not appear",
+      },
+    ];
+    const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
+    const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
+    const entry = wcag22?.entries.find((e) => e.criterionId === "wcag22:1.1.1");
+    expect(entry?.remarks).not.toContain("candidate location(s)");
+    expect(entry?.remarks).toContain("violation(s)");
+  });
 });
 
 describe("buildCertificationScorecard + renderCertificationMarkdown", () => {
