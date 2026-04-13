@@ -3,24 +3,26 @@
 > Multi-standard accessibility scanner. Zero runtime dependencies. Built for precommit speed and WCAG certification.
 
 [![npm version](https://img.shields.io/npm/v/@ra11y/core)](https://www.npmjs.com/package/@ra11y/core)
-[![license](https://img.shields.io/npm/l/@ra11y/core)](./LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/vanctran/ra11y/ci.yml?branch=main)](https://github.com/vanctran/ra11y/actions)
+[![license](https://img.shields.io/npm/l/@ra11y/core)](./LICENSE)
+[![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](./package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 
 **`ra11y`** (pronounced "rally") is an accessibility scanner for JSX/TSX, HTML, and CSS. It ships with four accessibility standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. It produces VPAT-ready compliance reports and a certification readiness scorecard alongside line-level violations, so the same tool that catches the bug in your precommit also tells your legal team where you stand on ADA conformance.
 
-> **Status: pre-release (v0.0.x).** The engine, plugin API, 41 rules, four built-in standards, eight output formatters, four report kinds (coverage, checklist, VPAT, certification), and a 12-tool MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
+> **Status: pre-release (v0.0.x).** The engine, plugin API, 49 rules, four built-in standards, eight output formatters, four report kinds (coverage, checklist, VPAT, certification), and a 12-tool MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
 ## Why ra11y
 
 | | ra11y | axe-core | eslint-plugin-jsx-a11y | Pa11y |
 |---|:---:|:---:|:---:|:---:|
-| Zero runtime dependencies | ✅ | ❌ | ❌ | ❌ |
-| Multi-standard (WCAG + Section 508 + EN 301 549) | ✅ | partial | ❌ | partial |
-| VPAT + certification scorecard | ✅ | ❌ | ❌ | ❌ |
-| Runs in precommit (< 1s on typical commits) | ✅ | partial | ✅ | ❌ |
-| Context-aware fix suggestions | ✅ | partial | partial | ❌ |
-| Plugin API for custom standards | ✅ | ❌ | ❌ | ❌ |
-| First-class TSX + Tailwind class resolution | ✅ | partial | ✅ | ❌ |
+| Zero runtime dependencies | yes | no | no | no |
+| Multi-standard (WCAG + Section 508 + EN 301 549) | yes | partial | no | partial |
+| VPAT + certification scorecard | yes | no | no | no |
+| Runs in precommit (< 1s on typical commits) | yes | partial | yes | no |
+| Context-aware fix suggestions | yes | partial | partial | no |
+| Plugin API for custom standards | yes | no | no | no |
+| First-class TSX + Tailwind class resolution | yes | partial | yes | no |
 
 ## Install
 
@@ -40,29 +42,60 @@ Install is instantaneous — zero runtime dependencies means zero transitive dow
 npx ra11y src/
 ```
 
+The following output comes from running ra11y against its own test fixtures (`tests/fixtures/bad/contrast-minimum/` and `tests/fixtures/bad/alt-text-missing/`):
+
 ```
-  ra11y  v0.1.0
+  ra11y v0.0.0
 
-  ┌─ src/ui/Card.tsx ─────────────────────────────────────────────
-  │
-  │  ✗  12:5   contrast/minimum
-  │            Text color on background has ratio 3.2:1 (needs 4.5:1)
-  │            WCAG 2.2 · 1.4.3 Contrast (Minimum) · Level AA
-  │            Fix: Use #4A4A4A foreground for 5.2:1 ratio
-  │
-  │  ⚠  45:9   link/descriptive-text
-  │            Link text "here" is not descriptive
-  │            WCAG 2.2 · 2.4.4 Link Purpose · Level A
-  │            Fix: Describe the destination, e.g. "view settings"
-  │
-  └───────────────────────────────────────────────────────────────
+┌─ tests/fixtures/bad/alt-text-missing/img-no-alt.html ─────────
+│
+│  ✗  2:1     document/page-titled
+│              HTML document is missing a <title> element — browsers and screen readers have nothing to announce.
+│              WCAG 2.2 · 2.4.2
+│              Fix: Add a <title>…</title> to <head> describing the page topic or purpose. Keep it specific — 'Settings — Acme' is better than 'Acme'.
+│
+│  ✗  5:5     media/alt-text-missing
+│              <img> 'revenue-2026.png' is missing a text alternative — screen readers will announce the file name or nothing at all.
+│              WCAG 2.2 · 1.1.1
+│              Fix: Add alt describing what the image communicates (e.g., alt="revenue 2026"). If the image is purely decorative — mark it with alt="" instead.
+│
+└───────────────────────────────────────────────────────────────
 
-  ✗ 1 error   ⚠ 1 warning   ℹ 0 info          in 12 files · 340ms
+┌─ tests/fixtures/bad/contrast-minimum/low-contrast.css ────────
+│
+│  ✗  2:1     contrast/minimum
+│              '.muted-note' has color contrast ratio 2.17:1 against its background — WCAG 1.4.3 requires 4.5:1 for normal text.
+│              WCAG 2.2 · 1.4.3
+│              Fix: Darken the foreground (`color: #b0b0b0`) or lighten the background (`background: #ffffff`). The current ratio is 2.17:1; you need 4.5:1.
+│
+│  ⚠  2:1     contrast/enhanced
+│              '.muted-note' has color contrast ratio 2.17:1 against its background — WCAG 1.4.6 requires 7:1 for normal text.
+│              WCAG 2.2 · 1.4.6
+│
+└───────────────────────────────────────────────────────────────
 
-  Coverage   22 of 28 automatable SC checked · 27 need manual review
-  Next       Run `ra11y --checklist` for manual review guide
-             Run `ra11y --explain contrast/minimum` for detail
+  ✗ 6 errors   ⚠ 2 warnings   in 4 files · 8ms
+
+  Coverage  WCAG 2.2  30/34 automatable passing (88%) · 52 need manual review
 ```
+
+Each violation cites the WCAG success criterion, the exact element or selector, and a fix suggestion based on the surrounding context — not a generic rule description.
+
+## How it works
+
+ra11y separates what to check (rules) from why it matters (criteria) from which framework cares (standards). This lets one rule satisfy WCAG 2.2, Section 508, and EN 301 549 simultaneously, without duplicating logic.
+
+The diagram below shows the three-layer model. An arrow from Standards to Criteria means a standard declares a set of criteria. An arrow from Criteria to Rules means a criterion is satisfied by one or more rules.
+
+```mermaid
+flowchart TD
+  S["Standards\n(WCAG 2.2, 2.1, Section 508, EN 301 549)"] --|declares|--> C["Criteria\n(e.g. wcag22:1.4.3, section508:1194.22.c)"]
+  C --|satisfied by|--> R["Rules\n(e.g. contrast/minimum, alt-text/missing)"]
+```
+
+A scan with `--standard section508` activates the same `contrast/minimum` rule and cites the Section 508 criterion ID in output — no rule changes needed. Adding a new standard is one file with criterion records and `equivalentTo` pointers into WCAG.
+
+Architecture deep-dive: [`docs/architecture.md`](./docs/architecture.md).
 
 ## Common commands
 
@@ -73,21 +106,21 @@ ra11y --standard wcag22,section508  # Run multiple standards at once
 ra11y --level AA                    # Enforce conformance level
 ra11y --format sarif                # GitHub code scanning output
 ra11y --format agent                # AI agent-optimized JSON (see below)
-ra11y --baseline=create              # Freeze existing violations
+ra11y --baseline=create             # Freeze existing violations
 ra11y --coverage                    # Per-standard coverage summary
 ra11y --vpat                        # Generate VPAT-ready report
 ra11y --certification               # Generate readiness scorecard
 ra11y --checklist                   # Manual review checklist
 ra11y --explain contrast/minimum    # Rule detail, spec quote, examples
-ra11y --list-rules                  # All 36 built-in rules
+ra11y --list-rules                  # All 49 built-in rules
 ra11y --list-standards              # All 4 built-in standards
 ```
 
-Full CLI reference: [`docs/cli.md`](./docs/cli.md). Architecture: [`docs/architecture.md`](./docs/architecture.md).
+Full CLI reference: [`docs/cli.md`](./docs/cli.md).
 
 ## Agent mode
 
-ra11y is the first accessibility scanner designed for AI coding agents. `--format agent` outputs compact JSON optimized for LLM context windows:
+ra11y is designed for AI coding agents. `--format agent` outputs compact JSON optimized for LLM context windows:
 
 ```sh
 ra11y src/ --format agent | claude-code --stdin
@@ -101,12 +134,10 @@ The output includes:
 ```json
 {
   "plan": { "totalFindings": 15, "fixSuggestionAvailable": 12, "summary": "..." },
-  "files": [{ "path": "src/Button.tsx", "findings": [{ "fix": { "confidence": "high" }, ... }] }],
-  "reviewCandidates": [{ "question": "Does this text rely solely on sensory characteristics?", ... }]
+  "files": [{ "path": "src/Button.tsx", "findings": [{ "fix": { "confidence": "high" }, "..." : "..." }] }],
+  "reviewCandidates": [{ "question": "Does this text rely solely on sensory characteristics?", "..." : "..." }]
 }
 ```
-
-Every field earns its place in the context window. No SARIF bloat, no schema URLs, no enterprise metadata.
 
 ## Configure
 
@@ -192,11 +223,11 @@ End-to-end templates: [`examples/plugin-rule/`](./examples/plugin-rule/) and [`e
 
 ## MCP Server (AI Agent Integration)
 
-ra11y ships a built-in [MCP](https://modelcontextprotocol.io) server so AI coding agents (Claude Code, Cursor, etc.) can scan, explain, and fix accessibility issues interactively.
+ra11y ships a built-in [MCP](https://modelcontextprotocol.io) server so AI coding agents (Claude Code, Cursor, Zed, Continue) can scan, explain, and fix accessibility issues interactively.
 
 **Setup** — add this to your project's `.mcp.json`:
 
-```json
+```jsonc
 {
   "mcpServers": {
     "ra11y": {
@@ -209,20 +240,32 @@ ra11y ships a built-in [MCP](https://modelcontextprotocol.io) server so AI codin
 
 Or start the server directly: `ra11y --mcp`
 
-**Available tools:**
+**Available tools (12):**
 
 | Tool | Purpose |
 |------|---------|
-| `scan` | Scan files/directories for violations |
+| `scan` | Scan files or directories for violations |
+| `scan_project` | Full-project scan with rule-grouped summary |
 | `scan_file` | Fast single-file re-scan (cached ASTs) |
-| `explain_rule` | Full rule docs, WCAG quote, examples |
-| `suggest_fix` | Concrete fix suggestion for a violation |
+| `detect_native_wrappers` | Discover PascalCase design-system wrappers to suppress false positives |
+| `explain_rule` | Full rule docs, WCAG quote, good/bad examples |
+| `explain_standard` | Standard metadata and criterion list |
+| `suggest_fix` | Concrete fix suggestion for a specific violation |
 | `coverage` | Per-standard compliance scorecard |
 | `checklist` | Manual review items with evaluation prompts |
-| `list_rules` | Discover available rules |
-| `configure` | Set session defaults (standard, level) |
+| `review_candidates` | Locations needing human judgment with the question to answer |
+| `list_rules` | Discover all loaded rules with metadata |
+| `configure` | Set session defaults (standard, level, excludes) |
 
-**Typical agent workflow:** `scan` → read findings → `explain_rule` for unclear ones → apply fix → `scan_file` to verify → `coverage` to check overall compliance.
+**Typical agent workflow:** `scan_project` to get findings → `explain_rule` for unclear ones → apply fixes → `scan_file` to verify → `coverage` to check overall compliance.
+
+Full setup guide: [`docs/mcp/server-setup.md`](./docs/mcp/server-setup.md).
+
+**Example agent interaction:**
+
+> **User:** Scan this project for WCAG AA issues and tell me which are easiest to fix.
+>
+> **Agent** calls `scan_project` with `{ "standard": "wcag22", "level": "AA" }`. ra11y returns 15 findings grouped by file. Agent calls `suggest_fix` for the three `contrast/minimum` findings. Agent responds: "Three contrast failures in `Card.tsx` are trivial — the suggested color values are already in the response. Two missing `alt` attributes in `Hero.tsx` need descriptive text you'll need to supply. The remaining ten are medium-effort keyboard and ARIA issues."
 
 ## Contributing
 
