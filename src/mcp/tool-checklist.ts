@@ -30,13 +30,30 @@ interface ChecklistCandidateOut {
   readonly reason: string;
 }
 
+type ChecklistPriority = "high" | "medium" | "low";
+
 interface ChecklistItemOut {
   readonly criterionId: string;
   readonly title: string;
   readonly level: string;
+  readonly priority: ChecklistPriority;
   readonly candidates: readonly ChecklistCandidateOut[];
   readonly likelyRelevant?: false;
   readonly relevanceReason?: string;
+}
+
+/**
+ * Priority bucket from (a) whether the finder surfaced concrete locations
+ * and (b) the WCAG conformance level. Reviewers should start with `high`
+ * — those items both have code to look at and are load-bearing for A/AA
+ * conformance. `low` is reserved for AAA criteria with no candidates:
+ * visit them last or skip for non-AAA targets.
+ */
+function priorityFor(level: string, hasCandidates: boolean): ChecklistPriority {
+  if (hasCandidates && (level === "A" || level === "AA")) return "high";
+  if (hasCandidates) return "medium";
+  if (level === "A" || level === "AA") return "medium";
+  return "low";
 }
 
 export const checklistTool: McpTool = {
@@ -89,10 +106,13 @@ export const checklistTool: McpTool = {
       presence,
     );
     const items = [...needsReview, ...likelyIrrelevant];
+    const byPriority = { high: 0, medium: 0, low: 0 };
+    for (const item of needsReview) byPriority[item.priority] += 1;
     const summary = {
       total: items.length,
       needsReview: needsReview.length,
       likelyIrrelevant: likelyIrrelevant.length,
+      byPriority,
     };
 
     return textResult({ summary, items });
@@ -180,11 +200,13 @@ function buildChecklistItem(
   presence: ElementPresence,
 ): { item: ChecklistItemOut; relevant: boolean } {
   const relevance = assessRelevance(criterion.id, presence);
+  const mapped = mapCandidates(criterion.id, candidates);
   const base = {
     criterionId: criterion.id,
     title: criterion.title,
     level: criterion.level,
-    candidates: mapCandidates(criterion.id, candidates),
+    priority: priorityFor(criterion.level, mapped.length > 0),
+    candidates: mapped,
   };
   if (relevance.likelyRelevant !== false) return { item: base, relevant: true };
   const item = relevance.reason
@@ -210,5 +232,7 @@ function bucketChecklistItems(
       (relevant ? needsReview : likelyIrrelevant).push(item);
     }
   }
+  const rank: Readonly<Record<ChecklistPriority, number>> = { high: 0, medium: 1, low: 2 };
+  needsReview.sort((a, b) => rank[a.priority] - rank[b.priority]);
   return { needsReview, likelyIrrelevant };
 }

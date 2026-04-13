@@ -293,7 +293,14 @@ export function runScanAndFormat(
       violations: violations.length,
       notes: notes.length,
       ...(fixSuggestions > 0 ? { fixSuggestionAvailable: fixSuggestions } : {}),
-      reviewNeeded: violations.length - fixSuggestions,
+      // Rule-level violations with no machine-generated fix suggestion —
+      // distinct from plan.manualReviewRequired, which counts WCAG
+      // criteria that static analysis can't evaluate at all. Omitted when
+      // zero so a clean scan doesn't pair it visually with
+      // manualReviewRequired and read as the same number.
+      ...(violations.length - fixSuggestions > 0
+        ? { violationsWithoutSuggestion: violations.length - fixSuggestions }
+        : {}),
       // Manual-review count is visible inline so a clean scan doesn't read
       // as "compliant" — the full picture is "automated clean AND N manual
       // criteria still need human review."
