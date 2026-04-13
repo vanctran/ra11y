@@ -50,8 +50,13 @@ export interface ResolvedDeclaration {
  * the resolver's scope.
  */
 export function resolveTailwindToken(token: TailwindToken): ResolvedDeclaration[] | null {
-  if (token.malformed) return null;
-  const { utility, negative, arbitraryValue, modifier } = token;
+  // The parser flags `modifier: ""` + non-null `arbitraryValue` as
+  // "malformed" because it doesn't know about Tailwind's arbitrary-
+  // modifier convention (`text-red-500/[.4]`). Recover that case here
+  // before rejecting malformed tokens.
+  const normalized = normalizeArbitraryModifier(token);
+  if (normalized.malformed) return null;
+  const { utility, negative, arbitraryValue, modifier } = normalized;
 
   // Dispatch by utility family. The match order matters: longer
   // prefixes are tried before shorter ones (e.g. `min-w-` before `w-`).
@@ -60,7 +65,7 @@ export function resolveTailwindToken(token: TailwindToken): ResolvedDeclaration[
 
   switch (family.kind) {
     case "sizing":
-      return resolveSizing(family.property, family.suffix, arbitraryValue);
+      return resolveSizing(family.property, family.suffix, arbitraryValue, modifier);
     case "spacing":
       return resolveSpacing(family.property, family.suffix, arbitraryValue, negative);
     case "gap":
@@ -280,13 +285,36 @@ function classifyBorder(utility: string): Family | null {
 
 type SizingProperty = "width" | "height" | "min-width" | "min-height" | "max-width" | "max-height";
 
+/**
+ * Merge the parser's arbitrary/modifier split back into a single
+ * logical modifier. For `text-red-500/[.4]` the parser hands us
+ * `arbitraryValue=".4"`, `modifier=""`, `malformed=true` — the
+ * bracket captured the modifier body but the parser can't tell.
+ * We re-synthesize a `[value]` modifier string and clear malformed.
+ */
+function normalizeArbitraryModifier(token: TailwindToken): TailwindToken {
+  if (!token.malformed) return token;
+  if (token.modifier !== "" || token.arbitraryValue === null) return token;
+  // Arbitrary-modifier sentinel: hand it back as a bracketed literal.
+  return {
+    ...token,
+    arbitraryValue: null,
+    modifier: `[${token.arbitraryValue}]`,
+    malformed: false,
+  };
+}
+
 function resolveSizing(
   property: SizingProperty,
   suffix: string,
   arbitrary: string | null,
+  modifier: string | null,
 ): ResolvedDeclaration[] | null {
   if (arbitrary !== null) return [{ property, value: normalizeArbitrary(arbitrary) }];
-  const value = lookupSize(property, suffix);
+  // Fractional sizes like `w-1/2` arrive as suffix="1", modifier="2".
+  // Reconstruct the fraction key before lookup.
+  const key = modifier === null ? suffix : `${suffix}/${modifier}`;
+  const value = lookupSize(property, key);
   if (value === null) return null;
   return [{ property, value }];
 }
