@@ -48,7 +48,7 @@ Types, registries, scanner skeleton, AST helpers, and public API surface are all
 - [x] `src/input/discover.ts`
 - [x] `src/input/index.ts`
 - [x] Unit tests for html, tsx, css parsers
-- [ ] Fuzz tests for html and css parsers
+- [x] Fuzz tests for html and css parsers (deterministic seeds, bounded-time assertions, O(n²)-regression guards)
 
 ## Phase 6 — Rule engine and first five rules  ✅ COMPLETE
 
