@@ -1,0 +1,15 @@
+{
+  "name": "ra11y-plugin-example-slack-markdown",
+  "version": "0.0.1",
+  "description": "Example ra11y formatter plugin producing Slack-flavored markdown for incoming webhooks.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./formatter.ts",
+  "scripts": {
+    "test": "bun test.ts"
+  },
+  "peerDependencies": {
+    "@ra11y/core": "*"
+  }
+}

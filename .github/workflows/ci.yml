@@ -66,3 +66,27 @@ jobs:
 
       - name: Verify lockfile matches package.json
         run: bun install --frozen-lockfile
+
+  plugin-examples:
+    name: plugin examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Example rule plugin
+        run: cd examples/plugin-rule && bun test.ts
+
+      - name: Example standard plugin
+        run: cd examples/plugin-standard && bun test.ts
+
+      - name: Example formatter plugin
+        run: cd examples/plugin-formatter && bun test.ts

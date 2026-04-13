@@ -25,7 +25,11 @@
  * added to the plugin.
  */
 
-import { defineStandard } from "@ra11y/core/plugin";
+// In a real consumer this is:
+//   import { defineStandard } from "@ra11y/core/plugin";
+// For the in-repo example, use the relative path so the smoke test
+// (`bun test.ts`) can run without publishing or linking.
+import { defineStandard } from "../../src/api/plugin.ts";
 
 export const acmeStandard = defineStandard({
   id: "acme",

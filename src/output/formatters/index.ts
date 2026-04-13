@@ -8,6 +8,7 @@
 
 import type { Formatter } from "../../api/plugin.ts";
 import { agentFormatter } from "./agent.ts";
+import { htmlFormatter } from "./html.ts";
 import { jsonFormatter } from "./json.ts";
 import { junitFormatter } from "./junit.ts";
 import { markdownFormatter } from "./markdown.ts";
@@ -22,6 +23,7 @@ export interface BuiltinFormatters {
   readonly sarif: Formatter;
   readonly junit: Formatter;
   readonly markdown: Formatter;
+  readonly html: Formatter;
   readonly agent: Formatter;
 }
 
@@ -32,11 +34,13 @@ export const BUILTIN_FORMATTERS: BuiltinFormatters = {
   sarif: sarifFormatter,
   junit: junitFormatter,
   markdown: markdownFormatter,
+  html: htmlFormatter,
   agent: agentFormatter,
 };
 
 export {
   agentFormatter,
+  htmlFormatter,
   jsonFormatter,
   junitFormatter,
   markdownFormatter,

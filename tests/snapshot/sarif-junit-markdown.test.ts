@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  htmlFormatter,
   junitFormatter,
   markdownFormatter,
   sarifFormatter,
@@ -219,6 +220,60 @@ describe("formatter: markdown", () => {
   it("is deterministic across repeated calls", () => {
     const a = markdownFormatter.format(RESULT, REPORT);
     const b = markdownFormatter.format(RESULT, REPORT);
+    expect(a).toBe(b);
+  });
+});
+
+describe("formatter: html", () => {
+  it("produces a complete HTML document", () => {
+    const out = htmlFormatter.format(RESULT, REPORT);
+    expect(out).toContain("<!doctype html>");
+    expect(out).toContain('<html lang="en">');
+    expect(out).toContain("</html>");
+  });
+
+  it("escapes HTML-sensitive characters in messages", () => {
+    const input: ScanResult = {
+      ...RESULT,
+      violations: [
+        {
+          ruleId: "media/alt-text-missing",
+          criteria: ["wcag22:1.1.1"],
+          severity: "error",
+          location: { filePath: "src/a.tsx", line: 1, column: 1 },
+          message: "<script>bad</script>",
+        },
+      ],
+    };
+    const out = htmlFormatter.format(input, REPORT);
+    expect(out).not.toContain("<script>bad</script>");
+    expect(out).toContain("&lt;script&gt;bad&lt;/script&gt;");
+  });
+
+  it("renders a summary table and coverage section when there are findings", () => {
+    const out = htmlFormatter.format(RESULT, REPORT);
+    expect(out).toContain("Summary");
+    expect(out).toContain("Findings");
+    expect(out).toContain("Coverage");
+    expect(out).toContain("<caption>");
+  });
+
+  it("handles the no-violations case gracefully", () => {
+    const empty: ScanResult = { ...RESULT, violations: [] };
+    const out = htmlFormatter.format(empty, REPORT);
+    expect(out).toContain("No accessibility violations found.");
+  });
+
+  it("includes inline CSS (self-contained artifact)", () => {
+    const out = htmlFormatter.format(RESULT, REPORT);
+    expect(out).toContain("<style>");
+    expect(out).toContain("system-ui");
+    expect(out).not.toContain('<link rel="stylesheet"');
+  });
+
+  it("is deterministic across repeated calls", () => {
+    const a = htmlFormatter.format(RESULT, REPORT);
+    const b = htmlFormatter.format(RESULT, REPORT);
     expect(a).toBe(b);
   });
 });

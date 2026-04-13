@@ -6,6 +6,9 @@
   "private": true,
   "type": "module",
   "main": "./rule.ts",
+  "scripts": {
+    "test": "bun test.ts"
+  },
   "peerDependencies": {
     "@ra11y/core": "*"
   }

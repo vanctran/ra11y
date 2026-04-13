@@ -30,7 +30,11 @@
  * rule is demonstrated by importing it directly into a test.)
  */
 
-import { defineRule } from "@ra11y/core/plugin";
+// In a real consumer this is:
+//   import { defineRule } from "@ra11y/core/plugin";
+// For the in-repo example, use the relative path so the smoke test
+// (`bun test.ts`) can run without publishing or linking.
+import { defineRule } from "../../src/api/plugin.ts";
 
 export const rule = defineRule({
   id: "example/no-title-attribute-as-label",
