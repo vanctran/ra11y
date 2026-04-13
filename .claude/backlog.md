@@ -62,8 +62,8 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 ## Phase 1 — Guards and scaffolding scripts
 
 - [x] `scripts/check-zero-deps.ts`
-- [ ] `scripts/check-limits.ts` (function size, file size, complexity, nesting)
-- [ ] `scripts/check-cycles.ts` (tarjan's)
+- [x] `scripts/check-limits.ts` (function size, file size, complexity, nesting)
+- [x] `scripts/check-cycles.ts` (tarjan's)
 - [ ] `scripts/check-dead-exports.ts`
 - [ ] `scripts/check-magic-numbers.ts`
 - [x] `scripts/check-commit.ts` (conventional commit validator)
@@ -78,8 +78,8 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [ ] `scripts/generate-rule-kb.ts`
 - [ ] `scripts/generate-kb-index.ts`
 - [ ] `scripts/generate-changelog.ts`
-- [ ] `scripts/build.ts` (bun-driven build)
-- [ ] `scripts/bench.ts`
+- [x] `scripts/build.ts` (bun-driven build)
+- [x] `scripts/bench.ts`
 
 ## Phase 2 — Core types and registries
 
