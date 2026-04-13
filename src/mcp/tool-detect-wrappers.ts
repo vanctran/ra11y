@@ -1,34 +1,37 @@
 /**
  * The detect_native_wrappers MCP tool. Scans the project for unique
- * PascalCase components that would emit info-level keyboard/handler-missing
- * findings and returns them as candidates for the nativeWrappers config.
+ * PascalCase components with onClick handlers and returns them as
+ * candidates for the nativeWrappers config.
  *
- * This closes the onboarding loop: instead of running a scan, reading
- * info findings, copying component names into ra11y.config.ts, and
- * re-scanning, an agent can call this once, eyeball the list, and add
- * the real wrappers to config in one step.
+ * This closes the onboarding loop: an agent can call this once, eyeball
+ * the list, and add the real wrappers to config in one step.
+ *
+ * We do our own lightweight JSX walk here instead of piggybacking on
+ * keyboard/handler-missing. The rule itself trusts PascalCase by
+ * default (custom components are assumed keyboard-operable), but this
+ * tool wants the inverse view: "which custom components with onClick
+ * exist?" — same input, opposite intent.
  */
 
-import { runScan } from "../engine/scanner.ts";
-import { BUILTIN_RULES } from "../rules/index.ts";
-import { BUILTIN_STANDARDS } from "../standards/index.ts";
-import type { Violation } from "../types/violation.ts";
+import { hasJsxAttribute, walkJsxElements } from "../engine/ast-helpers.ts";
+import type { ParsedFile } from "../engine/scanner.ts";
+import type { TsxModule } from "../types/ast.ts";
 import { gitRoot } from "../utils/git.ts";
-import {
-  applyRuleSettings,
-  findRule,
-  type McpTool,
-  parseFiles,
-  resolveStandards,
-  strParam,
-  textResult,
-} from "./tools-helpers.ts";
+import { type McpTool, parseFiles, strParam, textResult } from "./tools-helpers.ts";
+
+const SAMPLE_LIMIT = 3;
+
+interface Candidate {
+  readonly component: string;
+  readonly occurrences: number;
+  readonly sampleLocations: readonly { readonly path: string; readonly line: number }[];
+}
 
 export const detectNativeWrappersTool: McpTool = {
   def: {
     name: "detect_native_wrappers",
     description:
-      "Scan the project and list unique PascalCase components with onClick that would trigger info-level keyboard/handler-missing findings. Use this during initial onboarding to quickly populate `nativeWrappers` in ra11y.config.ts — scan the list, confirm which ones actually wrap a native <button>/<a>/<input>, and add those to config in one pass. The tool does not modify files.",
+      "Scan the project and list unique PascalCase components with onClick — onboarding aid for `nativeWrappers` in ra11y.config.ts. Review the list, confirm which ones actually wrap a native <button>/<a>/<input>, and add those to config in one pass. The tool does not modify files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -37,7 +40,6 @@ export const detectNativeWrappersTool: McpTool = {
           description:
             "Project root. Defaults to the git root of the MCP server's spawn directory, then process.cwd().",
         },
-        standard: { type: "string", description: "Standard ID. Defaults to session config." },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -47,16 +49,6 @@ export const detectNativeWrappersTool: McpTool = {
     const spawnCwd = process.cwd();
     const root = explicitCwd ?? gitRoot(spawnCwd) ?? spawnCwd;
 
-    // The check targets PascalCase components — confirm the rule is active.
-    if (findRule("keyboard/handler-missing") === undefined) {
-      return textResult({
-        scannedRoot: root,
-        candidates: [],
-        note: "keyboard/handler-missing is not loaded; no candidates.",
-      });
-    }
-
-    const standards = resolveStandards(strParam(params, "standard"), session);
     const projectConfig = await session.loadProjectConfig(root);
     const files = await parseFiles([root], session, root);
     if (files.length === 0) {
@@ -67,14 +59,7 @@ export const detectNativeWrappersTool: McpTool = {
       });
     }
 
-    const { result } = runScan({
-      standards: BUILTIN_STANDARDS,
-      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
-      enabled: standards,
-      files,
-    });
-
-    const candidates = collectCandidates(result.violations);
+    const candidates = collectCandidates(files);
     const detectedNames = new Set(candidates.map((c) => c.component));
     const declared = [
       ...new Set([...projectConfig.nativeWrappers, ...session.config.nativeWrappers]),
@@ -111,32 +96,26 @@ function buildNextStep(
   return parts.join("");
 }
 
-interface Candidate {
-  readonly component: string;
-  readonly occurrences: number;
-  readonly sampleLocations: readonly { readonly path: string; readonly line: number }[];
-}
-
 /**
- * Groups info-level keyboard/handler-missing findings by component name.
- * The rule's message starts with `<ComponentName>` so we can extract it
- * without a new field on Violation. Up to 3 sample locations per
- * component — enough for an agent to verify without the response blowing up.
+ * Walk every parsed JSX/TSX file and group PascalCase elements with an
+ * onClick prop by component name. Up to SAMPLE_LIMIT locations per
+ * component — enough for verification without blowing up the response.
  */
-function collectCandidates(violations: readonly Violation[]): readonly Candidate[] {
+function collectCandidates(files: readonly ParsedFile[]): readonly Candidate[] {
   const groups = new Map<string, { count: number; locations: { path: string; line: number }[] }>();
-  for (const v of violations) {
-    if (v.ruleId !== "keyboard/handler-missing") continue;
-    if (v.severity !== "info") continue;
-    const match = /^<([A-Z][A-Za-z0-9]*)>/.exec(v.message);
-    const name = match?.[1];
-    if (!name) continue;
-    const entry = groups.get(name) ?? { count: 0, locations: [] };
-    entry.count += 1;
-    if (entry.locations.length < SAMPLE_LIMIT) {
-      entry.locations.push({ path: v.location.filePath, line: v.location.line });
+  for (const file of files) {
+    if (file.ast.language !== "tsx") continue;
+    const tsx = file.ast.root as TsxModule;
+    for (const el of walkJsxElements(tsx)) {
+      if (!isPascalCase(el.tagName)) continue;
+      if (!hasJsxAttribute(el, "onClick")) continue;
+      const entry = groups.get(el.tagName) ?? { count: 0, locations: [] };
+      entry.count += 1;
+      if (entry.locations.length < SAMPLE_LIMIT) {
+        entry.locations.push({ path: file.filePath, line: el.loc.start.line });
+      }
+      groups.set(el.tagName, entry);
     }
-    groups.set(name, entry);
   }
   return [...groups.entries()]
     .sort(([a, x], [b, y]) => y.count - x.count || a.localeCompare(b))
@@ -147,4 +126,7 @@ function collectCandidates(violations: readonly Violation[]): readonly Candidate
     }));
 }
 
-const SAMPLE_LIMIT = 3;
+function isPascalCase(name: string): boolean {
+  const first = name[0];
+  return first !== undefined && first >= "A" && first <= "Z";
+}

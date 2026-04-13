@@ -356,7 +356,11 @@ const coverageTool: McpTool = {
       // grade, so we surface it as raw counts instead of a percentage.
       return {
         standardId: c.standardId,
-        automatedPassRate: c.automatedPassRate, // passing / automatable
+        // Named so the denominator is unmistakable: it's the share of
+        // the `criteriaAutomatable` subset that passed, not the share of
+        // the full standard. Previous name ("automatedPassRate") was
+        // repeatedly misread as overall conformance.
+        automatedCriteriaPassRate: c.automatedPassRate,
         criteriaTotal: c.total,
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,

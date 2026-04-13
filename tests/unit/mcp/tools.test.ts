@@ -346,14 +346,15 @@ describe("MCP tool: configure", () => {
     ).toBe(false);
   });
 
-  it("nativeWrappers suppresses info keyboard/handler-missing on listed components", async () => {
+  it("keyboard/handler-missing trusts PascalCase and still errors on <div onClick>", async () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join: joinPath } = await import("node:path");
 
     const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-native-wrappers-"));
-    // JSX with two PascalCase wrappers + one real <div onClick> bug so we
-    // can see the allowlist only silences the wrapper, not real violations.
+    // Custom components are assumed keyboard-operable — "can't see through
+    // the component" is not a finding. A bare <div onClick> remains an
+    // error because the DOM surface is visible and broken.
     const fixture = joinPath(dir, "app.tsx");
     await writeFile(
       fixture,
@@ -371,9 +372,7 @@ describe("MCP tool: configure", () => {
     );
 
     const scanTool = findTool("scan");
-    const configureTool = findTool("configure");
     const session = new McpSession();
-    await configureTool.handler({ nativeWrappers: ["ActionButton"] }, session);
     const result = await scanTool.handler({ paths: [fixture], cwd: dir }, session);
 
     const data = JSON.parse(result.content[0].text) as {
@@ -382,9 +381,8 @@ describe("MCP tool: configure", () => {
     const khm = data.files.flatMap((f) =>
       f.findings.filter((v) => v.ruleId === "keyboard/handler-missing"),
     );
-    // ActionButton suppressed; OtherWidget still emits (info); <div> still an error.
     expect(khm.some((v) => v.message.includes("ActionButton"))).toBe(false);
-    expect(khm.some((v) => v.message.includes("OtherWidget"))).toBe(true);
+    expect(khm.some((v) => v.message.includes("OtherWidget"))).toBe(false);
     expect(khm.some((v) => v.severity === "error")).toBe(true);
   });
 });
@@ -398,14 +396,14 @@ describe("MCP tool: coverage", () => {
     expect(result.isError).toBeUndefined();
     const data = JSON.parse(result.content[0].text) as {
       standardId: string;
-      automatedPassRate: number;
+      automatedCriteriaPassRate: number;
       criteriaTotal: number;
       criteriaAutomatable: number;
       criteriaManualReviewRequired: number;
       summary: string;
     };
     expect(data.standardId).toBe("wcag22");
-    expect(typeof data.automatedPassRate).toBe("number");
+    expect(typeof data.automatedCriteriaPassRate).toBe("number");
     expect(data.criteriaTotal).toBeGreaterThan(0);
     expect(data.criteriaAutomatable).toBeLessThanOrEqual(data.criteriaTotal);
     expect(data.criteriaManualReviewRequired).toBeGreaterThan(0);

@@ -60,7 +60,7 @@ export const checklistTool: McpTool = {
   def: {
     name: "checklist",
     description:
-      "Get the manual review checklist — criteria that can't be fully automated. The response has three arrays: `items` (criteria with concrete candidate locations — start here), `untargeted` (criteria with no candidates the finders could ground in code — pure WCAG prompts to keep in mind), and `likelyIrrelevant` (criteria the scan can tell don't apply, e.g., no <video>/<audio> for 1.2.*). `summary.byPriority` counts only the actionable `items`.",
+      "Get the manual review checklist — criteria that can't be fully automated. Returns `items` (criteria with concrete candidate locations — start here) and `likelyIrrelevant` (criteria the scan can tell don't apply, e.g., no <video>/<audio> for 1.2.*). The summary also reports `untargeted`: criteria with no candidates the finders could ground in code. Pass `showUntargeted: true` to include them in the response when you're preparing a VPAT or running a formal audit — by default they're counted but not returned, since 18 bare WCAG titles will drown 3 real finds.",
     inputSchema: {
       type: "object",
       properties: {
@@ -76,6 +76,11 @@ export const checklistTool: McpTool = {
           type: "string",
           description:
             "Base directory. Used as the scan root when `paths` is omitted, and for resolving relative `paths` when given.",
+        },
+        showUntargeted: {
+          type: "boolean",
+          description:
+            "Include the full list of manual criteria without candidates (pure WCAG prompts). Default false; the summary still reports the count.",
         },
       },
     },
@@ -123,10 +128,11 @@ export const checklistTool: McpTool = {
       byPriority,
     };
 
+    const showUntargeted = params["showUntargeted"] === true;
     return textResult({
       summary,
       items: actionable,
-      untargeted,
+      ...(showUntargeted ? { untargeted } : {}),
       likelyIrrelevant,
     });
   },

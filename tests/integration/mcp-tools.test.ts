@@ -165,21 +165,21 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     const body = bodyOf(responses[1]) as {
       standardId: string;
       criteriaTotal: number;
-      automatedPassRate: number;
+      automatedCriteriaPassRate: number;
     };
     expect(body.standardId).toBe("wcag22");
     expect(body.criteriaTotal).toBeGreaterThan(0);
-    expect(typeof body.automatedPassRate).toBe("number");
+    expect(typeof body.automatedCriteriaPassRate).toBe("number");
   });
 
-  it("checklist splits items by actionability and relevance", async () => {
+  it("checklist returns actionable items and omits untargeted by default", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
     ]);
     const body = bodyOf(responses[1]) as {
       items: Array<{ criterionId: string; candidates: unknown[] }>;
-      untargeted: Array<{ criterionId: string; candidates: unknown[] }>;
+      untargeted?: unknown;
       likelyIrrelevant: Array<{ criterionId: string }>;
       summary: {
         totalManualCriteria: number;
@@ -189,16 +189,28 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       };
     };
     expect(Array.isArray(body.items)).toBe(true);
-    expect(Array.isArray(body.untargeted)).toBe(true);
     expect(Array.isArray(body.likelyIrrelevant)).toBe(true);
+    expect(body.untargeted).toBeUndefined();
     expect(body.items.every((i) => i.candidates.length > 0)).toBe(true);
-    expect(body.untargeted.every((i) => i.candidates.length === 0)).toBe(true);
     expect(body.summary.actionable).toBe(body.items.length);
-    expect(body.summary.untargeted).toBe(body.untargeted.length);
     expect(body.summary.likelyIrrelevant).toBe(body.likelyIrrelevant.length);
     expect(body.summary.totalManualCriteria).toBe(
       body.summary.actionable + body.summary.untargeted + body.summary.likelyIrrelevant,
     );
+  });
+
+  it("checklist includes untargeted when showUntargeted: true", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { paths: [BAD_ALT_DIR], showUntargeted: true }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      untargeted: Array<{ criterionId: string; candidates: unknown[] }>;
+      summary: { untargeted: number };
+    };
+    expect(Array.isArray(body.untargeted)).toBe(true);
+    expect(body.untargeted.every((i) => i.candidates.length === 0)).toBe(true);
+    expect(body.summary.untargeted).toBe(body.untargeted.length);
   });
 
   it("review_candidates returns a candidateCount with the active level echoed", async () => {

@@ -168,19 +168,14 @@ function checkOneJsxElement(el: import("../../types/ast.ts").JsxElement): {
   // aria-label, no role — this is a click-to-dismiss overlay, not a
   // button. Keyboard dismiss is via Escape on the parent dialog.
   if (isBackdropPattern(el)) return null;
-  // PascalCase components (ActionButton, ResetButton, etc.) likely wrap
-  // a native interactive element internally. We can't see through the
-  // component boundary — emit as "info" (not error/warning) so it's
-  // visible but doesn't cry wolf. Agents can verify by reading the
-  // component source; humans review at their discretion.
-  if (isPascalCaseComponent(el.tagName)) {
-    return {
-      severity: "info",
-      location: { filePath: "", line: el.loc.start.line, column: el.loc.start.column },
-      message: `<${el.tagName}> has onClick — looks good if it renders a <button> or <a> internally.`,
-      suggestion: `No action needed if <${el.tagName}> wraps a native interactive element. If it renders a <div> or <span>, consider adding onKeyDown/onKeyUp and tabIndex={0}.`,
-    };
-  }
+  // PascalCase components (ActionButton, IconButton, etc.) are custom
+  // components whose internals this rule can't see. Trust them by
+  // default — "we can't verify" is not a finding. Users whose codebase
+  // has a genuinely broken custom component can surface it by scanning
+  // that component's source file, where the issue is on a real DOM
+  // element. Registering a wrapper in nativeWrappers is for explicit
+  // allow-listing when desired.
+  if (isPascalCaseComponent(el.tagName)) return null;
   return {
     severity: "error",
     location: { filePath: "", line: el.loc.start.line, column: el.loc.start.column },
