@@ -95,6 +95,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 - [aria/hidden-focus](./rules/aria__hidden-focus.md)
 - [aria/invalid-role](./rules/aria__invalid-role.md)
+- [aria/live-region-valid](./rules/aria__live-region-valid.md)
 - [aria/required-attrs](./rules/aria__required-attrs.md)
 - [aria/valid-attr](./rules/aria__valid-attr.md)
 - [contrast/enhanced](./rules/contrast__enhanced.md)
