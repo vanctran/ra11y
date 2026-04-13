@@ -26,6 +26,7 @@ import { rule as nonEmptyLabel } from "./forms/non-empty-label.ts";
 import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as orientationLock } from "./layout/orientation-lock.ts";
+import { rule as reflowHardcodedWidth } from "./layout/reflow-hardcoded-width.ts";
 import { rule as textSpacing } from "./layout/text-spacing.ts";
 import { rule as altTextMissing } from "./media/alt-text-missing.ts";
 import { rule as autoplaySound } from "./media/autoplay-sound.ts";
@@ -79,6 +80,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   outlineVisible,
   pageTitled,
   pauseStopHide,
+  reflowHardcodedWidth,
   requiredAttrs,
   skipLink,
   tabindexPositive,
@@ -122,6 +124,7 @@ export {
   outlineVisible,
   pageTitled,
   pauseStopHide,
+  reflowHardcodedWidth,
   requiredAttrs,
   skipLink,
   tabindexPositive,
