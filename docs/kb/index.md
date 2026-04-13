@@ -103,6 +103,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [contrast/non-text](./rules/contrast__non-text.md)
 - [document/iframe-title](./rules/document__iframe-title.md)
 - [document/lang-attribute](./rules/document__lang-attribute.md)
+- [document/lang-on-parts](./rules/document__lang-on-parts.md)
 - [document/meta-refresh](./rules/document__meta-refresh.md)
 - [document/page-titled](./rules/document__page-titled.md)
 - [document/viewport-zoom](./rules/document__viewport-zoom.md)
