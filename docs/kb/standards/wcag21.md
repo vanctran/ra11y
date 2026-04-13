@@ -1,0 +1,91 @@
+---
+title: "WCAG 2.1"
+id: "wcag21"
+version: "2.1"
+---
+# WCAG 2.1
+- **ID:** `wcag21`
+- **Version:** 2.1
+- **Publisher:** W3C
+- **Levels:** A, AA, AAA
+- **Criteria:** 78 (A: 30 · AA: 20 · AAA: 28)
+- **Spec:** <https://www.w3.org/TR/WCAG21/>
+## Criteria
+- `wcag21:1.1.1` · A · Non-text Content
+- `wcag21:1.2.1` · A · Audio-only and Video-only (Prerecorded)
+- `wcag21:1.2.2` · A · Captions (Prerecorded)
+- `wcag21:1.2.3` · A · Audio Description or Media Alternative (Prerecorded)
+- `wcag21:1.2.4` · AA · Captions (Live)
+- `wcag21:1.2.5` · AA · Audio Description (Prerecorded)
+- `wcag21:1.2.6` · AAA · Sign Language (Prerecorded)
+- `wcag21:1.2.7` · AAA · Extended Audio Description (Prerecorded)
+- `wcag21:1.2.8` · AAA · Media Alternative (Prerecorded)
+- `wcag21:1.2.9` · AAA · Audio-only (Live)
+- `wcag21:1.3.1` · A · Info and Relationships
+- `wcag21:1.3.2` · A · Meaningful Sequence
+- `wcag21:1.3.3` · A · Sensory Characteristics
+- `wcag21:1.3.4` · AA · Orientation
+- `wcag21:1.3.5` · AA · Identify Input Purpose
+- `wcag21:1.3.6` · AAA · Identify Purpose
+- `wcag21:1.4.1` · A · Use of Color
+- `wcag21:1.4.2` · A · Audio Control
+- `wcag21:1.4.3` · AA · Contrast (Minimum)
+- `wcag21:1.4.4` · AA · Resize Text
+- `wcag21:1.4.5` · AA · Images of Text
+- `wcag21:1.4.6` · AAA · Contrast (Enhanced)
+- `wcag21:1.4.7` · AAA · Low or No Background Audio
+- `wcag21:1.4.8` · AAA · Visual Presentation
+- `wcag21:1.4.9` · AAA · Images of Text (No Exception)
+- `wcag21:1.4.10` · AA · Reflow
+- `wcag21:1.4.11` · AA · Non-text Contrast
+- `wcag21:1.4.12` · AA · Text Spacing
+- `wcag21:1.4.13` · AA · Content on Hover or Focus
+- `wcag21:2.1.1` · A · Keyboard
+- `wcag21:2.1.2` · A · No Keyboard Trap
+- `wcag21:2.1.3` · AAA · Keyboard (No Exception)
+- `wcag21:2.1.4` · A · Character Key Shortcuts
+- `wcag21:2.2.1` · A · Timing Adjustable
+- `wcag21:2.2.2` · A · Pause, Stop, Hide
+- `wcag21:2.2.3` · AAA · No Timing
+- `wcag21:2.2.4` · AAA · Interruptions
+- `wcag21:2.2.5` · AAA · Re-authenticating
+- `wcag21:2.2.6` · AAA · Timeouts
+- `wcag21:2.3.1` · A · Three Flashes or Below Threshold
+- `wcag21:2.3.2` · AAA · Three Flashes
+- `wcag21:2.3.3` · AAA · Animation from Interactions
+- `wcag21:2.4.1` · A · Bypass Blocks
+- `wcag21:2.4.2` · A · Page Titled
+- `wcag21:2.4.3` · A · Focus Order
+- `wcag21:2.4.4` · A · Link Purpose (In Context)
+- `wcag21:2.4.5` · AA · Multiple Ways
+- `wcag21:2.4.6` · AA · Headings and Labels
+- `wcag21:2.4.7` · AA · Focus Visible
+- `wcag21:2.4.8` · AAA · Location
+- `wcag21:2.4.9` · AAA · Link Purpose (Link Only)
+- `wcag21:2.4.10` · AAA · Section Headings
+- `wcag21:2.5.1` · A · Pointer Gestures
+- `wcag21:2.5.2` · A · Pointer Cancellation
+- `wcag21:2.5.3` · A · Label in Name
+- `wcag21:2.5.4` · A · Motion Actuation
+- `wcag21:2.5.5` · AAA · Target Size (Enhanced)
+- `wcag21:2.5.6` · AAA · Concurrent Input Mechanisms
+- `wcag21:3.1.1` · A · Language of Page
+- `wcag21:3.1.2` · AA · Language of Parts
+- `wcag21:3.1.3` · AAA · Unusual Words
+- `wcag21:3.1.4` · AAA · Abbreviations
+- `wcag21:3.1.5` · AAA · Reading Level
+- `wcag21:3.1.6` · AAA · Pronunciation
+- `wcag21:3.2.1` · A · On Focus
+- `wcag21:3.2.2` · A · On Input
+- `wcag21:3.2.3` · AA · Consistent Navigation
+- `wcag21:3.2.4` · AA · Consistent Identification
+- `wcag21:3.2.5` · AAA · Change on Request
+- `wcag21:3.3.1` · A · Error Identification
+- `wcag21:3.3.2` · A · Labels or Instructions
+- `wcag21:3.3.3` · AA · Error Suggestion
+- `wcag21:3.3.4` · AA · Error Prevention (Legal, Financial, Data)
+- `wcag21:3.3.5` · AAA · Help
+- `wcag21:3.3.6` · AAA · Error Prevention (All)
+- `wcag21:4.1.1` · A · Parsing
+- `wcag21:4.1.2` · A · Name, Role, Value
+- `wcag21:4.1.3` · AA · Status Messages

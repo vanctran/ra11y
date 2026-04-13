@@ -1,0 +1,51 @@
+---
+title: "Section 508 (2017 refresh)"
+id: "section508"
+version: "2017"
+---
+# Section 508 (2017 refresh)
+- **ID:** `section508`
+- **Version:** 2017
+- **Publisher:** U.S. Access Board
+- **Levels:** base
+- **Criteria:** 38 (base: 38)
+- **Spec:** <https://www.access-board.gov/ict/>
+## Criteria
+- `section508:1.1.1` · base · Non-text Content
+- `section508:1.2.1` · base · Audio-only and Video-only (Prerecorded)
+- `section508:1.2.2` · base · Captions (Prerecorded)
+- `section508:1.2.3` · base · Audio Description or Media Alternative (Prerecorded)
+- `section508:1.2.4` · base · Captions (Live)
+- `section508:1.2.5` · base · Audio Description (Prerecorded)
+- `section508:1.3.1` · base · Info and Relationships
+- `section508:1.3.2` · base · Meaningful Sequence
+- `section508:1.3.3` · base · Sensory Characteristics
+- `section508:1.4.1` · base · Use of Color
+- `section508:1.4.2` · base · Audio Control
+- `section508:1.4.3` · base · Contrast (Minimum)
+- `section508:1.4.4` · base · Resize Text
+- `section508:1.4.5` · base · Images of Text
+- `section508:2.1.1` · base · Keyboard
+- `section508:2.1.2` · base · No Keyboard Trap
+- `section508:2.2.1` · base · Timing Adjustable
+- `section508:2.2.2` · base · Pause, Stop, Hide
+- `section508:2.3.1` · base · Three Flashes or Below Threshold
+- `section508:2.4.1` · base · Bypass Blocks
+- `section508:2.4.2` · base · Page Titled
+- `section508:2.4.3` · base · Focus Order
+- `section508:2.4.4` · base · Link Purpose (In Context)
+- `section508:2.4.5` · base · Multiple Ways
+- `section508:2.4.6` · base · Headings and Labels
+- `section508:2.4.7` · base · Focus Visible
+- `section508:3.1.1` · base · Language of Page
+- `section508:3.1.2` · base · Language of Parts
+- `section508:3.2.1` · base · On Focus
+- `section508:3.2.2` · base · On Input
+- `section508:3.2.3` · base · Consistent Navigation
+- `section508:3.2.4` · base · Consistent Identification
+- `section508:3.3.1` · base · Error Identification
+- `section508:3.3.2` · base · Labels or Instructions
+- `section508:3.3.3` · base · Error Suggestion
+- `section508:3.3.4` · base · Error Prevention (Legal, Financial, Data)
+- `section508:4.1.1` · base · Parsing (Obsolete in WCAG 2.2)
+- `section508:4.1.2` · base · Name, Role, Value

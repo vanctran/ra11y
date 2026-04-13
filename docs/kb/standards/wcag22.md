@@ -1,0 +1,99 @@
+---
+title: "WCAG 2.2"
+id: "wcag22"
+version: "2.2"
+---
+# WCAG 2.2
+- **ID:** `wcag22`
+- **Version:** 2.2
+- **Publisher:** W3C
+- **Levels:** A, AA, AAA
+- **Criteria:** 86 (A: 31 · AA: 24 · AAA: 31)
+- **Spec:** <https://www.w3.org/TR/WCAG22/>
+## Criteria
+- `wcag22:1.1.1` · A · Non-text Content
+- `wcag22:1.2.1` · A · Audio-only and Video-only (Prerecorded)
+- `wcag22:1.2.2` · A · Captions (Prerecorded)
+- `wcag22:1.2.3` · A · Audio Description or Media Alternative (Prerecorded)
+- `wcag22:1.2.4` · AA · Captions (Live)
+- `wcag22:1.2.5` · AA · Audio Description (Prerecorded)
+- `wcag22:1.2.6` · AAA · Sign Language (Prerecorded)
+- `wcag22:1.2.7` · AAA · Extended Audio Description (Prerecorded)
+- `wcag22:1.2.8` · AAA · Media Alternative (Prerecorded)
+- `wcag22:1.2.9` · AAA · Audio-only (Live)
+- `wcag22:1.3.1` · A · Info and Relationships
+- `wcag22:1.3.2` · A · Meaningful Sequence
+- `wcag22:1.3.3` · A · Sensory Characteristics
+- `wcag22:1.3.4` · AA · Orientation
+- `wcag22:1.3.5` · AA · Identify Input Purpose
+- `wcag22:1.3.6` · AAA · Identify Purpose
+- `wcag22:1.4.1` · A · Use of Color
+- `wcag22:1.4.2` · A · Audio Control
+- `wcag22:1.4.3` · AA · Contrast (Minimum)
+- `wcag22:1.4.4` · AA · Resize Text
+- `wcag22:1.4.5` · AA · Images of Text
+- `wcag22:1.4.6` · AAA · Contrast (Enhanced)
+- `wcag22:1.4.7` · AAA · Low or No Background Audio
+- `wcag22:1.4.8` · AAA · Visual Presentation
+- `wcag22:1.4.9` · AAA · Images of Text (No Exception)
+- `wcag22:1.4.10` · AA · Reflow
+- `wcag22:1.4.11` · AA · Non-text Contrast
+- `wcag22:1.4.12` · AA · Text Spacing
+- `wcag22:1.4.13` · AA · Content on Hover or Focus
+- `wcag22:2.1.1` · A · Keyboard
+- `wcag22:2.1.2` · A · No Keyboard Trap
+- `wcag22:2.1.3` · AAA · Keyboard (No Exception)
+- `wcag22:2.1.4` · A · Character Key Shortcuts
+- `wcag22:2.2.1` · A · Timing Adjustable
+- `wcag22:2.2.2` · A · Pause, Stop, Hide
+- `wcag22:2.2.3` · AAA · No Timing
+- `wcag22:2.2.4` · AAA · Interruptions
+- `wcag22:2.2.5` · AAA · Re-authenticating
+- `wcag22:2.2.6` · AAA · Timeouts
+- `wcag22:2.3.1` · A · Three Flashes or Below Threshold
+- `wcag22:2.3.2` · AAA · Three Flashes
+- `wcag22:2.3.3` · AAA · Animation from Interactions
+- `wcag22:2.4.1` · A · Bypass Blocks
+- `wcag22:2.4.2` · A · Page Titled
+- `wcag22:2.4.3` · A · Focus Order
+- `wcag22:2.4.4` · A · Link Purpose (In Context)
+- `wcag22:2.4.5` · AA · Multiple Ways
+- `wcag22:2.4.6` · AA · Headings and Labels
+- `wcag22:2.4.7` · AA · Focus Visible
+- `wcag22:2.4.8` · AAA · Location
+- `wcag22:2.4.9` · AAA · Link Purpose (Link Only)
+- `wcag22:2.4.10` · AAA · Section Headings
+- `wcag22:2.4.11` · AA · Focus Not Obscured (Minimum)
+- `wcag22:2.4.12` · AAA · Focus Not Obscured (Enhanced)
+- `wcag22:2.4.13` · AAA · Focus Appearance
+- `wcag22:2.5.1` · A · Pointer Gestures
+- `wcag22:2.5.2` · A · Pointer Cancellation
+- `wcag22:2.5.3` · A · Label in Name
+- `wcag22:2.5.4` · A · Motion Actuation
+- `wcag22:2.5.5` · AAA · Target Size (Enhanced)
+- `wcag22:2.5.6` · AAA · Concurrent Input Mechanisms
+- `wcag22:2.5.7` · AA · Dragging Movements
+- `wcag22:2.5.8` · AA · Target Size (Minimum)
+- `wcag22:3.1.1` · A · Language of Page
+- `wcag22:3.1.2` · AA · Language of Parts
+- `wcag22:3.1.3` · AAA · Unusual Words
+- `wcag22:3.1.4` · AAA · Abbreviations
+- `wcag22:3.1.5` · AAA · Reading Level
+- `wcag22:3.1.6` · AAA · Pronunciation
+- `wcag22:3.2.1` · A · On Focus
+- `wcag22:3.2.2` · A · On Input
+- `wcag22:3.2.3` · AA · Consistent Navigation
+- `wcag22:3.2.4` · AA · Consistent Identification
+- `wcag22:3.2.5` · AAA · Change on Request
+- `wcag22:3.2.6` · A · Consistent Help
+- `wcag22:3.3.1` · A · Error Identification
+- `wcag22:3.3.2` · A · Labels or Instructions
+- `wcag22:3.3.3` · AA · Error Suggestion
+- `wcag22:3.3.4` · AA · Error Prevention (Legal, Financial, Data)
+- `wcag22:3.3.5` · AAA · Help
+- `wcag22:3.3.6` · AAA · Error Prevention (All)
+- `wcag22:3.3.7` · A · Redundant Entry
+- `wcag22:3.3.8` · AA · Accessible Authentication (Minimum)
+- `wcag22:3.3.9` · AAA · Accessible Authentication (Enhanced)
+- `wcag22:4.1.2` · A · Name, Role, Value
+- `wcag22:4.1.3` · AA · Status Messages
