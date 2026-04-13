@@ -88,7 +88,7 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 - [x] contrast/enhanced (1.4.6 AAA) — shares _shared.ts with minimum
 - [x] contrast/non-text (1.4.11 AA)
 - [x] focus/not-obscured (2.4.11 WCAG 2.2 AA)
-- [ ] keyboard/character-shortcuts (2.1.4)
+- [x] keyboard/character-shortcuts (2.1.4)
 - [ ] aria/live-region-valid (4.1.3)
 - [x] semantics/landmark-main (1.3.1) — pages with header/nav/footer/aside must have `<main>`
 - [x] forms/non-empty-label (2.4.6) — label elements must have text content
