@@ -1,6 +1,6 @@
 {
   "name": "@ra11y/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Multi-standard accessibility scanner. Zero runtime dependencies. WCAG 2.2 / 2.1, Section 508, EN 301 549, and a plugin API for custom standards.",
   "license": "MIT",
   "author": "ra11y contributors",
