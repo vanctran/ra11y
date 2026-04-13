@@ -85,13 +85,13 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 
 36 rules shipped (see `src/rules/index.ts`). The rules below still need implementation.
 
-- [ ] contrast/enhanced (1.4.6 AAA)
+- [x] contrast/enhanced (1.4.6 AAA) — shares _shared.ts with minimum
 - [ ] contrast/non-text (1.4.11 AA)
 - [ ] focus/not-obscured (2.4.11 WCAG 2.2 AA)
 - [ ] keyboard/character-shortcuts (2.1.4)
 - [ ] aria/live-region-valid (4.1.3)
-- [ ] semantics/landmark-roles (1.3.1)
-- [ ] forms/non-empty-label (2.4.6)
+- [x] semantics/landmark-main (1.3.1) — pages with header/nav/footer/aside must have `<main>`
+- [x] forms/non-empty-label (2.4.6) — label elements must have text content
 - [ ] pointer/drag-alternative (2.5.7 WCAG 2.2)
 - [ ] pointer/target-size (2.5.8 WCAG 2.2)
 - [ ] navigation/skip-link (2.4.1)

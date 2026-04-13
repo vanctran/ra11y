@@ -9,6 +9,7 @@ import { rule as hiddenFocus } from "./aria/hidden-focus.ts";
 import { rule as invalidRole } from "./aria/invalid-role.ts";
 import { rule as requiredAttrs } from "./aria/required-attrs.ts";
 import { rule as validAttr } from "./aria/valid-attr.ts";
+import { rule as contrastEnhanced } from "./contrast/enhanced.ts";
 import { rule as contrastMinimum } from "./contrast/minimum.ts";
 import { rule as iframeTitle } from "./document/iframe-title.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
@@ -21,6 +22,7 @@ import { rule as autocompleteMissing } from "./forms/autocomplete-missing.ts";
 import { rule as fieldsetLegend } from "./forms/fieldset-legend.ts";
 import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
+import { rule as nonEmptyLabel } from "./forms/non-empty-label.ts";
 import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
 import { rule as orientationLock } from "./layout/orientation-lock.ts";
@@ -38,6 +40,7 @@ import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as emptyHeading } from "./semantics/empty-heading.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
 import { rule as labelInName } from "./semantics/label-in-name.ts";
+import { rule as landmarkMain } from "./semantics/landmark-main.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
 import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 import { rule as tableHeaders } from "./semantics/table-headers.ts";
@@ -49,6 +52,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   autoplaySound,
   buttonName,
   cancellation,
+  contrastEnhanced,
   contrastMinimum,
   duplicateId,
   emptyHeading,
@@ -62,12 +66,14 @@ export const BUILTIN_RULES: readonly Rule[] = [
   labelForIdMismatch,
   labelInName,
   labelsRequired,
+  landmarkMain,
   langAttribute,
   linkDescriptiveText,
   linkNoHref,
   listStructure,
   metaRefresh,
   nestedInteractive,
+  nonEmptyLabel,
   orientationLock,
   outlineVisible,
   pageTitled,
@@ -88,6 +94,7 @@ export {
   autoplaySound,
   buttonName,
   cancellation,
+  contrastEnhanced,
   contrastMinimum,
   duplicateId,
   emptyHeading,
@@ -101,12 +108,14 @@ export {
   labelForIdMismatch,
   labelInName,
   labelsRequired,
+  landmarkMain,
   langAttribute,
   linkDescriptiveText,
   linkNoHref,
   listStructure,
   metaRefresh,
   nestedInteractive,
+  nonEmptyLabel,
   orientationLock,
   outlineVisible,
   pageTitled,
