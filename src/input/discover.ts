@@ -31,14 +31,19 @@ export interface DiscoverOptions {
 }
 
 /**
- * File patterns excluded by default. Test files aren't shipped UI —
- * scanning them produces noise (render assertions, mocks, etc.).
+ * File patterns excluded by default. Test files, Storybook stories, and
+ * mock fixtures aren't shipped UI — scanning them produces noise
+ * (onChange on filter bars, render assertions, sample copy that happens
+ * to contain "click below"). Users can re-include with `includeTests`.
  */
 const DEFAULT_EXCLUDED_PATTERNS: readonly string[] = [
   "**/*.test.*",
   "**/*.spec.*",
+  "**/*.stories.*",
+  "**/*.story.*",
   "**/__tests__/**",
   "**/__mocks__/**",
+  "**/stories/**",
 ];
 
 /** Resolves every input path into a flat list of parseable files. */

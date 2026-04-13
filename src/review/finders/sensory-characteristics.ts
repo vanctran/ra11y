@@ -29,16 +29,29 @@ const SENSORY_PATTERN =
   /\b(right side|left side|click the red|the green\b|the blue\b|the red\b|the round\b|the square\b|shaped like)\b/i;
 
 /**
- * Directional cues ("above"/"below") are sensory *only* in instructional
- * context. Bare "the topic below" or "see below for notes" in prose is
- * not a 1.3.3 violation, so require an instructional verb within a short
- * window of the directional word.
+ * Directional cues ("above"/"below") are sensory *only* when used as a
+ * positional-only identifier. Two narrow patterns catch the real 1.3.3
+ * case without flagging prose where the word merely modifies a noun
+ * ("the prompt below", "the topic below"):
+ *
+ *   A. Instructional verb IMMEDIATELY followed by "above"/"below" with
+ *      no intervening object ("click below", "see above", "tap below
+ *      to continue").
+ *   B. UI-element noun followed by "above"/"below" ("button above",
+ *      "section below") — the directional word is the disambiguator.
  */
-const DIRECTIONAL_PATTERN =
-  /\b(?:click|press|tap|select|choose|use|find|look at|refer to|view|scroll|shown|listed)\b[^.!?\n]{0,40}\b(above|below)\b/i;
+const DIRECTIONAL_VERB_PATTERN =
+  /\b(?:click|press|tap|see|view|scroll)\s+(?:the\s+)?(above|below)\b/i;
+
+const DIRECTIONAL_NOUN_PATTERN =
+  /\b(?:button|link|icon|image|card|section|panel|menu|dialog|form|field|input|option|tab|box|arrow)s?\s+(above|below)\b/i;
 
 function matchSensory(text: string): string | undefined {
-  return SENSORY_PATTERN.exec(text)?.[0] ?? DIRECTIONAL_PATTERN.exec(text)?.[0];
+  return (
+    SENSORY_PATTERN.exec(text)?.[0] ??
+    DIRECTIONAL_VERB_PATTERN.exec(text)?.[0] ??
+    DIRECTIONAL_NOUN_PATTERN.exec(text)?.[0]
+  );
 }
 
 export const finder = defineCandidateFinder({
