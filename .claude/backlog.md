@@ -97,7 +97,7 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 - [x] navigation/skip-link (2.4.1) — validates a skip link precedes the primary nav and points at a real id
 - [x] layout/reflow-hardcoded-width (1.4.10) — flags fixed px widths >320 and physical-unit widths outside @media breakpoints
 - [x] tooltip/dismissable (1.4.13)
-- [ ] document/lang-on-parts (3.1.2)
+- [x] document/lang-on-parts (3.1.2)
 
 ## Phase 12 — Alternative formatters  ✅ COMPLETE
 
