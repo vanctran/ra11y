@@ -131,10 +131,10 @@ coverage, checklist, vpat, certification all shipped with tests.
 
 User-facing guides + architecture KB + authoring guides + ADRs. These are all stubs in `docs/` today.
 
-- [ ] `docs/getting-started.md` — expand beyond stub
-- [ ] `docs/cli.md`
-- [ ] `docs/configuration.md`
-- [ ] `docs/architecture.md`
+- [x] `docs/getting-started.md` (196 lines; revisit for v0.1 polish)
+- [x] `docs/cli.md` (158 lines)
+- [x] `docs/configuration.md` (180 lines)
+- [x] `docs/architecture.md` (191 lines)
 - [x] `docs/kb/architecture/three-layer-model.md`
 - [x] `docs/kb/architecture/rule-engine.md`
 - [x] `docs/kb/architecture/registries.md`
@@ -145,22 +145,22 @@ User-facing guides + architecture KB + authoring guides + ADRs. These are all st
 - [x] `docs/kb/patterns/writing-a-rule.md` (pre-existing)
 - [x] `docs/kb/patterns/writing-a-standard.md`
 - [x] `docs/kb/patterns/writing-a-formatter.md`
-- [ ] `docs/kb/patterns/writing-a-test.md`
+- [x] `docs/kb/patterns/writing-a-test.md`
 - [x] `docs/kb/patterns/using-ast-helpers.md`
-- [ ] `docs/kb/patterns/adding-a-fixture.md`
-- [ ] `docs/kb/patterns/evaluator-optimizer-loop.md`
+- [x] `docs/kb/patterns/adding-a-fixture.md`
+- [x] `docs/kb/patterns/evaluator-optimizer-loop.md`
 - [x] `docs/kb/patterns/using-mcp-from-agents.md`
-- [ ] `docs/kb/concepts/accessible-name-computation.md`
-- [ ] `docs/kb/concepts/interactive-elements.md`
-- [ ] `docs/kb/concepts/focus-visible-semantics.md`
-- [ ] `docs/kb/concepts/tailwind-class-resolution.md`
-- [ ] `docs/kb/concepts/wcag-contrast-formula.md`
-- [ ] `docs/kb/concepts/aria-valid-roles.md`
-- [ ] `docs/kb/gotchas/biome-quirks.md`
-- [ ] `docs/kb/gotchas/bun-vs-node-differences.md`
-- [ ] `docs/kb/gotchas/typescript-compiler-gotchas.md`
-- [ ] `docs/kb/gotchas/wcag-edge-cases.md`
-- [ ] `docs/kb/gotchas/test-flakiness.md`
+- [x] `docs/kb/concepts/accessible-name-computation.md`
+- [x] `docs/kb/concepts/interactive-elements.md`
+- [x] `docs/kb/concepts/focus-visible-semantics.md`
+- [x] `docs/kb/concepts/tailwind-class-resolution.md`
+- [x] `docs/kb/concepts/wcag-contrast-formula.md`
+- [x] `docs/kb/concepts/aria-valid-roles.md`
+- [x] `docs/kb/gotchas/biome-quirks.md`
+- [x] `docs/kb/gotchas/bun-vs-node-differences.md`
+- [x] `docs/kb/gotchas/typescript-compiler-gotchas.md`
+- [x] `docs/kb/gotchas/wcag-edge-cases.md`
+- [x] `docs/kb/gotchas/test-flakiness.md`
 - [x] `docs/kb/glossary.md`
 - [x] `docs/certification/vpat-mapping.md`
 - [x] `docs/certification/readiness-scoring.md`

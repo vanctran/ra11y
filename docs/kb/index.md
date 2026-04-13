@@ -154,11 +154,31 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 ## patterns
 
+- [Adding a fixture](./patterns/adding-a-fixture.md)
+- [The evaluator-optimizer loop](./patterns/evaluator-optimizer-loop.md)
 - [Using AST helpers](./patterns/using-ast-helpers.md)
 - [Using the ra11y MCP server from an agent](./patterns/using-mcp-from-agents.md)
 - [Writing a formatter](./patterns/writing-a-formatter.md)
 - [Writing a rule](./patterns/writing-a-rule.md)
 - [Writing a standard](./patterns/writing-a-standard.md)
+- [Writing a test](./patterns/writing-a-test.md)
+
+## concepts
+
+- [Accessible-name computation](./concepts/accessible-name-computation.md)
+- [Valid ARIA roles](./concepts/aria-valid-roles.md)
+- [Focus visibility and the :focus-visible pseudo-class](./concepts/focus-visible-semantics.md)
+- [Interactive elements](./concepts/interactive-elements.md)
+- [Tailwind class resolution](./concepts/tailwind-class-resolution.md)
+- [The WCAG contrast formula](./concepts/wcag-contrast-formula.md)
+
+## gotchas
+
+- [Biome quirks](./gotchas/biome-quirks.md)
+- [Bun vs Node differences that have bitten us](./gotchas/bun-vs-node-differences.md)
+- [Test flakiness](./gotchas/test-flakiness.md)
+- [TypeScript compiler-API gotchas](./gotchas/typescript-compiler-gotchas.md)
+- [WCAG edge cases](./gotchas/wcag-edge-cases.md)
 
 ## glossary.md
 
