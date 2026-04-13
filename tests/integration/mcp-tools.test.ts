@@ -172,20 +172,33 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(typeof body.automatedPassRate).toBe("number");
   });
 
-  it("checklist returns manual-review items bucketed by relevance", async () => {
+  it("checklist splits items by actionability and relevance", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
     ]);
     const body = bodyOf(responses[1]) as {
-      items: Array<{ criterionId: string }>;
-      summary: { total: number; needsReview: number; likelyIrrelevant: number };
+      items: Array<{ criterionId: string; candidates: unknown[] }>;
+      untargeted: Array<{ criterionId: string; candidates: unknown[] }>;
+      likelyIrrelevant: Array<{ criterionId: string }>;
+      summary: {
+        totalManualCriteria: number;
+        actionable: number;
+        untargeted: number;
+        likelyIrrelevant: number;
+      };
     };
     expect(Array.isArray(body.items)).toBe(true);
-    expect(body.items.length).toBeGreaterThan(0);
-    expect(typeof body.summary.total).toBe("number");
-    expect(body.summary.total).toBe(body.items.length);
-    expect(body.summary.needsReview + body.summary.likelyIrrelevant).toBe(body.summary.total);
+    expect(Array.isArray(body.untargeted)).toBe(true);
+    expect(Array.isArray(body.likelyIrrelevant)).toBe(true);
+    expect(body.items.every((i) => i.candidates.length > 0)).toBe(true);
+    expect(body.untargeted.every((i) => i.candidates.length === 0)).toBe(true);
+    expect(body.summary.actionable).toBe(body.items.length);
+    expect(body.summary.untargeted).toBe(body.untargeted.length);
+    expect(body.summary.likelyIrrelevant).toBe(body.likelyIrrelevant.length);
+    expect(body.summary.totalManualCriteria).toBe(
+      body.summary.actionable + body.summary.untargeted + body.summary.likelyIrrelevant,
+    );
   });
 
   it("review_candidates returns a candidateCount with the active level echoed", async () => {

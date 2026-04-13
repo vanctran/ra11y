@@ -60,7 +60,7 @@ export const checklistTool: McpTool = {
   def: {
     name: "checklist",
     description:
-      "Get the manual review checklist — criteria that can't be fully automated. Includes evaluation prompts and candidate source locations. Call without `paths` for a project-wide checklist rooted at `cwd`. Items flagged `likelyRelevant: false` are criteria the scan can tell don't apply (e.g., no <video>/<audio> in the codebase means the 1.2.* media criteria are irrelevant) — triage the relevant ones first.",
+      "Get the manual review checklist — criteria that can't be fully automated. The response has three arrays: `items` (criteria with concrete candidate locations — start here), `untargeted` (criteria with no candidates the finders could ground in code — pure WCAG prompts to keep in mind), and `likelyIrrelevant` (criteria the scan can tell don't apply, e.g., no <video>/<audio> for 1.2.*). `summary.byPriority` counts only the actionable `items`.",
     inputSchema: {
       type: "object",
       properties: {
@@ -105,17 +105,30 @@ export const checklistTool: McpTool = {
       report.candidates ?? [],
       presence,
     );
-    const items = [...needsReview, ...likelyIrrelevant];
+    // Actionable items (concrete candidates) stay in `items`; criteria
+    // the finders couldn't ground in code move to `untargeted`. Keeping
+    // them in separate fields prevents 18 bare WCAG titles from burying
+    // 3 real finds, which was the dominant feedback after the first
+    // priority pass. Agents that still want the full list can compose
+    // [...items, ...untargeted].
+    const actionable = needsReview.filter((i) => i.candidates.length > 0);
+    const untargeted = needsReview.filter((i) => i.candidates.length === 0);
     const byPriority = { high: 0, medium: 0, low: 0 };
-    for (const item of needsReview) byPriority[item.priority] += 1;
+    for (const item of actionable) byPriority[item.priority] += 1;
     const summary = {
-      total: items.length,
-      needsReview: needsReview.length,
+      totalManualCriteria: actionable.length + untargeted.length + likelyIrrelevant.length,
+      actionable: actionable.length,
+      untargeted: untargeted.length,
       likelyIrrelevant: likelyIrrelevant.length,
       byPriority,
     };
 
-    return textResult({ summary, items });
+    return textResult({
+      summary,
+      items: actionable,
+      untargeted,
+      likelyIrrelevant,
+    });
   },
 };
 
