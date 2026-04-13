@@ -448,14 +448,77 @@ function lookupColor(suffix: string): string | null {
 }
 
 /**
- * Placeholder for the color-modifier pass. Returns the base value
- * unchanged unless a modifier is present — in which case the next
- * slice rewrites this to produce an rgb()/hex-with-alpha form.
+ * Apply a `/<modifier>` opacity suffix to a resolved color. Tailwind
+ * accepts numeric percentages (`/50`) and arbitrary decimals
+ * (`/[.4]`). Keywords (`transparent`, `currentColor`, `inherit`)
+ * can't carry an alpha — return them unchanged so the modifier is
+ * silently dropped (matching Tailwind's own output).
+ *
+ * Output format: `rgb(R G B / A)` — the modern space-separated CSS
+ * Color syntax that downstream contrast math expects.
  */
 function applyColorModifier(base: string, modifier: string | null): string | null {
   if (modifier === null) return base;
-  // Temporarily pass through; real implementation in follow-up slice.
-  return base;
+  const alpha = parseAlpha(modifier);
+  if (alpha === null) return null;
+  const rgb = hexToRgb(base);
+  if (rgb === null) return base; // keyword or non-hex; keep as-is.
+  return `rgb(${rgb.r} ${rgb.g} ${rgb.b} / ${formatAlpha(alpha)})`;
+}
+
+/**
+ * Parse the raw modifier string (post-parser, so `[.4]` has already
+ * been unwrapped by the arbitrary-modifier extraction if present,
+ * but numeric forms are still raw digits). Accepts `50`, `12.5`,
+ * `.4`. Returns a number in [0, 1] or `null` on failure.
+ */
+function parseAlpha(modifier: string): number | null {
+  const trimmed = modifier.trim();
+  if (trimmed.length === 0) return null;
+  // Bracketed form (`[.4]`, `[0.75]`) is a literal decimal.
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    const inner = trimmed.slice(1, -1);
+    const lit = Number.parseFloat(inner);
+    if (Number.isNaN(lit) || lit < 0 || lit > 1) return null;
+    return lit;
+  }
+  // Plain numeric form is a percentage 0..100.
+  const pct = Number.parseFloat(trimmed);
+  if (Number.isNaN(pct) || pct < 0 || pct > 100) return null;
+  return pct / 100;
+}
+
+/** Format alpha as a short decimal, dropping trailing zeros. */
+function formatAlpha(n: number): string {
+  if (n === 0) return "0";
+  if (n === 1) return "1";
+  // Two decimals is enough for the Tailwind opacity scale (steps of 5%).
+  return String(Math.round(n * 100) / 100);
+}
+
+/**
+ * Parse `#rgb` / `#rrggbb` / `#rrggbbaa` into numeric channels.
+ * Returns `null` for non-hex values (keywords, rgb(), etc.) so the
+ * caller can decide whether to pass them through unchanged.
+ */
+function hexToRgb(color: string): { r: number; g: number; b: number } | null {
+  if (!color.startsWith("#")) return null;
+  const hex = color.slice(1);
+  if (hex.length === 3) {
+    const r = Number.parseInt(hex.charAt(0) + hex.charAt(0), 16);
+    const g = Number.parseInt(hex.charAt(1) + hex.charAt(1), 16);
+    const b = Number.parseInt(hex.charAt(2) + hex.charAt(2), 16);
+    if ([r, g, b].some(Number.isNaN)) return null;
+    return { r, g, b };
+  }
+  if (hex.length === 6 || hex.length === 8) {
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
+    if ([r, g, b].some(Number.isNaN)) return null;
+    return { r, g, b };
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
