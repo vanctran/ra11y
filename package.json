@@ -41,6 +41,7 @@
     "check-deps": "bun scripts/check-zero-deps.ts",
     "check-limits": "bun scripts/check-limits.ts",
     "check-cycles": "bun scripts/check-cycles.ts",
+    "check-dead-exports": "bun scripts/check-dead-exports.ts",
     "check-kb-drift": "bun scripts/check-kb-drift.ts",
     "check-network-isolation": "bun scripts/check-network-isolation.ts",
     "docs:check": "bun scripts/check-tsdoc.ts && bun scripts/check-mermaid.ts && bun scripts/check-docs-links.ts && bun scripts/check-api-docs-drift.ts",
