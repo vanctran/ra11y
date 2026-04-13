@@ -206,9 +206,17 @@ function countByExtension(files: readonly ParsedFile[]): Record<string, number> 
 
 // ─── Shared scan+format ─────────────────────────────────────────────────────
 
-/** Shape of the scan output used by both `scan` and `scan_project`. */
+/**
+ * Shape of the scan output used by both `scan` and `scan_project`.
+ *
+ * `automatedPass` is true iff no rule-level violations were emitted — it
+ * says nothing about the manual-review criteria surfaced in
+ * `plan.manualReviewRequired`. Clean automated scans with unreviewed
+ * manual criteria are not "accessible"; they are "automatable layer
+ * clean, human layer pending."
+ */
 export interface ScanFormatted {
-  readonly pass: boolean;
+  readonly automatedPass: boolean;
   readonly plan: Record<string, unknown>;
   readonly files: readonly { readonly path: string; readonly findings: unknown[] }[];
   readonly meta: Record<string, unknown>;
@@ -279,7 +287,7 @@ export function runScanAndFormat(
 
   const manualCount = countManualCriteria(enabled, session.config.level);
   const formatted: ScanFormatted = {
-    pass: violations.length === 0,
+    automatedPass: violations.length === 0,
     plan: {
       totalFindings: filtered.length,
       violations: violations.length,
@@ -306,7 +314,12 @@ export function runScanAndFormat(
       rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
-      ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
+      ...(wrappers.length > 0
+        ? {
+            activeNativeWrappers: [...wrappers],
+            activeNativeWrappersNote: `Component names treated as native-element wrappers for this scan. Rules that would fire on bare <div onClick> skip instances of these components because they are assumed to wrap a real <button>, <a>, etc. Configure via ra11y.config.ts \`nativeWrappers\` or the \`configure\` tool.`,
+          }
+        : {}),
       // Split visibility: agents editing ra11y.config.ts need to see when
       // a session configure() call is layering extras on top of the file.
       // Without this, an ad-hoc "add Button for this session" persists

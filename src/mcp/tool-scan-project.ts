@@ -78,7 +78,7 @@ export const scanProjectTool: McpTool = {
     if (files.length === 0) {
       logger.debug(`scan_project: 0 parseable files (${parseMs}ms discover)`);
       return textResult({
-        pass: true,
+        automatedPass: true,
         scannedRoot: root,
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
@@ -100,7 +100,7 @@ export const scanProjectTool: McpTool = {
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
     );
-    const nextStep = suggestNextStep(formatted.pass, describeMode(params));
+    const nextStep = suggestNextStep(formatted.automatedPass, describeMode(params));
     return textResult({
       ...formatted,
       scannedRoot: root,
