@@ -42,6 +42,7 @@ import { rule as skipLink } from "./navigation/skip-link.ts";
 import { rule as duplicateId } from "./parsing/duplicate-id.ts";
 import { rule as htmlHasLang } from "./parsing/html-has-lang.ts";
 import { rule as cancellation } from "./pointer/cancellation.ts";
+import { rule as dragAlternative } from "./pointer/drag-alternative.ts";
 import { rule as buttonName } from "./semantics/button-name.ts";
 import { rule as emptyHeading } from "./semantics/empty-heading.ts";
 import { rule as headingHierarchy } from "./semantics/heading-hierarchy.ts";
@@ -62,6 +63,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
+  dragAlternative,
   duplicateId,
   emptyHeading,
   fieldsetLegend,
@@ -110,6 +112,7 @@ export {
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
+  dragAlternative,
   duplicateId,
   emptyHeading,
   fieldsetLegend,
