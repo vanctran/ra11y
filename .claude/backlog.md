@@ -69,11 +69,11 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [x] `scripts/check-commit.ts` (conventional commit validator)
 - [x] `scripts/check-network-isolation.ts`
 - [x] `scripts/check-error-messages.ts` (wired into verify:precommit)
-- [ ] `scripts/check-tsdoc.ts`
-- [ ] `scripts/check-mermaid.ts`
-- [ ] `scripts/check-docs-links.ts`
-- [ ] `scripts/check-api-docs-drift.ts`
-- [ ] `scripts/check-kb-drift.ts`
+- [x] `scripts/check-tsdoc.ts` (wired into verify:precommit)
+- [x] `scripts/check-mermaid.ts`
+- [x] `scripts/check-docs-links.ts` (advisory — 2 pending links to Phase 16 docs)
+- [x] `scripts/check-api-docs-drift.ts` (advisory — 9 symbols pending docs/api/ pages)
+- [x] `scripts/check-kb-drift.ts`
 - [ ] `scripts/generate-wcag-kb.ts`
 - [ ] `scripts/generate-rule-kb.ts`
 - [ ] `scripts/generate-kb-index.ts`

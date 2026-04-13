@@ -41,6 +41,12 @@ export async function scan(_options: ScanOptions): Promise<import("./types/index
   throw new Error("ra11y scan() is not implemented yet — see .claude/backlog.md Phase 7–8");
 }
 
+/**
+ * Options passed to {@link scan}. `paths` is the set of files or
+ * directories to scan. `standards` restricts evaluation to specific
+ * accessibility standards (default: all loaded). `level` clamps the
+ * severity floor for WCAG conformance reporting.
+ */
 export interface ScanOptions {
   readonly paths: readonly string[];
   readonly standards?: readonly string[];
