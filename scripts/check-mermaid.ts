@@ -66,7 +66,7 @@ function checkBlock(file: string, lineNo: number, body: string): void {
   }
 
   const nodeIds = new Set<string>();
-  const nodeRe = /(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]*)\s*[\[\(\{"]/g;
+  const nodeRe = /(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]*)\s*[[({"]/g;
   for (const m of body.matchAll(nodeRe)) {
     const id = m[1] ?? "";
     if (id === "flowchart" || id === "graph" || id === "subgraph" || id === "end") continue;

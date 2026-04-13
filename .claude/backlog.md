@@ -32,7 +32,7 @@ Types, registries, scanner skeleton, AST helpers, and public API surface are all
 - [x] `src/utils/git.ts`
 - [x] `src/utils/ansi.ts`
 - [x] `src/utils/string-width.ts`
-- [ ] `src/utils/wrap.ts` + tests (text wrapping for terminal formatter long messages)
+- [x] `src/utils/wrap.ts` + tests
 - [x] `src/utils/color.ts`
 - [x] `src/utils/contrast.ts`
 - [x] `src/utils/args.ts`
@@ -69,8 +69,8 @@ Terminal + plain + JSON formatters + theme + snapshot tests.
 - [x] `src/cli/commands/checklist.ts`
 - [x] `src/cli/commands/vpat.ts`
 - [x] `src/cli/commands/certification.ts`
-- [ ] `src/cli/commands/init.ts` (scaffolds `ra11y.config.ts`)
-- [ ] `src/cli/commands/doctor.ts` (env + config sanity check)
+- [x] `src/cli/commands/init.ts` (scaffolds `ra11y.config.ts`)
+- [x] `src/cli/commands/doctor.ts` (env + config sanity check)
 - [x] `tests/cli/cli.test.ts`
 
 ## Phase 9 — WCAG 2.1 standard  ✅ COMPLETE
@@ -179,12 +179,12 @@ User-facing guides + architecture KB + authoring guides + ADRs. These are all st
 ## Phase 17 — CI workflows
 
 - [x] `.github/workflows/ci.yml`
-- [ ] `.github/workflows/release.yml` (npm publish --provenance on tag)
-- [ ] `.github/ISSUE_TEMPLATE/bug_report.md`
-- [ ] `.github/ISSUE_TEMPLATE/rule_request.md`
-- [ ] `.github/ISSUE_TEMPLATE/standard_request.md`
+- [x] `.github/workflows/release.yml`
+- [x] `.github/ISSUE_TEMPLATE/bug_report.md`
+- [x] `.github/ISSUE_TEMPLATE/rule_request.md`
+- [x] `.github/ISSUE_TEMPLATE/standard_request.md`
 - [x] `.github/PULL_REQUEST_TEMPLATE.md`
-- [ ] `.github/dependabot.yml` (devDependencies only)
+- [x] `.github/dependabot.yml`
 
 ## Phase 18 — Polish and v0.1.0
 

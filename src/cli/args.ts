@@ -18,6 +18,8 @@ export interface CliOptions {
     | "vpat"
     | "certification"
     | "mcp"
+    | "init"
+    | "doctor"
     | "help"
     | "version";
   readonly positionals: readonly string[];
@@ -70,6 +72,8 @@ interface RawCliOptions {
   readonly vpat: boolean | undefined;
   readonly certification: boolean | undefined;
   readonly mcp: boolean | undefined;
+  readonly init: boolean | undefined;
+  readonly doctor: boolean | undefined;
   readonly explain: string | undefined;
   readonly format: string | undefined;
   readonly standard: string | undefined;
@@ -97,6 +101,8 @@ const FLAGS = [
   "vpat",
   "certification",
   "mcp",
+  "init",
+  "doctor",
   "changed",
 ];
 
@@ -122,6 +128,8 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   if (opts.vpat === true) return baseOpts(parsed.positionals, "vpat", opts);
   if (opts.certification === true) return baseOpts(parsed.positionals, "certification", opts);
   if (opts.mcp === true) return baseOpts(parsed.positionals, "mcp");
+  if (opts.init === true) return baseOpts(parsed.positionals, "init", opts);
+  if (opts.doctor === true) return baseOpts(parsed.positionals, "doctor", opts);
 
   if (typeof opts.explain === "string") {
     return { ...baseOpts(parsed.positionals, "explain"), ruleId: opts.explain };
@@ -154,6 +162,8 @@ function translate(
     vpat: boolAt(raw, "vpat"),
     certification: boolAt(raw, "certification"),
     mcp: boolAt(raw, "mcp"),
+    init: boolAt(raw, "init"),
+    doctor: boolAt(raw, "doctor"),
     explain: stringAt(raw, "explain"),
     format: stringAt(raw, "format"),
     standard: stringAt(raw, "standard"),

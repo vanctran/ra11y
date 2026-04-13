@@ -13,3 +13,4 @@ export * as fs from "./fs.ts";
 export { logger, setLogLevel } from "./logger.ts";
 export * as pathUtils from "./path.ts";
 export * as stringWidth from "./string-width.ts";
+export { wrapText } from "./wrap.ts";

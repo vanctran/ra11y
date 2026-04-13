@@ -73,7 +73,9 @@ const runs: Promise<Result>[] = selected.map(run);
 const results: Result[] = [];
 const failures: string[] = [];
 for (let i = 0; i < runs.length; i++) {
-  const r = await runs[i]!;
+  const pending = runs[i];
+  if (!pending) continue;
+  const r = await pending;
   results.push(r);
   const suffix = r.ok ? `ok (${r.ms}ms)` : `FAIL (${r.ms}ms)`;
   process.stdout.write(`→ ${r.name.padEnd(20)} ${suffix}\n`);

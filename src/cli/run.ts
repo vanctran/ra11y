@@ -10,7 +10,9 @@ import { parseCliArgs } from "./args.ts";
 import { runCertification } from "./commands/certification.ts";
 import { runChecklist } from "./commands/checklist.ts";
 import { runCoverage } from "./commands/coverage.ts";
+import { runDoctor } from "./commands/doctor.ts";
 import { runExplain } from "./commands/explain.ts";
+import { runInit } from "./commands/init.ts";
 import { runListRules } from "./commands/list-rules.ts";
 import { runListStandards } from "./commands/list-standards.ts";
 import { runScanCommand, type ScanExit } from "./commands/scan.ts";
@@ -45,6 +47,10 @@ export async function runCli(argv: readonly string[]): Promise<ScanExit> {
     case "mcp":
       await startMcpServer();
       return { stdout: "", stderr: "", exitCode: 0 };
+    case "init":
+      return runInit(options);
+    case "doctor":
+      return runDoctor();
     case "scan":
       return runScanCommand(options);
   }
