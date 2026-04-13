@@ -11,6 +11,7 @@ import { rule as requiredAttrs } from "./aria/required-attrs.ts";
 import { rule as validAttr } from "./aria/valid-attr.ts";
 import { rule as contrastEnhanced } from "./contrast/enhanced.ts";
 import { rule as contrastMinimum } from "./contrast/minimum.ts";
+import { rule as contrastNonText } from "./contrast/non-text.ts";
 import { rule as iframeTitle } from "./document/iframe-title.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
 import { rule as metaRefresh } from "./document/meta-refresh.ts";
@@ -56,6 +57,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   cancellation,
   contrastEnhanced,
   contrastMinimum,
+  contrastNonText,
   duplicateId,
   emptyHeading,
   fieldsetLegend,
@@ -100,6 +102,7 @@ export {
   cancellation,
   contrastEnhanced,
   contrastMinimum,
+  contrastNonText,
   duplicateId,
   emptyHeading,
   fieldsetLegend,
