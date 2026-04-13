@@ -93,7 +93,7 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 - [x] semantics/landmark-main (1.3.1) — pages with header/nav/footer/aside must have `<main>`
 - [x] forms/non-empty-label (2.4.6) — label elements must have text content
 - [x] pointer/drag-alternative (2.5.7 WCAG 2.2)
-- [ ] pointer/target-size (2.5.8 WCAG 2.2)
+- [x] pointer/target-size (2.5.8 WCAG 2.2)
 - [x] navigation/skip-link (2.4.1) — validates a skip link precedes the primary nav and points at a real id
 - [x] layout/reflow-hardcoded-width (1.4.10) — flags fixed px widths >320 and physical-unit widths outside @media breakpoints
 - [ ] tooltip/dismissable (1.4.13)
