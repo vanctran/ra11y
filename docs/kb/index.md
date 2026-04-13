@@ -99,6 +99,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [aria/valid-attr](./rules/aria__valid-attr.md)
 - [contrast/enhanced](./rules/contrast__enhanced.md)
 - [contrast/minimum](./rules/contrast__minimum.md)
+- [contrast/non-text](./rules/contrast__non-text.md)
 - [document/iframe-title](./rules/document__iframe-title.md)
 - [document/lang-attribute](./rules/document__lang-attribute.md)
 - [document/meta-refresh](./rules/document__meta-refresh.md)
