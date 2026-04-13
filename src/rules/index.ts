@@ -52,6 +52,7 @@ import { rule as landmarkMain } from "./semantics/landmark-main.ts";
 import { rule as listStructure } from "./semantics/list-structure.ts";
 import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 import { rule as tableHeaders } from "./semantics/table-headers.ts";
+import { rule as tooltipDismissable } from "./tooltip/dismissable.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   accesskeyDuplicate,
@@ -98,6 +99,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   tableHeaders,
   targetSize,
   textSpacing,
+  tooltipDismissable,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
@@ -148,6 +150,7 @@ export {
   tableHeaders,
   targetSize,
   textSpacing,
+  tooltipDismissable,
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
