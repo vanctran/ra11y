@@ -20,7 +20,10 @@ import {
 import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
 import type { ReviewCandidate } from "../../types/review.ts";
 
-const CRITERION_IDS = ["wcag22:3.2.1", "wcag21:3.2.1", "wcag22:3.2.2", "wcag21:3.2.2"] as const;
+const ALL_CRITERION_IDS = ["wcag22:3.2.1", "wcag21:3.2.1", "wcag22:3.2.2", "wcag21:3.2.2"] as const;
+
+const ON_FOCUS_CRITERIA = ["wcag22:3.2.1", "wcag21:3.2.1"] as const;
+const ON_INPUT_CRITERIA = ["wcag22:3.2.2", "wcag21:3.2.2"] as const;
 
 /** HTML event attribute names (lowercase). */
 const HTML_HANDLER_ATTRS = ["onfocus", "onblur", "onchange"] as const;
@@ -36,6 +39,12 @@ const HANDLER_DESCRIPTIONS: Record<string, string> = {
   onBlur: "onBlur handler",
   onChange: "onChange handler",
 };
+
+function criteriaForHandler(handler: string): readonly string[] {
+  const lower = handler.toLowerCase();
+  if (lower === "onchange") return ON_INPUT_CRITERIA;
+  return ON_FOCUS_CRITERIA;
+}
 
 function findHtmlHandlers(el: HtmlElement): string[] {
   const found: string[] = [];
@@ -55,7 +64,7 @@ function findJsxHandlers(el: JsxElement): string[] {
 
 export const finder = defineCandidateFinder({
   id: "review/on-input-change",
-  criterionIds: [...CRITERION_IDS],
+  criterionIds: [...ALL_CRITERION_IDS],
   scope: "node",
   appliesTo: { fileExtensions: [".html", ".htm", ".tsx", ".jsx"] },
   docs: {
@@ -86,7 +95,7 @@ function findHtmlCandidates(
   for (const el of walkHtmlElements(root)) {
     const handlers = findHtmlHandlers(el);
     for (const handler of handlers) {
-      for (const criterionId of CRITERION_IDS) {
+      for (const criterionId of criteriaForHandler(handler)) {
         candidates.push({
           criterionId,
           location: {
@@ -105,7 +114,7 @@ function findJsxCandidates(root: TsxModule, filePath: string, candidates: Review
   for (const el of walkJsxElements(root)) {
     const handlers = findJsxHandlers(el);
     for (const handler of handlers) {
-      for (const criterionId of CRITERION_IDS) {
+      for (const criterionId of criteriaForHandler(handler)) {
         candidates.push({
           criterionId,
           location: {
