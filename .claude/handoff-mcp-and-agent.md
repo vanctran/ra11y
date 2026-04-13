@@ -1,5 +1,7 @@
 # Handoff: MCP Server + Agent Workflow for ra11y
 
+> **Historical. Part 2 superseded 2026-04-12.** Phase 1 (the MCP server) shipped. Part 2 proposed a standalone `ra11y --fix` command with its own Anthropic API key and prompt library; that path was dropped in favor of **MCP sampling** — the server delegates LLM work to the host (Claude Code / Cursor / …), which owns the model and the key. See `.claude/notes/mcp-iteration.md` ("Pivot" section) and Phase 20 in `.claude/backlog.md` for the current plan. Read Part 2 below only for historical context.
+
 ## Context
 
 ra11y is a multi-standard accessibility scanner (WCAG 2.2/2.1, Section 508, EN 301 549) with 36 rules, zero runtime dependencies, and an agent-optimized output format (`--format agent`). It runs as a CLI tool at `/Users/van/dev/ra11y`.

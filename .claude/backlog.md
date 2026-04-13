@@ -216,8 +216,8 @@ Completed (do not regress):
 Hardening / polish still open:
 - [ ] `src/mcp/tool-baseline.ts` — tools to create/check/update a baseline from within an MCP session (pairs with Phase 14 baseline work)
 - [ ] `src/mcp/tool-scan-diff.ts` — compare current scan vs a baseline or previous result; emit only new findings (matches the `changedOnly` mental model but structural)
-- [ ] `src/mcp/tool-explain-standard.ts` — return standard metadata + criterion list formatted for an agent (today's `list_rules` is rule-centric)
-- [ ] `src/mcp/tool-review-candidates.ts` — surface tier-1 manual-review candidates with source context chunks so an LLM caller can answer pass/fail
+- [x] `src/mcp/tool-explain-standard.ts` — returns metadata + criterion list (filterable by level)
+- [x] `src/mcp/tool-review-candidates.ts` — surfaces tier-1 candidates with source snippets + finder reviewPrompt for LLM pass/fail
 - [ ] `src/mcp/tool-apply-fix.ts` — take a `suggest_fix` result, apply the search/replace, re-scan automatically, return the delta (kept disabled by default behind a `--allow-write` session flag — opt-in destructive)
 - [ ] Prompt templates under `src/mcp/prompts/` — reusable `prompts/list` entries for common agent workflows (triage, fix, audit, VPAT narrative)
 - [ ] `resources/list` support — expose `docs/kb/**` as MCP resources so attached agents can retrieve KB entries without filesystem tools
@@ -226,35 +226,31 @@ Hardening / polish still open:
 - [ ] `tests/integration/mcp-resources.test.ts` covering resources/list + resources/read round-trip
 - [ ] `tests/integration/mcp-prompts.test.ts` covering prompts/list + prompts/get round-trip
 
-## Phase 20 — Agent workflow (`ra11y --fix`, v0.2.0)
+## Phase 20 — MCP sampling + sampling-backed tools (v0.2.0, the real moat)
 
-The turnkey version of the MCP workflow: one command, deterministic pipeline, no agent-loop hallucinations. `src/agent/` is the only part of `src/` allowed to use `fetch` (gated by an explicit carve-out in `scripts/check-network-isolation.ts`).
+**Why the pivot (was: `ra11y --fix` with an API key).** Building our own LLM client would mean duplicating the prompt + billing + rate-limit surface that every agent host already runs, punching a hole in the network-isolation invariant that's core to the trust pitch, and competing with Claude Code / Cursor / Zed on agent UX — we'd lose. MCP sampling (`sampling/createMessage`) lets the server request a completion from the *host*; host owns the model and the key. One conduit for everything LLM-backed. ra11y stays fully offline. Works with any MCP host. This is Phase 20 now.
 
-- [ ] `scripts/check-network-isolation.ts` — carve out `src/agent/**` as the only allowed `fetch` caller, document in the script header
-- [ ] `src/agent/llm.ts` — thin Anthropic API client (fetch-based, no SDK); reads `RA11Y_API_KEY` / `ANTHROPIC_API_KEY`; prompt-caching enabled
-- [ ] `src/agent/triage.ts` — given a scan result, classify findings into (auto-fixable, needs-source-read, needs-review, false-positive-candidate)
-- [ ] `src/agent/component-resolver.ts` — for findings on PascalCase elements, follow the import and read the component source; verify if it wraps a native element
-- [ ] `src/agent/fixer.ts` — apply or suggest fixes based on rule's `suggest_fix` plus LLM augmentation
-- [ ] `src/agent/reviewer.ts` — for tier-1 review candidates, ask the LLM to answer pass/fail with the candidate's own `evaluation` prompt
-- [ ] `src/agent/verifier.ts` — re-scan after fixes to confirm no regressions
-- [ ] `src/agent/workflow.ts` — orchestrates scan → triage → resolve → verify → report
-- [ ] `src/agent/reporter.ts` — summary output (fixed / false-positives / manual pass / manual fail)
-- [ ] CLI: `ra11y --fix <paths>` wiring in `src/cli/args.ts` + `src/cli/commands/fix.ts`
-- [ ] `src/cli/commands/review.ts` — run ONLY the manual-review pass (no fixes) for teams that want audit-only
-- [ ] Deterministic prompt library under `src/agent/prompts/` — version-pinned strings, checksummed, loaded lazily
-- [ ] `tests/unit/agent/*` — mock LLM responses; no real network
-- [ ] `tests/integration/agent-fix.test.ts` — runs against fixtures/bad; uses a fake LLM that returns canned responses
-- [ ] Docs: `docs/agent/workflow.md`, `docs/agent/configuration.md`, `docs/agent/prompt-library.md`
+- [ ] `src/mcp/sampling.ts` — client-side sampling helper: given a prompt + tool context, call `sampling/createMessage` on the host, parse the response, enforce timeout + max-tokens budget
+- [ ] Server capability declaration: advertise `sampling` in the initialize response so hosts know to wire the channel; handle hosts that decline gracefully (fall back to "return the prompt for the agent to run")
+- [ ] `src/mcp/tool-resolve-component.ts` — takes a finding on a PascalCase element, samples the host to read the referenced component file and verify whether it wraps a native interactive element; returns verdict + rationale
+- [ ] `src/mcp/tool-verdict-candidate.ts` — takes a review candidate + source snippet + the finder's `reviewPrompt`; samples the host for pass/fail with reasoning
+- [ ] `src/mcp/tool-draft-vpat-narrative.ts` — takes a criterion's coverage data; samples the host to draft the VPAT "Remarks and explanations" cell
+- [ ] `src/mcp/tool-triage-findings.ts` — pure, no-sampling triage that labels each finding (auto-fixable / needs-component-source / needs-manual-review) — the input the LLM-backed tools above consume
+- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (no template engine, no deps); version-pinned with a checksum registry so prompt drift is reviewable
+- [ ] `tests/unit/mcp/sampling.test.ts` — unit test with a fake host that records sampling requests
+- [ ] `tests/integration/mcp-sampling.test.ts` — end-to-end via a scripted host adapter that canned-responds
+- [ ] Docs: `docs/kb/architecture/mcp-sampling.md` (trust model, what the server can and cannot ask), `docs/mcp/prompts.md`
 
-## Phase 21 — MCP + Agent polish (v0.2.x moat-deepening)
+## Phase 21 — Polish the agent experience (v0.2.x moat-deepening)
 
 Items that turn "it works" into "it's the obvious choice for agentic a11y work."
 
-- [ ] `ra11y.config.ts` schema for agent defaults (model, max tokens, redaction rules for source snippets)
-- [ ] Telemetry opt-in: anonymous usage pings for agent workflow success/failure rates (strictly opt-in, documented in SECURITY.md)
-- [ ] `src/mcp/sampling.ts` — implement MCP sampling so the server can ask the host agent for LLM completions, enabling LLM-backed review without the server owning an API key
-- [ ] `/audit` skill — end-to-end: run scan, run agent review, produce a VPAT draft, output markdown report
-- [ ] Prompt evals harness in `tests/evals/` — measure the prompt library's accuracy against a labeled fixture set, CI-gated
-- [ ] `examples/ra11y-in-ci-with-agent/` — reference repo layout showing scan-only in CI + `--fix` in a labeled PR workflow
-- [ ] VS Code extension skeleton under `integrations/vscode/` (out-of-tree but linked from README) — wraps the MCP server for IDE-native findings
-- [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` vs axe-core + jsx-a11y against a labeled fixture set, published on releases
+- [ ] `/audit` MCP prompt template: end-to-end workflow — scan, triage, sample-verdict every review candidate, draft a VPAT, output a markdown report (host drives; server exposes the prompt)
+- [ ] `resources/list` support — expose `docs/kb/**` as MCP resources so hosts can retrieve KB entries without filesystem access
+- [ ] Structured errors across every tool: replace text-only error payloads with `structuredContent` where the result is machine-consumable (coverage, checklist, list_rules, review_candidates)
+- [ ] `roots` capability: respect the host's declared project boundaries so `scan_project` doesn't wander outside the agent's working root
+- [ ] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set, CI-gated (runs against a scripted host, no real LLM calls)
+- [ ] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + a sample `CLAUDE.md` section showing the triage → verdict → draft-VPAT workflow from inside Claude Code
+- [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
+- [ ] VS Code extension skeleton under `integrations/vscode/` (out-of-tree but linked from README) — wraps the MCP server for IDE-native findings and surfaces sampled verdicts inline
+- [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` vs axe-core + jsx-a11y against a labeled fixture set, published on releases — accuracy, false-positive rate, and *agent-workflow completion rate* which is where we expect to win

@@ -6,6 +6,11 @@
  * source must be able to trust that nothing leaves the machine. This script
  * greps src/ for network-adjacent symbols and fails the build on any hit.
  *
+ * LLM-assisted workflows go through MCP sampling instead — the server
+ * delegates to the host (Claude Code, Cursor, …) which owns the model
+ * and the key. That keeps src/ fully offline and removes the need for a
+ * carve-out. See docs/kb/architecture/mcp-server.md.
+ *
  * Exits 0 on success, 1 on violation.
  */
 

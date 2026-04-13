@@ -65,7 +65,7 @@ describe("MCP server JSON-RPC", () => {
     expect(typeof result.instructions).toBe("string");
   });
 
-  it("responds to tools/list with all 8 tools", async () => {
+  it("responds to tools/list with every registered tool", async () => {
     const res = await rpc({
       jsonrpc: "2.0",
       id: 2,
@@ -74,7 +74,7 @@ describe("MCP server JSON-RPC", () => {
 
     expect(res.id).toBe(2);
     const result = res.result as { tools: Array<{ name: string }> };
-    expect(result.tools.length).toBe(10);
+    expect(result.tools.length).toBe(12);
 
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
@@ -83,7 +83,9 @@ describe("MCP server JSON-RPC", () => {
       "coverage",
       "detect_native_wrappers",
       "explain_rule",
+      "explain_standard",
       "list_rules",
+      "review_candidates",
       "scan",
       "scan_file",
       "scan_project",

@@ -93,11 +93,20 @@ Patterns that look like improvements but aren't:
 5. **Name-heuristic allowlisting** (e.g., "components ending in `Button` are safe"). Will bite on the first `MyButton` that wraps a `<div>`.
 6. **Composite coverage percentages** (passing / total including manual). Reads as failure; raw counts + summary prose is honest.
 
-## Next actionable: MCP Phase 2 — the `--fix` command
+## Pivot: `ra11y --fix` with our own API key is dead — MCP sampling replaces it
 
-`.claude/handoff-mcp-and-agent.md` §Part 2 is untouched. That's the "turnkey LLM workflow" — `ra11y --fix src/` uses the Anthropic API to resolve findings by reading component sources. Ships in v0.2.0. Architecture sketch in the handoff doc.
+The handoff doc proposed a standalone `ra11y --fix` CLI that held an Anthropic key and ran its own prompt library. **We're not building that.** Reasons, in order of impact:
 
-Prereq: `scripts/check-network-isolation.ts` needs a carve-out for `src/agent/` (the only part of `src/` allowed to use `fetch`, and only for the LLM API).
+1. **Trust pitch.** Our core selling point is "zero runtime deps, src/ never touches the network." Carving a hole in `check-network-isolation.ts` for our own `fetch` call — even behind an opt-in flag — erodes that story. The check has to grow an exception; SECURITY.md grows a caveat; every security-conscious reviewer reads it twice.
+2. **Duplicate surface area.** Every agent host (Claude Code, Cursor, Zed, Continue) already implements prompt caching, retry, rate-limit handling, model selection, and key management. We would rebuild all of it, in a way that drifts from whatever the host does.
+3. **We'd lose the UX fight.** Agent hosts have better interactive UX than we can ship in a CLI. "Point Claude Code at your repo and say 'fix a11y'" beats `ra11y --fix` on almost every axis.
+4. **MCP sampling exists for exactly this.** The server asks the host: `sampling/createMessage` with a prompt + context; the host runs the LLM on its model + its key and returns the completion. ra11y never holds a key. Works with any host that implements sampling.
+
+**What's in Phase 20 instead:** `src/mcp/sampling.ts` plus three sampling-backed tools — `resolve_component` (read a PascalCase component and verify), `verdict_candidate` (answer a review-candidate's reviewPrompt pass/fail), `draft_vpat_narrative` (write VPAT cells). Pure MCP path, zero-dep preserved, one story.
+
+`src/agent/`, an Anthropic client, and an API-key environment variable **are not coming back.** If a CI-only team without an agent host asks for turnkey fixes later, we revisit — but "defer until real demand" is the right call for v0.2.0.
+
+Handoff doc (`.claude/handoff-mcp-and-agent.md`) Part 2 should be read as historical context only; Phase 20 in the backlog supersedes it.
 
 ## File map
 
