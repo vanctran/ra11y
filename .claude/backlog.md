@@ -191,7 +191,7 @@ User-facing guides + architecture KB + authoring guides + ADRs. These are all st
 - [ ] README with real output snapshots (Mermaid diagram, `--mcp` demo, badges)
 - [ ] asciinema demo recording
 - [x] `tests/integration/multi-standard-scan.test.ts` covers cross-standard reuse via equivalentTo closure
-- [ ] `tests/integration/mcp-session.test.ts` coverage audit
+- [x] `tests/integration/mcp-session.test.ts` coverage audit
 - [ ] Version bump to 0.1.0
 - [ ] First npm publish
 - [ ] GitHub release with changelog excerpt
