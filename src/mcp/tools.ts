@@ -339,21 +339,19 @@ const coverageTool: McpTool = {
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
 
-    const { result } = runScan({
+    const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
       rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files,
+      finders: BUILTIN_CANDIDATE_FINDERS,
     });
 
+    const candidateCriteria = new Set((report.candidates ?? []).map((c) => c.criterionId));
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const entries = coverage.map((c) => {
-      // Report only the pass rate for what ra11y actually checks. We used to
-      // also emit `overallAutomatedCoverage = passing / total` but agents read
-      // that "54%" number as failure when it really means "this tool's rule
-      // library automates 54% of WCAG — the rest is inherently manual review,
-      // not a gap in your code." That's a property of the rule set, not a
-      // grade, so we surface it as raw counts instead of a percentage.
+      const withCandidates = c.manualCriteria.filter((id) => candidateCriteria.has(id));
+      const untargeted = c.manualCriteria.filter((id) => !candidateCriteria.has(id));
       return {
         standardId: c.standardId,
         // Named so the denominator is unmistakable: it's the share of
@@ -365,12 +363,18 @@ const coverageTool: McpTool = {
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,
         criteriaManualReviewRequired: c.manualCriteria.length,
+        // Split the manual-review pile so agents can see at the coverage
+        // level (without a second checklist call) how many manual
+        // criteria have concrete candidates worth reviewing vs pure
+        // WCAG prompts the finders couldn't ground in code.
+        manualWithCandidates: withTitles(withCandidates),
+        manualUntargeted: withTitles(untargeted),
         automatedGaps: withTitles(c.failingCriteria),
-        manualReview: withTitles(c.manualCriteria),
         summary:
           `${c.passing}/${c.automatable} automatable criteria passing (${c.automatedPassRate}%). ` +
           `${c.manualCriteria.length} of ${c.total} criteria in ${c.standardId} are manual-only ` +
-          `(static analysis can't evaluate them) — run the 'checklist' tool for evaluation prompts.`,
+          `(${withCandidates.length} with concrete candidates, ${untargeted.length} untargeted). ` +
+          `Run the 'checklist' tool for evaluation prompts.`,
       };
     });
 

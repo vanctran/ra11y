@@ -136,23 +136,23 @@ function buildConfigHint(
   autoPromoted: boolean,
 ): string | null {
   if (sourcePath !== null) return null;
-  // Config not found — always say something. The prior silent case was
-  // specifically the one agents kept missing: `configSource: null`
-  // appeared with no warning that they were running on defaults.
-  if (explicitCwd !== undefined) {
-    return `No ra11y.config found at or above ${explicitCwd}. Running on built-in defaults (no nativeWrappers, no custom rule severities, no extra excludes). If the project has one and it's elsewhere, pass \`cwd\` pointing there; if it doesn't, you can safely ignore this.`;
-  }
-  // If we auto-promoted to the git root and still didn't find a config,
-  // the project simply doesn't have one — note that so the agent isn't
-  // left wondering whether discovery broke.
-  if (autoPromoted) {
-    return `No ra11y.config found at ${resolvedCwd} (auto-promoted from the git root). Running on built-in defaults. Create ra11y.config.ts at the project root to register nativeWrappers and per-rule severities.`;
-  }
+  // Only surface the hint when there's something actionable the agent
+  // can do about it. A project that genuinely has no ra11y.config and
+  // is scanned with the correct cwd needs no repeated warning — the
+  // hint must earn its place in every response, not be wallpaper.
   const nearby = findNearbyConfig(resolvedCwd);
   if (nearby !== null) {
-    return `No ra11y.config found walking up from ${resolvedCwd} (the MCP server's spawn directory). A config exists at ${nearby} — retry with \`cwd: "${dirname(nearby)}"\` to load it.`;
+    return `No ra11y.config found walking up from ${resolvedCwd}${explicitCwd === undefined ? " (the MCP server's spawn directory)" : ""}. A config exists at ${nearby} — retry with \`cwd: "${dirname(nearby)}"\` to load it.`;
   }
-  return `No ra11y.config was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
+  // No nearby config and caller was explicit about cwd: they're
+  // running on defaults intentionally. Silent.
+  if (explicitCwd !== undefined) return null;
+  // No explicit cwd, no config, no nearby candidate — warn that the
+  // spawn directory probably isn't the project root.
+  if (!autoPromoted) {
+    return `No ra11y.config was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
+  }
+  return null;
 }
 
 const CONFIG_FILENAMES = [
