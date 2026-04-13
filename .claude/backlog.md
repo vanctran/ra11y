@@ -44,7 +44,7 @@ Types, registries, scanner skeleton, AST helpers, and public API surface are all
 - [x] `src/input/parsers/html.ts`
 - [x] `src/input/parsers/css.ts`
 - [x] `src/input/parsers/tailwind.ts` (class extraction + arbitrary value resolution)
-- [ ] `src/input/resolvers/theme.ts` (resolve tailwind theme tokens → concrete values)
+- [x] `src/input/resolvers/theme.ts` (resolve tailwind theme tokens → concrete values)
 - [x] `src/input/discover.ts`
 - [x] `src/input/index.ts`
 - [x] Unit tests for html, tsx, css parsers
