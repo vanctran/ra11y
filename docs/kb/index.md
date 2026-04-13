@@ -114,6 +114,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [forms/labels-required](./rules/forms__labels-required.md)
 - [forms/non-empty-label](./rules/forms__non-empty-label.md)
 - [keyboard/accesskey-duplicate](./rules/keyboard__accesskey-duplicate.md)
+- [keyboard/character-shortcuts](./rules/keyboard__character-shortcuts.md)
 - [keyboard/handler-missing](./rules/keyboard__handler-missing.md)
 - [layout/orientation-lock](./rules/layout__orientation-lock.md)
 - [layout/reflow-hardcoded-width](./rules/layout__reflow-hardcoded-width.md)
