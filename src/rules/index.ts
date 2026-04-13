@@ -15,6 +15,7 @@ import { rule as contrastMinimum } from "./contrast/minimum.ts";
 import { rule as contrastNonText } from "./contrast/non-text.ts";
 import { rule as iframeTitle } from "./document/iframe-title.ts";
 import { rule as langAttribute } from "./document/lang-attribute.ts";
+import { rule as langOnParts } from "./document/lang-on-parts.ts";
 import { rule as metaRefresh } from "./document/meta-refresh.ts";
 import { rule as pageTitled } from "./document/page-titled.ts";
 import { rule as viewportZoom } from "./document/viewport-zoom.ts";
@@ -80,6 +81,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   labelsRequired,
   landmarkMain,
   langAttribute,
+  langOnParts,
   linkDescriptiveText,
   linkNoHref,
   listStructure,
@@ -131,6 +133,7 @@ export {
   labelsRequired,
   landmarkMain,
   langAttribute,
+  langOnParts,
   linkDescriptiveText,
   linkNoHref,
   listStructure,
