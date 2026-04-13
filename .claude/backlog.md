@@ -86,7 +86,7 @@ Both standards shipped as thin `equivalentTo` data. Integration tests pending in
 36 rules shipped (see `src/rules/index.ts`). The rules below still need implementation.
 
 - [x] contrast/enhanced (1.4.6 AAA) — shares _shared.ts with minimum
-- [ ] contrast/non-text (1.4.11 AA)
+- [x] contrast/non-text (1.4.11 AA)
 - [ ] focus/not-obscured (2.4.11 WCAG 2.2 AA)
 - [ ] keyboard/character-shortcuts (2.1.4)
 - [ ] aria/live-region-valid (4.1.3)
