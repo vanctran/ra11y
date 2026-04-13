@@ -38,7 +38,7 @@ export type {
  */
 // biome-ignore lint/suspicious/useAwait: stub throws synchronously; real Phase 7-8 impl will await file discovery and parsing
 export async function scan(_options: ScanOptions): Promise<import("./types/index.ts").ScanResult> {
-  throw new Error("ra11y scan() is not implemented yet — see .claude/backlog.md Phase 7–8.");
+  throw new Error("ra11y scan() is not implemented yet — see .claude/backlog.md Phase 7–8");
 }
 
 export interface ScanOptions {

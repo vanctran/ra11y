@@ -65,10 +65,10 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - [x] `scripts/check-limits.ts` (function size, file size, complexity, nesting)
 - [x] `scripts/check-cycles.ts` (tarjan's)
 - [x] `scripts/check-dead-exports.ts` (script exists; 117 findings to triage before wiring into verify)
-- [ ] `scripts/check-magic-numbers.ts`
+- [x] `scripts/check-magic-numbers.ts` (advisory; 80 findings — mostly WCAG/ANSI constants)
 - [x] `scripts/check-commit.ts` (conventional commit validator)
 - [x] `scripts/check-network-isolation.ts`
-- [ ] `scripts/check-error-messages.ts`
+- [x] `scripts/check-error-messages.ts` (wired into verify:precommit)
 - [ ] `scripts/check-tsdoc.ts`
 - [ ] `scripts/check-mermaid.ts`
 - [ ] `scripts/check-docs-links.ts`
