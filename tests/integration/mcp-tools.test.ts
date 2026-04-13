@@ -182,7 +182,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       untargeted?: unknown;
       likelyIrrelevant: Array<{ criterionId: string }>;
       summary: {
-        totalManualCriteria: number;
+        manualReviewRequired: number;
         actionable: number;
         untargeted: number;
         likelyIrrelevant: number;
@@ -194,8 +194,8 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.items.every((i) => i.candidates.length > 0)).toBe(true);
     expect(body.summary.actionable).toBe(body.items.length);
     expect(body.summary.likelyIrrelevant).toBe(body.likelyIrrelevant.length);
-    expect(body.summary.totalManualCriteria).toBe(
-      body.summary.actionable + body.summary.untargeted + body.summary.likelyIrrelevant,
+    expect(body.summary.manualReviewRequired).toBe(
+      body.summary.actionable + body.summary.untargeted,
     );
   });
 

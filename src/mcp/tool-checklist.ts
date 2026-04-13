@@ -5,13 +5,18 @@
  * of the central tool-registration module.
  */
 
-import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
 import { buildCoverageReport, type PerStandardCoverage } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import type { ReviewCandidate } from "../types/review.ts";
+import {
+  type Applicability,
+  detectApplicability,
+  irrelevanceReason,
+  isLikelyIrrelevant,
+} from "./manual-applicability.ts";
 import {
   applyRuleSettings,
   findStandard,
@@ -103,12 +108,12 @@ export const checklistTool: McpTool = {
     });
 
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
-    const presence = detectElementPresence(files);
+    const applicability = detectApplicability(files);
 
     const { needsReview, likelyIrrelevant } = bucketChecklistItems(
       coverage,
       report.candidates ?? [],
-      presence,
+      applicability,
     );
     // Actionable items (concrete candidates) stay in `items`; criteria
     // the finders couldn't ground in code move to `untargeted`. Keeping
@@ -120,8 +125,14 @@ export const checklistTool: McpTool = {
     const untargeted = needsReview.filter((i) => i.candidates.length === 0);
     const byPriority = { high: 0, medium: 0, low: 0 };
     for (const item of actionable) byPriority[item.priority] += 1;
+    // `manualReviewRequired` is the single canonical count agents can
+    // expect to see agree across scan/scan_project/coverage/checklist:
+    // it excludes `likelyIrrelevant` because those criteria don't apply
+    // to the scanned files (irrelevance is itself a finding). The prior
+    // `totalManualCriteria` field counted everything and kept
+    // contradicting the other surfaces.
     const summary = {
-      totalManualCriteria: actionable.length + untargeted.length + likelyIrrelevant.length,
+      manualReviewRequired: actionable.length + untargeted.length,
       actionable: actionable.length,
       untargeted: untargeted.length,
       likelyIrrelevant: likelyIrrelevant.length,
@@ -138,72 +149,6 @@ export const checklistTool: McpTool = {
   },
 };
 
-interface ElementPresence {
-  readonly hasMedia: boolean;
-}
-
-/**
- * Walks parsed files once to learn what element families are present.
- * Used to tell the agent when a manual criterion is obviously irrelevant
- * (e.g., no `<video>` or `<audio>` → 1.2.* captions/audio criteria don't
- * apply to this repo). Zero AST traversal — a cheap text scan is enough
- * for a hint, and we're ok with the occasional false positive from a
- * string literal that happens to contain "<video".
- */
-function detectElementPresence(files: readonly ParsedFile[]): ElementPresence {
-  let hasMedia = false;
-  for (const f of files) {
-    const lower = f.source.toLowerCase();
-    if (lower.includes("<video") || lower.includes("<audio")) {
-      hasMedia = true;
-      break;
-    }
-  }
-  return { hasMedia };
-}
-
-const MEDIA_ONLY_CRITERIA: ReadonlySet<string> = new Set([
-  "wcag22:1.2.1",
-  "wcag22:1.2.2",
-  "wcag22:1.2.3",
-  "wcag22:1.2.4",
-  "wcag22:1.2.5",
-  "wcag22:1.2.6",
-  "wcag22:1.2.7",
-  "wcag22:1.2.8",
-  "wcag22:1.2.9",
-  "wcag22:1.4.2",
-  "wcag21:1.2.1",
-  "wcag21:1.2.2",
-  "wcag21:1.2.3",
-  "wcag21:1.2.4",
-  "wcag21:1.2.5",
-  "wcag21:1.2.6",
-  "wcag21:1.2.7",
-  "wcag21:1.2.8",
-  "wcag21:1.2.9",
-  "wcag21:1.4.2",
-]);
-
-/**
- * Returns a relevance hint for a manual criterion based on detected
- * elements. Conservative: only flags media criteria as irrelevant when
- * no <video>/<audio> is present. Everything else defaults to likely
- * relevant — human judgment is expected on the rest.
- */
-function assessRelevance(
-  criterionId: string,
-  presence: ElementPresence,
-): { readonly likelyRelevant: boolean; readonly reason?: string } {
-  if (MEDIA_ONLY_CRITERIA.has(criterionId) && !presence.hasMedia) {
-    return {
-      likelyRelevant: false,
-      reason: "No <video> or <audio> elements detected in the scanned files.",
-    };
-  }
-  return { likelyRelevant: true };
-}
-
 function mapCandidates(
   criterionId: string,
   candidates: readonly ReviewCandidate[],
@@ -216,9 +161,8 @@ function mapCandidates(
 function buildChecklistItem(
   criterion: { id: string; title: string; level: string },
   candidates: readonly ReviewCandidate[],
-  presence: ElementPresence,
+  applicability: Applicability,
 ): { item: ChecklistItemOut; relevant: boolean } {
-  const relevance = assessRelevance(criterion.id, presence);
   const mapped = mapCandidates(criterion.id, candidates);
   const base = {
     criterionId: criterion.id,
@@ -227,9 +171,10 @@ function buildChecklistItem(
     priority: priorityFor(criterion.level, mapped.length > 0),
     candidates: mapped,
   };
-  if (relevance.likelyRelevant !== false) return { item: base, relevant: true };
-  const item = relevance.reason
-    ? { ...base, likelyRelevant: false as const, relevanceReason: relevance.reason }
+  if (!isLikelyIrrelevant(criterion.id, applicability)) return { item: base, relevant: true };
+  const reason = irrelevanceReason(criterion.id, applicability);
+  const item = reason
+    ? { ...base, likelyRelevant: false as const, relevanceReason: reason }
     : { ...base, likelyRelevant: false as const };
   return { item, relevant: false };
 }
@@ -237,7 +182,7 @@ function buildChecklistItem(
 function bucketChecklistItems(
   coverage: readonly PerStandardCoverage[],
   candidates: readonly ReviewCandidate[],
-  presence: ElementPresence,
+  applicability: Applicability,
 ): { needsReview: ChecklistItemOut[]; likelyIrrelevant: ChecklistItemOut[] } {
   const needsReview: ChecklistItemOut[] = [];
   const likelyIrrelevant: ChecklistItemOut[] = [];
@@ -247,7 +192,7 @@ function bucketChecklistItems(
     for (const criterionId of entry.manualCriteria) {
       const criterion = standard.criteria.find((c) => c.id === criterionId);
       if (!criterion) continue;
-      const { item, relevant } = buildChecklistItem(criterion, candidates, presence);
+      const { item, relevant } = buildChecklistItem(criterion, candidates, applicability);
       (relevant ? needsReview : likelyIrrelevant).push(item);
     }
   }

@@ -16,6 +16,7 @@ import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import type { Rule } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
 import type { Violation } from "../types/violation.ts";
+import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
 import type { McpSession } from "./session.ts";
 
 // ─── Tool metadata types ────────────────────────────────────────────────────
@@ -177,42 +178,6 @@ function isCountableManual(
   return !seen.has(c.id);
 }
 
-/**
- * WCAG 1.2.* captions/audio and 1.4.2 (media) are irrelevant when the
- * scanned files contain no `<video>` or `<audio>`. Kept in sync with
- * the list in src/mcp/tool-checklist.ts.
- */
-const MEDIA_ONLY_CRITERIA: ReadonlySet<string> = new Set([
-  "wcag22:1.2.1",
-  "wcag22:1.2.2",
-  "wcag22:1.2.3",
-  "wcag22:1.2.4",
-  "wcag22:1.2.5",
-  "wcag22:1.2.6",
-  "wcag22:1.2.7",
-  "wcag22:1.2.8",
-  "wcag22:1.2.9",
-  "wcag22:1.4.2",
-  "wcag21:1.2.1",
-  "wcag21:1.2.2",
-  "wcag21:1.2.3",
-  "wcag21:1.2.4",
-  "wcag21:1.2.5",
-  "wcag21:1.2.6",
-  "wcag21:1.2.7",
-  "wcag21:1.2.8",
-  "wcag21:1.2.9",
-  "wcag21:1.4.2",
-]);
-
-function filesHaveMedia(files: readonly ParsedFile[]): boolean {
-  for (const f of files) {
-    const lower = f.source.toLowerCase();
-    if (lower.includes("<video") || lower.includes("<audio")) return true;
-  }
-  return false;
-}
-
 function countManualCriteria(
   enabledStandardIds: readonly string[],
   maxLevel: "A" | "AA" | "AAA" = "AAA",
@@ -220,13 +185,13 @@ function countManualCriteria(
 ): number {
   const enabled = new Set(enabledStandardIds);
   const maxRank = LEVEL_ORDER[maxLevel] ?? 3;
-  const hasMedia = filesHaveMedia(files);
+  const applicability = detectApplicability(files);
   const seen = new Set<string>();
   for (const std of BUILTIN_STANDARDS) {
     if (!enabled.has(std.id)) continue;
     for (const c of std.criteria) {
       if (!isCountableManual(c, maxRank, seen)) continue;
-      if (!hasMedia && MEDIA_ONLY_CRITERIA.has(c.id)) continue;
+      if (isLikelyIrrelevant(c.id, applicability)) continue;
       seen.add(c.id);
     }
   }

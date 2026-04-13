@@ -14,6 +14,7 @@ import { buildCoverageReport } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { detectApplicability, splitManualCriteria } from "./manual-applicability.ts";
 import { checklistTool } from "./tool-checklist.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { explainStandardTool } from "./tool-explain-standard.ts";
@@ -117,6 +118,11 @@ const scanTool: McpTool = {
         scannedPaths: paths,
         configSource: projectConfig.sourcePath,
         configSearchedFrom: cwd,
+        ...(projectConfig.sourcePath === null
+          ? {
+              configNote: `No ra11y.config found at ${cwd} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
+            }
+          : {}),
       },
     });
   },
@@ -348,10 +354,16 @@ const coverageTool: McpTool = {
     });
 
     const candidateCriteria = new Set((report.candidates ?? []).map((c) => c.criterionId));
+    const applicability = detectApplicability(files);
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const entries = coverage.map((c) => {
-      const withCandidates = c.manualCriteria.filter((id) => candidateCriteria.has(id));
-      const untargeted = c.manualCriteria.filter((id) => !candidateCriteria.has(id));
+      // Split by applicability first so the counts align with scan_project
+      // and checklist — media-only criteria move to likelyIrrelevant
+      // when there's no <video>/<audio>, and never inflate the
+      // review-required number.
+      const { applicable, likelyIrrelevant } = splitManualCriteria(c.manualCriteria, applicability);
+      const withCandidates = applicable.filter((id) => candidateCriteria.has(id));
+      const untargeted = applicable.filter((id) => !candidateCriteria.has(id));
       return {
         standardId: c.standardId,
         // Named so the denominator is unmistakable: it's the share of
@@ -362,18 +374,23 @@ const coverageTool: McpTool = {
         criteriaTotal: c.total,
         criteriaAutomatable: c.automatable,
         criteriaAutomatablePassing: c.passing,
-        criteriaManualReviewRequired: c.manualCriteria.length,
+        criteriaManualReviewRequired: applicable.length,
         // Split the manual-review pile so agents can see at the coverage
         // level (without a second checklist call) how many manual
         // criteria have concrete candidates worth reviewing vs pure
         // WCAG prompts the finders couldn't ground in code.
         manualWithCandidates: withTitles(withCandidates),
         manualUntargeted: withTitles(untargeted),
-        automatedGaps: withTitles(c.failingCriteria),
+        likelyIrrelevantCriteria: withTitles(likelyIrrelevant),
+        // Renamed from "automatedGaps" — agents consistently misread
+        // that as "criteria automation can't cover" when it actually
+        // listed automated criteria that are currently failing.
+        failingAutomatedCriteria: withTitles(c.failingCriteria),
         summary:
           `${c.passing}/${c.automatable} automatable criteria passing (${c.automatedPassRate}%). ` +
-          `${c.manualCriteria.length} of ${c.total} criteria in ${c.standardId} are manual-only ` +
-          `(${withCandidates.length} with concrete candidates, ${untargeted.length} untargeted). ` +
+          `${applicable.length} of ${c.total} criteria in ${c.standardId} need manual review ` +
+          `(${withCandidates.length} with concrete candidates, ${untargeted.length} untargeted` +
+          `${likelyIrrelevant.length > 0 ? `; ${likelyIrrelevant.length} media-only criteria are irrelevant to this scan` : ""}). ` +
           `Run the 'checklist' tool for evaluation prompts.`,
       };
     });

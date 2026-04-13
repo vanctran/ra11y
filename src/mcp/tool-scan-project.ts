@@ -114,6 +114,11 @@ export const scanProjectTool: McpTool = {
         scanMode: describeMode(params),
         configSource: projectConfig.sourcePath,
         configSearchedFrom: root,
+        ...(projectConfig.sourcePath === null
+          ? {
+              configNote: `No ra11y.config found at ${root} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
+            }
+          : {}),
         ...(configHint === null ? {} : { configHint }),
         nextStep,
       },
