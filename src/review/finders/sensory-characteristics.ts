@@ -85,11 +85,16 @@ function emitSensoryCandidates(
   text: string,
   candidates: ReviewCandidate[],
 ): void {
+  const match = SENSORY_PATTERN.exec(text);
+  const matchedPhrase = match?.[0];
+  const reason = matchedPhrase
+    ? `text references sensory characteristic "${matchedPhrase}" -- verify a non-sensory alternative exists`
+    : "text references sensory characteristic -- verify a non-sensory alternative exists";
   for (const criterionId of CRITERION_IDS) {
     candidates.push({
       criterionId,
       location: { filePath, line: loc.line, column: loc.column },
-      reason: "text references sensory characteristic -- verify a non-sensory alternative exists",
+      reason,
       snippet: text.slice(0, 120),
     });
   }
