@@ -140,6 +140,28 @@ function buildEntry(
   violations: readonly Violation[],
   candidates: readonly ReviewCandidate[],
 ): VpatEntry {
+  // Demonstrated failures always win — even for criteria classified
+  // "manual" in metadata, because a rule can still satisfy a slice of a
+  // manual criterion (e.g., document/meta-refresh satisfies wcag22:2.2.1).
+  // A VPAT that hides known non-support behind "Not Evaluated" is worse
+  // than one that surfaces it.
+  if (violations.length > 0) {
+    const hasError = violations.some((v) => v.severity === "error");
+    const conformance: Conformance = hasError ? "Does Not Support" : "Partially Supports";
+    const ruleSet = new Set(violations.map((v) => v.ruleId));
+    const ruleList = [...ruleSet].sort().join(", ");
+    return {
+      criterionId: criterion.id,
+      localId: criterion.localId,
+      title: criterion.title,
+      level: criterion.level,
+      conformance,
+      remarks: `${violations.length} violation(s) from rule(s): ${ruleList}. See the terminal or JSON report for file locations and fix suggestions.`,
+      violationCount: violations.length,
+      automated: criterion.automatable !== "manual",
+    };
+  }
+
   const automated = criterion.automatable !== "manual";
 
   if (!automated) {
@@ -155,36 +177,18 @@ function buildEntry(
     };
   }
 
-  if (violations.length === 0) {
-    const remarks =
-      criterion.automatable === "partial"
-        ? "Automated checks passed. The `partial` classification means additional manual review is still recommended for full assurance."
-        : "Automated checks passed.";
-    return {
-      criterionId: criterion.id,
-      localId: criterion.localId,
-      title: criterion.title,
-      level: criterion.level,
-      conformance: criterion.automatable === "partial" ? "Partially Supports" : "Supports",
-      remarks,
-      violationCount: 0,
-      automated: true,
-    };
-  }
-
-  const hasError = violations.some((v) => v.severity === "error");
-  const conformance: Conformance = hasError ? "Does Not Support" : "Partially Supports";
-  const ruleSet = new Set(violations.map((v) => v.ruleId));
-  const ruleList = [...ruleSet].sort().join(", ");
-
+  const remarks =
+    criterion.automatable === "partial"
+      ? "Automated checks passed. The `partial` classification means additional manual review is still recommended for full assurance."
+      : "Automated checks passed.";
   return {
     criterionId: criterion.id,
     localId: criterion.localId,
     title: criterion.title,
     level: criterion.level,
-    conformance,
-    remarks: `${violations.length} violation(s) from rule(s): ${ruleList}. See the terminal or JSON report for file locations and fix suggestions.`,
-    violationCount: violations.length,
+    conformance: criterion.automatable === "partial" ? "Partially Supports" : "Supports",
+    remarks,
+    violationCount: 0,
     automated: true,
   };
 }

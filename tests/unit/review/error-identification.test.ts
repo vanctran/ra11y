@@ -37,6 +37,24 @@ describe("review/error-identification", () => {
     expect(out.length).toBeGreaterThan(0);
   });
 
+  it('flags JSX <input aria-invalid={"true"} /> — quoted string in expression', () => {
+    const source = `const x = <input aria-invalid={"true"} />;`;
+    const out = runFinder(finder, source);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("flags JSX <input aria-invalid={'true'} /> — single-quoted string in expression", () => {
+    const source = `const x = <input aria-invalid={'true'} />;`;
+    const out = runFinder(finder, source);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('does not flag input type={"hidden"} with aria-invalid set', () => {
+    const source = `const x = <input type={"hidden"} aria-invalid={true} />;`;
+    const out = runFinder(finder, source);
+    expect(out).toEqual([]);
+  });
+
   it("does not flag when aria-describedby is present", () => {
     const source = `<input aria-invalid="true" aria-describedby="err1">`;
     const out = runFinder(finder, source, { filePath: "input.html" });

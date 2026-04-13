@@ -29,7 +29,6 @@ import { defineCandidateFinder } from "../../api/plugin.ts";
 import {
   getHtmlAttribute,
   getJsxAttribute,
-  getJsxAttributeString,
   hasHtmlAttribute,
   hasJsxAttribute,
   walkHtmlElements,
@@ -110,8 +109,10 @@ function isHiddenInput(el: HtmlElement): boolean {
 
 function isHiddenJsxInput(el: JsxElement): boolean {
   if (el.tagName.toLowerCase() !== "input") return false;
-  const type = getJsxAttributeString(el, "type");
-  return type !== null && type.toLowerCase() === "hidden";
+  const attr = getJsxAttribute(el, "type");
+  if (!attr?.value) return false;
+  const literal = jsxAttrStringLiteral(attr.value);
+  return literal !== null && literal.toLowerCase() === "hidden";
 }
 
 function isLiteralTrue(value: string | null): boolean {
@@ -124,12 +125,41 @@ function hasLiteralTrueAriaInvalid(el: JsxElement): boolean {
   if (attr.value.kind === "StringLiteral") {
     return attr.value.value.toLowerCase() === "true";
   }
-  // Expression: only a bare `{true}` qualifies as a static literal-true.
-  // Parser emits the raw text including braces. Strip them, trim, compare.
-  // Anything else (variables, function calls, ternaries) is out of scope.
+  // Expression: accept the bare boolean `{true}` and the
+  // string-literal-in-braces form `{"true"}` / `{'true'}`. Both render
+  // identically in the DOM. Anything else (variables, function calls,
+  // ternaries) is out of scope for this static finder.
+  const literal = jsxAttrStringLiteral(attr.value);
+  if (literal !== null) return literal.toLowerCase() === "true";
   const raw = attr.value.raw;
   const inner = raw.startsWith("{") && raw.endsWith("}") ? raw.slice(1, -1) : raw;
   return inner.trim() === "true";
+}
+
+/**
+ * Extracts a string literal value from a JsxAttributeValue, accepting
+ * both the plain StringLiteral form (`foo="bar"`) and the expression
+ * form wrapping a quoted literal (`foo={"bar"}` or `foo={'bar'}`).
+ * Returns null when the value is a non-literal expression (variable,
+ * call, etc.), so callers can decide whether to treat it as "unknown."
+ */
+function jsxAttrStringLiteral(value: {
+  kind: "StringLiteral" | "Expression";
+  value?: string;
+  raw?: string;
+}): string | null {
+  if (value.kind === "StringLiteral") return value.value ?? null;
+  if (!value.raw) return null;
+  const trimmed = value.raw.trim();
+  if (!(trimmed.startsWith("{") && trimmed.endsWith("}"))) return null;
+  const inner = trimmed.slice(1, -1).trim();
+  if (
+    (inner.startsWith('"') && inner.endsWith('"')) ||
+    (inner.startsWith("'") && inner.endsWith("'"))
+  ) {
+    return inner.slice(1, -1);
+  }
+  return null;
 }
 
 function pushForAllCriteria(

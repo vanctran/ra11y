@@ -182,6 +182,32 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
     expect(entry?.remarks).toContain("+5 more");
   });
 
+  it("surfaces violations on a manual-classified criterion as 'Does Not Support'", () => {
+    // Regression guard: document/meta-refresh is a real rule that can
+    // fire on wcag22:2.2.1, classified "manual" in metadata. The VPAT
+    // must not silently downgrade that to "Not Evaluated" just because
+    // the criterion is tagged manual.
+    const ruleHit: ScanResult = {
+      ...RESULT,
+      violations: [
+        {
+          ruleId: "document/meta-refresh",
+          criteria: ["wcag22:2.2.1"],
+          severity: "error",
+          location: { filePath: "src/page.html", line: 1, column: 1 },
+          message: '<meta http-equiv="refresh">',
+          suggestion: "Remove.",
+        },
+      ],
+    };
+    const report = buildVpatReport(ruleHit, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z");
+    const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
+    const entry = wcag22?.entries.find((e) => e.criterionId === "wcag22:2.2.1");
+    expect(entry?.conformance).toBe("Does Not Support");
+    expect(entry?.violationCount).toBe(1);
+    expect(entry?.remarks).toContain("document/meta-refresh");
+  });
+
   it("leaves automated criteria remarks untouched when candidates attach", () => {
     // Candidates targeting the same criterion that already has violations
     // should not overwrite the violation-based remark, because the
