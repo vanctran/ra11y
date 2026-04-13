@@ -254,3 +254,15 @@ Items that turn "it works" into "it's the obvious choice for agentic a11y work."
 - [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
 - [ ] VS Code extension skeleton under `integrations/vscode/` (out-of-tree but linked from README) — wraps the MCP server for IDE-native findings and surfaces sampled verdicts inline
 - [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` vs axe-core + jsx-a11y against a labeled fixture set, published on releases — accuracy, false-positive rate, and *agent-workflow completion rate* which is where we expect to win
+
+## Phase 22 — Review-candidate coverage (unbiased-agent feedback, post-v0.1.0)
+
+Three batches of unbiased feedback against ~/dev/leela converged on the same shape: the checklist reads like a "WCAG spec dump" because most manual criteria have no candidates. Moving criteria from empty-list to location-anchored is the highest-leverage work to make the manual-review half of the tool genuinely useful. Each finder is ~1–2h of work.
+
+- [ ] `src/review/finders/use-of-color.ts` — wcag22:1.4.1. Scan CSS/Tailwind class strings for status-conveying color names (red-500, success, warning, error, danger) without an adjacent icon, text label, or aria-label. Emit candidates at the JSX/HTML element where the color-only signal lives.
+- [ ] `src/review/finders/error-identification.ts` — wcag22:3.3.1. Detect form `<input>`/`<select>`/`<textarea>` elements with `required`, `pattern`, `min`/`max`, or `type="email"`/`type="url"` and no associated error-message element (no `aria-describedby` pointing to a `role="alert"` or error text node). Pairs well with 3.3.3 Error Suggestion.
+- [ ] `src/review/finders/consistent-navigation.ts` — wcag22:3.2.3. Compare the structure/order of `<nav>` children across route files; flag routes whose nav differs from the modal pattern as candidates.
+- [ ] `src/review/finders/headings-and-labels.ts` — wcag22:2.4.6. Extend heading work to flag generic headings ("Click here", "More info", "Section", "Overview") as candidates for descriptiveness review.
+- [ ] `src/review/finders/on-input-body.ts` — tighten 3.2.2 confidence. Inspect the onChange handler's function body (arrow/named) for a call to `router.push`, `navigate`, `history.push`, `window.location.*`, or `.submit()`. Handlers with those calls get `confidence: "high"`; handlers without get `confidence: "low"` so reviewers can skip filter-bar noise in seconds.
+- [ ] `src/mcp/tool-audit.ts` — meta-tool that runs scan + coverage + checklist in one round-trip and returns all three payloads under `{ scan, coverage, checklist }`. Keeps the existing three tools intact; just saves the round-trips for agents that want one-shot workflow.
+- [ ] `tests/unit/review/finders/*` — each new finder gets the standard ≥3 positive, ≥3 negative, ≥1 edge-case suite against fixtures under `tests/fixtures/review/<finder>/`.
