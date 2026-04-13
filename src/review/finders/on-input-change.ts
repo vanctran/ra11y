@@ -87,6 +87,10 @@ export const finder = defineCandidateFinder({
   },
 });
 
+function reasonFor(handler: string, tag: string): string {
+  return `${HANDLER_DESCRIPTIONS[handler]} on <${tag}> -- verify it does not cause an unexpected context change`;
+}
+
 function findHtmlCandidates(
   root: HtmlDocument,
   filePath: string,
@@ -103,7 +107,7 @@ function findHtmlCandidates(
             line: el.loc.start.line,
             column: el.loc.start.column,
           },
-          reason: `${HANDLER_DESCRIPTIONS[handler]} -- verify it does not cause an unexpected context change`,
+          reason: reasonFor(handler, el.tagName),
         });
       }
     }
@@ -122,7 +126,7 @@ function findJsxCandidates(root: TsxModule, filePath: string, candidates: Review
             line: el.loc.start.line,
             column: el.loc.start.column,
           },
-          reason: `${HANDLER_DESCRIPTIONS[handler]} -- verify it does not cause an unexpected context change`,
+          reason: reasonFor(handler, el.tagName),
         });
       }
     }
