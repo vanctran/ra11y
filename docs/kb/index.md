@@ -130,6 +130,8 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [parsing/duplicate-id](./rules/parsing__duplicate-id.md)
 - [parsing/html-has-lang](./rules/parsing__html-has-lang.md)
 - [pointer/cancellation](./rules/pointer__cancellation.md)
+- [pointer/drag-alternative](./rules/pointer__drag-alternative.md)
+- [pointer/target-size](./rules/pointer__target-size.md)
 - [semantics/button-name](./rules/semantics__button-name.md)
 - [semantics/empty-heading](./rules/semantics__empty-heading.md)
 - [semantics/heading-hierarchy](./rules/semantics__heading-hierarchy.md)
