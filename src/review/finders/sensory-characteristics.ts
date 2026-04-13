@@ -22,12 +22,24 @@ import type { ReviewCandidate } from "../../types/review.ts";
 const CRITERION_IDS = ["wcag22:1.3.3", "wcag21:1.3.3"] as const;
 
 /**
- * Pattern matching sensory-only instruction words. Case-insensitive.
- * Matches phrases like "above", "below", "right side", "left side",
- * "click the red", "the green", "the round", "shaped like", etc.
+ * Clear sensory-only phrases — color, shape, or side-based identification
+ * that is effectively always a 1.3.3 concern in UI copy.
  */
 const SENSORY_PATTERN =
-  /\b(above|below|right side|left side|click the red|the green\b|the blue\b|the red\b|the round\b|the square\b|shaped like)\b/i;
+  /\b(right side|left side|click the red|the green\b|the blue\b|the red\b|the round\b|the square\b|shaped like)\b/i;
+
+/**
+ * Directional cues ("above"/"below") are sensory *only* in instructional
+ * context. Bare "the topic below" or "see below for notes" in prose is
+ * not a 1.3.3 violation, so require an instructional verb within a short
+ * window of the directional word.
+ */
+const DIRECTIONAL_PATTERN =
+  /\b(?:click|press|tap|select|choose|use|find|look at|refer to|view|scroll|shown|listed)\b[^.!?\n]{0,40}\b(above|below)\b/i;
+
+function matchSensory(text: string): string | undefined {
+  return SENSORY_PATTERN.exec(text)?.[0] ?? DIRECTIONAL_PATTERN.exec(text)?.[0];
+}
 
 export const finder = defineCandidateFinder({
   id: "review/sensory-characteristics",
@@ -58,24 +70,26 @@ function findHtmlCandidates(
 ): void {
   for (const el of walkHtmlElements(root)) {
     const text = htmlTextContent(el);
-    if (!(text && SENSORY_PATTERN.test(text))) continue;
+    const matched = text ? matchSensory(text) : undefined;
+    if (!matched) continue;
     const hasDirectText = el.children.some(
-      (c) => c.kind === "HtmlText" && SENSORY_PATTERN.test(c.value),
+      (c) => c.kind === "HtmlText" && matchSensory(c.value) !== undefined,
     );
     if (!hasDirectText) continue;
-    emitSensoryCandidates(filePath, el.loc.start, text, candidates);
+    emitSensoryCandidates(filePath, el.loc.start, text as string, matched, candidates);
   }
 }
 
 function findJsxCandidates(root: TsxModule, filePath: string, candidates: ReviewCandidate[]): void {
   for (const el of walkJsxElements(root)) {
     const text = jsxTextContent(el);
-    if (!(text && SENSORY_PATTERN.test(text))) continue;
+    const matched = text ? matchSensory(text) : undefined;
+    if (!matched) continue;
     const hasDirectText = el.children.some(
-      (c) => c.kind === "JsxText" && SENSORY_PATTERN.test(c.value),
+      (c) => c.kind === "JsxText" && matchSensory(c.value) !== undefined,
     );
     if (!hasDirectText) continue;
-    emitSensoryCandidates(filePath, el.loc.start, text, candidates);
+    emitSensoryCandidates(filePath, el.loc.start, text as string, matched, candidates);
   }
 }
 
@@ -83,13 +97,10 @@ function emitSensoryCandidates(
   filePath: string,
   loc: { line: number; column: number },
   text: string,
+  matchedPhrase: string,
   candidates: ReviewCandidate[],
 ): void {
-  const match = SENSORY_PATTERN.exec(text);
-  const matchedPhrase = match?.[0];
-  const reason = matchedPhrase
-    ? `text references sensory characteristic "${matchedPhrase}" -- verify a non-sensory alternative exists`
-    : "text references sensory characteristic -- verify a non-sensory alternative exists";
+  const reason = `text references sensory characteristic "${matchedPhrase}" -- verify a non-sensory alternative exists`;
   for (const criterionId of CRITERION_IDS) {
     candidates.push({
       criterionId,
