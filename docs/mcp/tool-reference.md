@@ -99,7 +99,7 @@ Every tool returns `{ content: [{ type: "text", text: "<json>" }] }` where the J
 
 ```jsonc
 {
-  "automatedPass": boolean,  // true iff no rule-level violations; manual-review criteria still pending
+  // No top-level pass boolean — see plan.summary and plan.totalFindings.
   "plan": { "totalFindings": number, "summary": string },
   "files": [
     {

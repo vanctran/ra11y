@@ -207,16 +207,14 @@ function countByExtension(files: readonly ParsedFile[]): Record<string, number> 
 // ─── Shared scan+format ─────────────────────────────────────────────────────
 
 /**
- * Shape of the scan output used by both `scan` and `scan_project`.
+ * Shape of the scan output used by both `scan` and `plan`.
  *
- * `automatedPass` is true iff no rule-level violations were emitted — it
- * says nothing about the manual-review criteria surfaced in
- * `plan.manualReviewRequired`. Clean automated scans with unreviewed
- * manual criteria are not "accessible"; they are "automatable layer
- * clean, human layer pending."
+ * Intentionally does NOT carry a top-level "pass" boolean — every prior
+ * variant ("pass", "automatedPass") read as "the app is accessible",
+ * which is a claim static analysis can't make. `plan.summary` and the
+ * counts in `plan` convey the state without a load-bearing boolean.
  */
 export interface ScanFormatted {
-  readonly automatedPass: boolean;
   readonly plan: Record<string, unknown>;
   readonly files: readonly { readonly path: string; readonly findings: unknown[] }[];
   readonly meta: Record<string, unknown>;
@@ -287,7 +285,6 @@ export function runScanAndFormat(
 
   const manualCount = countManualCriteria(enabled, session.config.level);
   const formatted: ScanFormatted = {
-    automatedPass: violations.length === 0,
     plan: {
       totalFindings: filtered.length,
       violations: violations.length,

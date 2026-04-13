@@ -92,7 +92,6 @@ const scanTool: McpTool = {
     const files = await parseFiles(paths, session, cwd);
     if (files.length === 0) {
       return textResult({
-        automatedPass: true,
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
         meta: { filesScanned: 0, scannedPaths: paths },

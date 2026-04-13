@@ -43,17 +43,17 @@ interface ChecklistItemOut {
 }
 
 /**
- * Priority bucket from (a) whether the finder surfaced concrete locations
- * and (b) the WCAG conformance level. Reviewers should start with `high`
- * — those items both have code to look at and are load-bearing for A/AA
- * conformance. `low` is reserved for AAA criteria with no candidates:
- * visit them last or skip for non-AAA targets.
+ * Priority bucket biased toward actionability. A checklist item with
+ * concrete candidate locations is something a reviewer can work from
+ * in the next minute; an item with no candidates is a pure WCAG
+ * reminder the reviewer already has from reading the spec. We rank by
+ * candidates first, level second, so the output doesn't drown real
+ * finds in a sea of criterion titles.
  */
 function priorityFor(level: string, hasCandidates: boolean): ChecklistPriority {
-  if (hasCandidates && (level === "A" || level === "AA")) return "high";
-  if (hasCandidates) return "medium";
-  if (level === "A" || level === "AA") return "medium";
-  return "low";
+  if (!hasCandidates) return "low";
+  if (level === "A" || level === "AA") return "high";
+  return "medium";
 }
 
 export const checklistTool: McpTool = {

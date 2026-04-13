@@ -44,6 +44,8 @@ const DEFAULT_EXCLUDED_PATTERNS: readonly string[] = [
   "**/__tests__/**",
   "**/__mocks__/**",
   "**/stories/**",
+  "**/dev-tools/**",
+  "**/devtools/**",
 ];
 
 /** Resolves every input path into a flat list of parseable files. */
