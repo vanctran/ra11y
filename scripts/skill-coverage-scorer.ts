@@ -19,7 +19,9 @@
 import { spawnSync } from "node:child_process";
 
 function gate(label: string, argv: readonly string[]): void {
-  const r = spawnSync(argv[0]!, argv.slice(1), { stdio: "inherit" });
+  const [cmd, ...rest] = argv;
+  if (!cmd) throw new Error(`[harness] empty gate argv for ${label}`);
+  const r = spawnSync(cmd, rest, { stdio: "inherit" });
   if (r.status !== 0) {
     process.stderr.write(`[harness] gate failed: ${label}\n`);
     process.exit(1);
