@@ -57,8 +57,8 @@ function runOneFinder(
 
   try {
     const fileCtx = { ...ctx, nodes: input.ast.root };
-    collectCandidates(finder.find?.(ctx), out, input.filePath);
-    collectCandidates(finder.afterFile?.(fileCtx), out, input.filePath);
+    collectCandidates(finder.find?.(ctx), out, input);
+    collectCandidates(finder.afterFile?.(fileCtx), out, input);
   } catch {
     // Crashing finder → zero candidates, no noise. Advisory only.
   }
@@ -67,15 +67,30 @@ function runOneFinder(
 function collectCandidates(
   maybe: readonly ReviewCandidate[] | undefined,
   out: ReviewCandidate[],
-  filePath: string,
+  input: CandidateRunnerInput,
 ): void {
   if (!Array.isArray(maybe)) return;
   for (const c of maybe) {
+    if (isLineWildcardDisabled(input.disableMap, c.location.line)) continue;
     out.push({
       ...c,
-      location: { ...c.location, filePath },
+      location: { ...c.location, filePath: input.filePath },
     });
   }
+}
+
+/**
+ * A file-level `<!-- ra11y-disable -->` (no matching enable) marks every
+ * line with `*` in the disableMap. Candidates respect that wildcard so
+ * users can silence the whole file — critical for Jinja templates, LLM
+ * prompt fragments, and other non-rendered HTML the scanner would
+ * otherwise produce review noise against.
+ */
+function isLineWildcardDisabled(
+  disableMap: ReadonlyMap<number, ReadonlySet<string>>,
+  line: number,
+): boolean {
+  return disableMap.get(line)?.has("*") ?? false;
 }
 
 function extractExtension(filePath: string): string {

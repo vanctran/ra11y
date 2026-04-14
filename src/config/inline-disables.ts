@@ -20,7 +20,10 @@
  *
  * Returns a `(line → Set<ruleId>)` map the engine's context-builder
  * consumes via `ctx.isDisabled(line, ruleId)`. A set containing
- * `"*"` means "all rules disabled on this line".
+ * `"*"` means "all rules disabled on this line" and is also honored by
+ * the candidate runner, so a file-level `<!-- ra11y-disable -->` at the
+ * top of a non-rendered HTML fragment (Jinja template, LLM prompt)
+ * silences review candidates alongside violations.
  */
 
 const COMMENT_PATTERNS: readonly RegExp[] = [

@@ -24,6 +24,32 @@ function tsxFile(filePath: string, source: string): ParsedFile {
   return { filePath, source, ast: { language: "tsx", root: r.root, errors: r.errors } };
 }
 
+describe("candidate-runner — inline-disable suppresses candidates", () => {
+  it("`<!-- ra11y-disable -->` at top of file silences review candidates", async () => {
+    // Jinja templates and LLM prompt fragments aren't rendered UI but
+    // trip manual-review heuristics (sensory wording, logo alt text,
+    // etc.). A file-level disable must quiet candidates, not just
+    // violations.
+    const { parseInlineDisables } = await import("../../src/config/inline-disables.ts");
+    const source = "<!-- ra11y-disable -->\n<p>consider the view above</p>\n";
+    const r = parseHtml(source);
+    const file: ParsedFile = {
+      filePath: "/p/prompt.html",
+      source,
+      ast: { language: "html", root: r.root, errors: r.errors },
+      disableMap: parseInlineDisables(source),
+    };
+    const { report } = runScan({
+      standards: [wcag22],
+      rules: [],
+      enabled: ["wcag22"],
+      files: [file],
+      finders: (await import("../../src/review/index.ts")).BUILTIN_CANDIDATE_FINDERS,
+    });
+    expect(report.candidates ?? []).toEqual([]);
+  });
+});
+
 describe("multiple-ways finder — uniquePerCriterion dedup", () => {
   it("emits one candidate per criterion even when multiple root layouts match", () => {
     const files: ParsedFile[] = [
