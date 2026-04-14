@@ -19,6 +19,7 @@ import { finder as onInputChange } from "./finders/on-input-change.ts";
 import { finder as redundantEntry } from "./finders/redundant-entry.ts";
 import { finder as sectionHeadings } from "./finders/section-headings.ts";
 import { finder as sensoryCharacteristics } from "./finders/sensory-characteristics.ts";
+import { finder as timing } from "./finders/timing.ts";
 import { finder as useOfColor } from "./finders/use-of-color.ts";
 
 export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
@@ -37,5 +38,6 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   redundantEntry,
   sectionHeadings,
   sensoryCharacteristics,
+  timing,
   useOfColor,
 ];
