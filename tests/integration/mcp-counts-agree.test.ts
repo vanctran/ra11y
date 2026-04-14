@@ -77,19 +77,27 @@ async function makeMediaPresentFixture(): Promise<string> {
 }
 
 interface ScanBody {
-  readonly plan: { readonly manualReviewRequired: number };
+  readonly plan: {
+    readonly manualReviewRequired: number;
+    readonly actionableManualItems: number;
+  };
 }
 interface CoverageBody {
   readonly criteriaManualReviewRequired: number;
 }
 interface ChecklistBody {
-  readonly summary: { readonly manualReviewRequired: number };
+  readonly summary: {
+    readonly manualReviewRequired: number;
+    readonly actionable: number;
+  };
 }
 
 async function gatherCounts(cwd: string): Promise<{
   scan: number;
   coverage: number;
   checklist: number;
+  scanActionable: number;
+  checklistActionable: number;
 }> {
   const responses = await mcpSession([
     initMsg(1),
@@ -104,6 +112,8 @@ async function gatherCounts(cwd: string): Promise<{
     scan: scanBody.plan.manualReviewRequired,
     coverage: coverageBody.criteriaManualReviewRequired,
     checklist: checklistBody.summary.manualReviewRequired,
+    scanActionable: scanBody.plan.actionableManualItems,
+    checklistActionable: checklistBody.summary.actionable,
   };
 }
 
@@ -120,6 +130,16 @@ describe("MCP invariant: manual-review count agrees across surfaces", () => {
     const counts = await gatherCounts(dir);
     expect(counts.scan).toBe(counts.coverage);
     expect(counts.coverage).toBe(counts.checklist);
+  });
+
+  it("scan.plan.actionableManualItems agrees with checklist.summary.actionable", async () => {
+    // Without this, an agent reading scan.plan.manualReviewRequired
+    // (e.g., 21) has to call checklist just to learn that only a
+    // handful (e.g., 4) are grounded in file:line candidates. Exposing
+    // the actionable count inline saves the round trip.
+    const mediaFree = await gatherCounts(await makeMediaFreeFixture());
+    expect(mediaFree.scanActionable).toBe(mediaFree.checklistActionable);
+    expect(mediaFree.scanActionable).toBeLessThanOrEqual(mediaFree.scan);
   });
 
   it("the two fixtures produce different counts (proves likelyIrrelevant filtering applies)", async () => {

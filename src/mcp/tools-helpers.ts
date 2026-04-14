@@ -179,11 +179,11 @@ function isCountableManual(
   return !seen.has(c.id);
 }
 
-function countManualCriteria(
+function collectManualCriteria(
   enabledStandardIds: readonly string[],
   maxLevel: "A" | "AA" | "AAA" = "AAA",
   files: readonly ParsedFile[] = [],
-): number {
+): ReadonlySet<string> {
   const enabled = new Set(enabledStandardIds);
   const maxRank = LEVEL_ORDER[maxLevel] ?? 3;
   const applicability = detectApplicability(files);
@@ -196,7 +196,7 @@ function countManualCriteria(
       seen.add(c.id);
     }
   }
-  return seen.size;
+  return seen;
 }
 
 /** Tally parseable files by extension — surfaces coverage gaps at a glance. */
@@ -252,7 +252,7 @@ export function runScanAndFormat(
 } {
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
-  const { result } = runScan({
+  const { result, report } = runScan({
     standards: BUILTIN_STANDARDS,
     rules: activeRules,
     enabled,
@@ -287,7 +287,18 @@ export function runScanAndFormat(
     (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
   ).length;
 
-  const manualCount = countManualCriteria(enabled, session.config.level, files);
+  const manualIds = collectManualCriteria(enabled, session.config.level, files);
+  const manualCount = manualIds.size;
+  // Actionable = manual criteria that a finder grounded in a concrete
+  // file:line. Without this, scan.plan.manualReviewRequired (all
+  // applicable manual criteria) and checklist.actionable (the subset
+  // with hits) disagreed by an order of magnitude and forced agents to
+  // make a second tool call just to size the real workload.
+  const actionableManualIds = new Set<string>();
+  for (const c of report.candidates ?? []) {
+    if (manualIds.has(c.criterionId)) actionableManualIds.add(c.criterionId);
+  }
+  const actionableManual = actionableManualIds.size;
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
@@ -306,6 +317,10 @@ export function runScanAndFormat(
       // as "compliant" — the full picture is "automated clean AND N manual
       // criteria still need human review."
       manualReviewRequired: manualCount,
+      // Matches checklist.actionable. The gap between the two (manual -
+      // actionable = untargeted WCAG prompts) is the real "size this"
+      // signal for agents deciding whether to open the checklist tool.
+      actionableManualItems: actionableManual,
       summary: buildPlanSummary(violations.length, notes.length, fixSuggestions, manualCount),
     },
     files: fileEntries,
