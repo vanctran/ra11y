@@ -190,6 +190,21 @@ describe("rule forms/fieldset-legend", () => {
     });
   });
 
+  describe("JSX: primitive component (info, not error)", () => {
+    it("empty <fieldset> with spread props emits info, not error", () => {
+      const v = runRule(rule, `function FieldSet(props) { return <fieldset {...props} />; }`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+      expect(v[0]?.message).toContain("spread");
+    });
+
+    it("empty <fieldset> without spread stays an error", () => {
+      const v = runRule(rule, `const X = <fieldset />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("error");
+    });
+  });
+
   describe("rule metadata", () => {
     it("declares all four satisfied criteria", () => {
       expect(rule.satisfies).toContain("wcag22:1.3.1");

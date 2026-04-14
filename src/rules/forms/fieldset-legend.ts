@@ -156,7 +156,12 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     if (hasJsxAriaName(fieldset)) continue;
     const reason = diagnoseJsxLegend(fieldset);
     if (reason === null) continue;
-    emit(buildViolation(reason, fieldset.loc.start, describeJsxFieldset(fieldset)));
+    const subject = describeJsxFieldset(fieldset);
+    if (fieldset.hasSpreadProps) {
+      emit(buildPrimitiveViolation(fieldset.loc.start, subject));
+      continue;
+    }
+    emit(buildViolation(reason, fieldset.loc.start, subject));
   }
 }
 
@@ -219,6 +224,23 @@ function buildViolation(
     location: { filePath: "", line: loc.line, column: loc.column },
     message: buildMessage(reason, subject),
     suggestion: buildSuggestion(reason, subject),
+  };
+}
+
+function buildPrimitiveViolation(
+  loc: { line: number; column: number },
+  subject: string,
+): {
+  severity: "info";
+  location: { filePath: string; line: number; column: number };
+  message: string;
+  suggestion: string;
+} {
+  return {
+    severity: "info",
+    location: { filePath: "", line: loc.line, column: loc.column },
+    message: `${subject} has no <legend> child but receives {...spread} props — this looks like a component primitive. Whether a <legend> is rendered depends on what the caller passes. Verify at usage sites.`,
+    suggestion: `If the primitive is always consumed with a <legend> child (or an aria-label on the wrapping component), this is fine — add \`{/* ra11y-disable forms/fieldset-legend */}\` at the top of the file to silence this info note. Otherwise ensure every call site provides a legend or aria-label.`,
   };
 }
 
