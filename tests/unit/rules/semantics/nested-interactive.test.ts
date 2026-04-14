@@ -165,6 +165,56 @@ describe("rule semantics/nested-interactive", () => {
     });
   });
 
+  describe("native <details>/<summary> nesting is allowed", () => {
+    it("HTML: <summary> inside <details> does not flag (defined native toggle)", () => {
+      const v = runRule(rule, `<details><summary>More info</summary><p>body</p></details>`, {
+        filePath: "a.html",
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it('HTML: <summary role="button"> inside <details> does not flag', () => {
+      const v = runRule(
+        rule,
+        `<details><summary role="button">More info</summary><p>body</p></details>`,
+        { filePath: "a.html" },
+      );
+      expect(v).toHaveLength(0);
+    });
+
+    it("HTML: nested <details> inside <details> does not flag (valid flow content)", () => {
+      const v = runRule(
+        rule,
+        `<details><summary>Outer</summary><details><summary>Inner</summary><p>body</p></details></details>`,
+        { filePath: "a.html" },
+      );
+      expect(v).toHaveLength(0);
+    });
+
+    it("HTML: <details> inside an <a href> still flags (real nesting violation)", () => {
+      const v = runRule(rule, `<a href="/x"><details><summary>x</summary></details></a>`, {
+        filePath: "a.html",
+      });
+      expect(v.length).toBeGreaterThan(0);
+    });
+
+    it("JSX: <summary> inside <details> does not flag", () => {
+      const v = runRule(
+        rule,
+        `const X = <details><summary role="button">More</summary><p>body</p></details>;`,
+      );
+      expect(v).toHaveLength(0);
+    });
+
+    it("JSX: nested <details> inside <details> does not flag", () => {
+      const v = runRule(
+        rule,
+        `const X = <details><summary>Outer</summary><details><summary>Inner</summary></details></details>;`,
+      );
+      expect(v).toHaveLength(0);
+    });
+  });
+
   describe("rule metadata", () => {
     it("declares wcag22:4.1.2 and wcag21:4.1.2", () => {
       expect(rule.satisfies).toContain("wcag22:4.1.2");

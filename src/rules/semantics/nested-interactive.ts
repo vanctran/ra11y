@@ -153,12 +153,40 @@ function findInteractiveHtmlAncestor(
   element: HtmlElement,
   parentOf: ReadonlyMap<HtmlElement, HtmlElement>,
 ): HtmlElement | null {
+  const elementTag = element.tagName.toLowerCase();
   let parent = parentOf.get(element);
   while (parent) {
-    if (isInteractiveHtml(parent)) return parent;
+    if (isInteractiveHtml(parent)) {
+      if (!isAllowedNativeNesting(elementTag, parent.tagName.toLowerCase())) return parent;
+    }
     parent = parentOf.get(parent);
   }
   return null;
+}
+
+/**
+ * Native HTML relationships where the inner "interactive" element is
+ * spec-required or spec-allowed to sit inside the outer one:
+ *
+ *   <details><summary></summary></details>
+ *     summary is the defined activation surface for details. This is
+ *     not two nested controls — it is one disclosure widget with a
+ *     header. Per WHATWG HTML 4.11.2 / 4.11.3.
+ *
+ *   <details><details></details></details>
+ *     details is flow content and may be nested. Each inner details
+ *     has its own summary; activation is independent. Per WHATWG HTML
+ *     4.11.2 (flow content model).
+ *
+ * Crucially this is NOT a "heuristic" about what the author might have
+ * meant — both nestings are literally defined by the HTML spec. A
+ * `<summary>` outside a `<details>` is meaningless; so too is a
+ * `<details>`'s activation without its `<summary>`.
+ */
+function isAllowedNativeNesting(elementTag: string, ancestorTag: string): boolean {
+  if (elementTag === "summary" && ancestorTag === "details") return true;
+  if (elementTag === "details" && ancestorTag === "details") return true;
+  return false;
 }
 
 function isInteractiveHtml(element: HtmlElement): boolean {
@@ -232,11 +260,14 @@ function findInteractiveJsxAncestor(
   element: JsxElement,
   parentOf: ReadonlyMap<JsxElement, JsxElement>,
 ): JsxElement | null {
+  const elementTag = element.tagName.toLowerCase();
   let parent = parentOf.get(element);
   while (parent) {
     // PascalCase components are opaque — don't traverse through them.
     if (isJsxPascalCase(parent.tagName)) return null;
-    if (isInteractiveJsx(parent)) return parent;
+    if (isInteractiveJsx(parent)) {
+      if (!isAllowedNativeNesting(elementTag, parent.tagName.toLowerCase())) return parent;
+    }
     parent = parentOf.get(parent);
   }
   return null;
