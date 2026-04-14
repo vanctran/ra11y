@@ -105,6 +105,26 @@ describe("rule semantics/empty-heading", () => {
     });
   });
 
+  describe("JSX: primitive component definition (info, not error)", () => {
+    it("empty <h1> with spread props emits info, not error", () => {
+      const v = runRule(rule, `const H1 = (props) => <h1 {...props} />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+      expect(v[0]?.message).toContain("spread");
+    });
+
+    it("empty <h2> without spread stays an error", () => {
+      const v = runRule(rule, `const X = <h2 />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("error");
+    });
+
+    it("<h3> with spread and children emits nothing (children resolve it)", () => {
+      const v = runRule(rule, `const X = <h3 {...props}>{children}</h3>;`);
+      expect(v).toHaveLength(0);
+    });
+  });
+
   describe("edge cases", () => {
     it("flags multiple empty headings independently", () => {
       const v = runRule(rule, `<h1></h1><h2></h2><h3></h3>`, { filePath: "index.html" });

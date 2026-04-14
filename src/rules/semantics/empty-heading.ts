@@ -111,6 +111,15 @@ function checkJsx(module: TsxModule, emit: Emit): void {
   for (const tag of HEADING_TAGS) {
     for (const element of findJsxElementsByTag(module, tag)) {
       if (hasAccessibleContentJsx(element)) continue;
+      if (element.hasSpreadProps) {
+        emitPrimitiveViolation(
+          element.tagName,
+          element.loc.start.line,
+          element.loc.start.column,
+          emit,
+        );
+        continue;
+      }
       emitViolation(element.tagName, element.loc.start.line, element.loc.start.column, emit);
     }
   }
@@ -158,5 +167,14 @@ function emitViolation(tagName: string, line: number, column: number, emit: Emit
     location: { filePath: "", line, column },
     message: `<${tagName}> is empty — it appears in the heading outline but describes no topic or purpose.`,
     suggestion: `Add descriptive text inside <${tagName}> that summarizes the section it introduces. If the heading is used for visual styling only, replace it with a styled <p> or <div> and apply CSS to achieve the same appearance.`,
+  });
+}
+
+function emitPrimitiveViolation(tagName: string, line: number, column: number, emit: Emit): void {
+  emit({
+    severity: "info",
+    location: { filePath: "", line, column },
+    message: `<${tagName}> has no visible children but receives {...spread} props — this looks like a component primitive (MDX override, styled heading). Whether the heading is empty at render time depends on what the caller passes. Verify at usage sites.`,
+    suggestion: `If the component is only ever called with children, this is fine — add \`{/* ra11y-disable semantics/empty-heading */}\` at the top of the file to silence this info note. Otherwise ensure every call site passes text content.`,
   });
 }
