@@ -1,2 +1,8 @@
 commit	metric	aux	status	description
 7438b29	96	-	keep	baseline
+cfdd501	98	-	keep	section-headings finder for wcag22:2.4.10
+48f60bd	99	refactor	keep	redundant-entry finder for wcag22:3.3.7
+7a3ea81	103	-	keep	images-of-text finder for wcag22:1.4.5
+55bf3cf	107	-	keep	error-suggestion finder for wcag22:3.3.3
+49325d7	111	split	keep	multiple-ways finder for wcag22:2.4.5
+3ae4f72	115	+claude-tests	keep	error-prevention finder for wcag22:3.3.4
