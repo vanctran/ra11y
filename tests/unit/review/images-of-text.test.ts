@@ -72,6 +72,9 @@ describe("review/images-of-text", () => {
     expect(ids.has("wcag21:1.4.5")).toBe(true);
     expect(ids.has("section508:1.4.5")).toBe(true);
     expect(ids.has("en301549:9.1.4.5")).toBe(true);
-    expect(out.length).toBe(4);
+    // 1.4.9 (AAA "no exception") shares detection with 1.4.5.
+    expect(ids.has("wcag22:1.4.9")).toBe(true);
+    expect(ids.has("wcag21:1.4.9")).toBe(true);
+    expect(out.length).toBe(6);
   });
 });

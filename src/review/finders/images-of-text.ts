@@ -1,7 +1,9 @@
 /**
  * Candidate finder: review/images-of-text
- * Criteria: wcag22:1.4.5, wcag21:1.4.5, section508:1.4.5, en301549:9.1.4.5
+ * Criteria: wcag22:1.4.5, wcag21:1.4.5, section508:1.4.5, en301549:9.1.4.5,
+ *           wcag22:1.4.9, wcag21:1.4.9 (AAA — "Images of Text (No Exception)")
  * Spec: https://www.w3.org/TR/WCAG22/#images-of-text
+ *       https://www.w3.org/TR/WCAG22/#images-of-text-no-exception
  *
  * Surfaces `<img>` elements that look like baked-in text:
  *   - short alt text (1-5 words) repeated in surrounding visible text
@@ -39,6 +41,13 @@ const CRITERION_IDS = [
   "wcag21:1.4.5",
   "section508:1.4.5",
   "en301549:9.1.4.5",
+  // 1.4.9 is the AAA "no exception" variant. Detection signal is
+  // identical — the question "is this text baked into an image?" is the
+  // same; only the permitted-exceptions answer-space differs. At AAA a
+  // logotype is no longer an exception, so every candidate demands
+  // review, not just ones that look non-logo.
+  "wcag22:1.4.9",
+  "wcag21:1.4.9",
 ] as const;
 
 const IMAGE_OF_TEXT_HINT = /\b(logo|banner|heading|title|header)\b/;
