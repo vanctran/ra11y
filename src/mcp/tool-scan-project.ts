@@ -200,7 +200,7 @@ function suggestNextStep(pass: boolean, mode: string): string {
       ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
       : "";
   if (pass) {
-    return `Automated checks clean. Call \`coverage\` to see how many WCAG criteria are inherently manual, then \`checklist\` for the evaluation prompts and candidate source locations.${iterativeTip} To gate commits on this, wire \`ra11y scan --changed\` into lint-staged or a pre-commit hook — it scans only git-staged files, so feedback is near-instant.`;
+    return `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${iterativeTip} To gate commits on this, wire \`ra11y scan --changed\` into lint-staged or a pre-commit hook — it scans only git-staged files, so feedback is near-instant. Caveat: runtime checks (focus traps, live regions, ARIA state, post-render contrast) are out of scope here; pair with axe-core in Playwright/Vitest for the runtime half. Do not claim "a11y clean" from this result alone.`;
   }
   return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${iterativeTip}`;
 }

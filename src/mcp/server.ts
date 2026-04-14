@@ -51,15 +51,17 @@ const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "ra11y";
 const SERVER_VERSION = "0.1.0";
 
-const SERVER_INSTRUCTIONS =
-  "New or noisy repo → `scan_project`. Clean repo → `coverage` + `checklist` for the manual-review half. " +
-  "Automated clean ≠ WCAG compliant; runtime checks (live regions, focus traps, ARIA state) live in " +
-  "your Playwright/Jest-DOM suite via axe-core, not here. " +
-  "Review candidates are questions to investigate (read the cited file, decide), not failures to report — " +
-  "the tool already filters by likelyIrrelevant and uniquePerCriterion, so don't post-hoc downgrade or " +
-  "suppress them in your own output. Silence at the source via `<!-- ra11y-disable -->` (HTML/JSX) only when " +
-  "genuinely N/A. Verbose `meta` fields (configSource, activeNativeWrappers, rulesEvaluated, filesByExtension) " +
-  "are scan-confidence telemetry — pass them through when explaining a result.";
+const SERVER_INSTRUCTIONS = [
+  "Workflow:",
+  "  1. `scan_project` for a project-wide audit, or `scan` / `scan_file` / `--changed` for narrower passes.",
+  "  2. If automated is clean, call `checklist` for the manual-review half (grounded candidates with file:line).",
+  "  3. For each candidate, read the cited file and decide — don't post-hoc filter or downgrade candidates in your own output; the tool already prunes by likelyIrrelevant and uniquePerCriterion.",
+  "  4. Dismiss by reading. Suppress at the source only when genuinely N/A via `<!-- ra11y-disable -->` / `{/* ra11y-disable */}` (accepts rule IDs like `keyboard/handler-missing` and criterion IDs like `wcag22:2.4.5`).",
+  "",
+  "Out of scope: runtime checks (live regions, focus traps, ARIA state, post-render contrast) live in your Playwright/Vitest suite via axe-core. Automated clean here ≠ WCAG compliant.",
+  "",
+  "Consumption tips: verbose `meta` fields (configSource, activeNativeWrappers, rulesEvaluated, filesByExtension) are scan-confidence telemetry — pass them through when explaining a result. `nextStep` on each response tells you the canonical next call.",
+].join("\n");
 
 // ─── Tool index ─────────────────────────────────────────────────────────────
 
