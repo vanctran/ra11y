@@ -6,6 +6,7 @@
  * on tool schemas and handler logic.
  */
 
+import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
@@ -238,18 +239,22 @@ export interface NativeWrapperSources {
   readonly fromSession: readonly string[];
 }
 
-export function runScanAndFormat(
+export async function runScanAndFormat(
   files: readonly ParsedFile[],
   session: McpSession,
   enabled: readonly string[],
   minSeverity: string | undefined,
   ruleSettings?: Readonly<Record<string, string>>,
   wrapperSources?: NativeWrapperSources,
-): {
+  // Optional project root used to widen wrapper-usage detection into
+  // excluded paths (stories, dev-tools, tests). Without it, wrappers
+  // referenced only from those paths are wrongly reported unused.
+  cwd?: string,
+): Promise<{
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
   readonly filesScanned: number;
-} {
+}> {
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
   const { result, report } = runScan({
@@ -266,8 +271,7 @@ export function runScanAndFormat(
   };
   const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession])];
   const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
-  const usedWrappers = collectUsedWrappers(files, wrappers);
-  const unusedWrappers = wrappers.filter((w) => !usedWrappers.has(w));
+  const unusedWrappers = await resolveUnusedWrappers(wrappers, files, cwd);
   // Names in session but not in file — flag so agents notice their ad-hoc
   // overrides masking the on-disk config. This is exactly the "edit the
   // file, session state silently keeps old entries" footgun.
@@ -359,7 +363,7 @@ export function runScanAndFormat(
       ...(unusedWrappers.length > 0
         ? {
             unusedNativeWrappers: unusedWrappers,
-            unusedNativeWrappersNote: `Components listed in nativeWrappers that weren't referenced anywhere in the scanned files. Not an error — either the component was renamed/deleted and the config entry is stale, or the scan scope didn't reach usages. If the component still exists, remove the entry from ra11y.config.ts; if it moved, update the name.`,
+            unusedNativeWrappersNote: `Components listed in nativeWrappers that weren't found in any scanned or scan-adjacent source file under cwd. Not an error — the component may live in a path the scan never reaches (outside the project root, or under a custom exclude). If the component was renamed or deleted, update or remove the entry in ra11y.config.ts; otherwise ignore.`,
           }
         : {}),
     },
@@ -425,6 +429,73 @@ function dropWrapperNoise(
     return !(name && allow.has(name));
   });
   return { violations: filtered };
+}
+
+/**
+ * Returns the wrappers that appear nowhere — neither in the scanned
+ * files (AST-level check) nor, when a project root is given, in paths
+ * the scanner excluded by default (text-level check). Split out from
+ * runScanAndFormat to keep that function's cognitive complexity under
+ * the biome limit.
+ */
+async function resolveUnusedWrappers(
+  wrappers: readonly string[],
+  files: readonly ParsedFile[],
+  cwd: string | undefined,
+): Promise<readonly string[]> {
+  if (wrappers.length === 0) return [];
+  const used = new Set(collectUsedWrappers(files, wrappers));
+  const stillCandidate = wrappers.filter((w) => !used.has(w));
+  if (cwd && stillCandidate.length > 0) {
+    const scanned = new Set(files.map((f) => f.filePath));
+    const widened = await findWrappersInExcludedSources(cwd, stillCandidate, scanned);
+    for (const name of widened) used.add(name);
+  }
+  return wrappers.filter((w) => !used.has(w));
+}
+
+/**
+ * Text-based best-effort search for wrapper usages in files the scan
+ * excluded (stories, dev-tools, tests). Matches `<Wrapper ` or `<Wrapper>`
+ * or `<Wrapper/>` as a whole-token. Cheap: reads each file once, regex
+ * short-circuits on first hit per wrapper.
+ *
+ * This is a transparency fix, not a correctness-critical signal — a
+ * false negative only means we warn about a config entry that isn't
+ * actually stale, which is exactly the Leela feedback we're addressing.
+ */
+async function findWrappersInExcludedSources(
+  cwd: string,
+  candidates: readonly string[],
+  alreadyScanned: ReadonlySet<string>,
+): Promise<ReadonlySet<string>> {
+  const found = new Set<string>();
+  const remaining = new Set(candidates);
+  // Re-discover with every default exclusion turned off so we see
+  // stories/dev-tools/tests. .gitignore still applies — we don't want
+  // to read node_modules or build output.
+  const all = await discoverFiles([cwd], { includeTests: true });
+  for (const path of all) {
+    if (remaining.size === 0) break;
+    if (alreadyScanned.has(path)) continue;
+    if (!/\.(tsx|jsx|ts|js)$/i.test(path)) continue;
+    let source: string;
+    try {
+      source = await readFile(path, "utf8");
+    } catch {
+      continue;
+    }
+    for (const name of remaining) {
+      // `<Name` followed by whitespace, `/`, or `>` — avoids matching
+      // substrings like `<NameMore>` or `ActionButtonGroup`.
+      const pattern = new RegExp(`<${name}(?=[\\s/>])`);
+      if (pattern.test(source)) {
+        found.add(name);
+        remaining.delete(name);
+      }
+    }
+  }
+  return found;
 }
 
 /**

@@ -85,7 +85,7 @@ export const scanProjectTool: McpTool = {
       });
     }
     const t1 = performance.now();
-    const { formatted } = runScanAndFormat(
+    const { formatted } = await runScanAndFormat(
       files,
       session,
       standards,
@@ -95,6 +95,7 @@ export const scanProjectTool: McpTool = {
         fromFile: projectConfig.nativeWrappers,
         fromSession: session.config.nativeWrappers,
       },
+      root,
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,

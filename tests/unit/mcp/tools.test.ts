@@ -418,6 +418,42 @@ describe("MCP tool: configure", () => {
     };
     expect(data.meta.unusedNativeWrappers).toEqual(["GhostWrapper"]);
   });
+
+  it("unusedNativeWrappers widens detection into excluded paths (stories, dev-tools)", async () => {
+    // Regression for Leela feedback: ActionButton was only referenced
+    // from dev-tools/ and *.stories.*, both default-excluded. The
+    // narrow AST-only detector marked it unused even though the real
+    // code used it — just not in files ra11y scans by default.
+    const { mkdir, mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapper-widen-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.ts"),
+      `export default { nativeWrappers: ["ActionButton", "TrulyGhost"] };\n`,
+    );
+    // No in-scope usage — ActionButton lives only in dev-tools/.
+    const devToolsDir = joinPath(dir, "dev-tools");
+    await mkdir(devToolsDir);
+    await writeFile(
+      joinPath(devToolsDir, "panel.tsx"),
+      `export const Panel = () => <ActionButton label="Reload" />;\n`,
+    );
+    // Keep an in-scope .tsx file so the scan has something to parse.
+    await writeFile(joinPath(dir, "app.tsx"), `export const App = () => <div />;\n`);
+
+    const scanTool = findTool("scan");
+    const session = new McpSession();
+    const result = await scanTool.handler({ paths: [dir], cwd: dir }, session);
+
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { unusedNativeWrappers?: string[] };
+    };
+    // ActionButton present in excluded dev-tools/ → not unused.
+    // TrulyGhost present nowhere → still unused.
+    expect(data.meta.unusedNativeWrappers).toEqual(["TrulyGhost"]);
+  });
 });
 
 describe("MCP tool: coverage", () => {

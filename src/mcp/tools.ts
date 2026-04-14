@@ -99,7 +99,7 @@ const scanTool: McpTool = {
       });
     }
 
-    const { formatted } = runScanAndFormat(
+    const { formatted } = await runScanAndFormat(
       files,
       session,
       standards,
@@ -109,6 +109,7 @@ const scanTool: McpTool = {
         fromFile: projectConfig.nativeWrappers,
         fromSession: session.config.nativeWrappers,
       },
+      cwd,
     );
 
     return textResult({
