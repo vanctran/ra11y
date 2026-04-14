@@ -102,6 +102,21 @@ describe("rule forms/labels-required", () => {
     });
   });
 
+  describe("JSX: primitive component (info, not error)", () => {
+    it("unlabeled <input> with spread props emits info, not error", () => {
+      const v = runRule(rule, `const Input = (props) => <input {...props} />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+      expect(v[0]?.message).toContain("spread");
+    });
+
+    it("unlabeled <input> without spread stays an error", () => {
+      const v = runRule(rule, `const X = <input type="text" />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("error");
+    });
+  });
+
   it("cites wcag22:3.3.2 and wcag21:3.3.2", () => {
     expect(rule.satisfies).toContain("wcag22:3.3.2");
     expect(rule.satisfies).toContain("wcag21:3.3.2");

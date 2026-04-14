@@ -189,22 +189,29 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     for (const el of findJsxElementsByTag(module, tag)) {
       if (isExcludedJsxControl(el)) continue;
       if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
-      emit({
-        severity: "error",
-        location: {
-          filePath: "",
-          line: el.loc.start.line,
-          column: el.loc.start.column,
-        },
-        message: buildMessage(el.tagName, getJsxAttributeString(el, "type")),
-        suggestion: buildSuggestion(
-          el.tagName,
-          getJsxAttributeString(el, "type"),
-          getJsxAttributeString(el, "id"),
-        ),
-      });
+      emit(buildJsxViolation(el));
     }
   }
+}
+
+function buildJsxViolation(el: JsxElement) {
+  const type = getJsxAttributeString(el, "type");
+  const id = getJsxAttributeString(el, "id");
+  const location = { filePath: "", line: el.loc.start.line, column: el.loc.start.column };
+  if (el.hasSpreadProps) {
+    return {
+      severity: "info" as const,
+      location,
+      message: `<${el.tagName}${type ? ` type="${type}"` : ""}> has no static accessible name but receives {...spread} props — this looks like a component primitive (Input/Textarea wrapper). Whether the control is labeled at render time depends on what the caller passes (aria-label, id matched by an external <label>, etc.). Verify at usage sites.`,
+      suggestion: `If the primitive is only consumed by callers that pass a label or aria-label, this is fine — add \`{/* ra11y-disable forms/labels-required */}\` at the top of the file to silence this info note. Otherwise require callers to pass a label via props.`,
+    };
+  }
+  return {
+    severity: "error" as const,
+    location,
+    message: buildMessage(el.tagName, type),
+    suggestion: buildSuggestion(el.tagName, type, id),
+  };
 }
 
 function collectJsxLabelHtmlFors(module: TsxModule): ReadonlySet<string> {
