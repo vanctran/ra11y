@@ -6,6 +6,7 @@
 import type { CandidateFinder } from "../types/review.ts";
 import { finder as captcha } from "./finders/captcha.ts";
 import { finder as errorIdentification } from "./finders/error-identification.ts";
+import { finder as errorPrevention } from "./finders/error-prevention.ts";
 import { finder as errorSuggestion } from "./finders/error-suggestion.ts";
 import { finder as imagesOfText } from "./finders/images-of-text.ts";
 import { finder as meaningfulSequence } from "./finders/meaningful-sequence.ts";
@@ -22,12 +23,13 @@ import { finder as useOfColor } from "./finders/use-of-color.ts";
 export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   captcha,
   errorIdentification,
+  errorPrevention,
   errorSuggestion,
   imagesOfText,
   meaningfulSequence,
   mediaAlternatives,
-  multipleWays,
   motionActuation,
+  multipleWays,
   noKeyboardTrap,
   onInputChange,
   redundantEntry,
