@@ -54,7 +54,12 @@ const SERVER_VERSION = "0.1.0";
 const SERVER_INSTRUCTIONS =
   "New or noisy repo → `scan_project`. Clean repo → `coverage` + `checklist` for the manual-review half. " +
   "Automated clean ≠ WCAG compliant; runtime checks (live regions, focus traps, ARIA state) live in " +
-  "your Playwright/Jest-DOM suite via axe-core, not here.";
+  "your Playwright/Jest-DOM suite via axe-core, not here. " +
+  "Review candidates are questions to investigate (read the cited file, decide), not failures to report — " +
+  "the tool already filters by likelyIrrelevant and uniquePerCriterion, so don't post-hoc downgrade or " +
+  "suppress them in your own output. Silence at the source via `<!-- ra11y-disable -->` (HTML/JSX) only when " +
+  "genuinely N/A. Verbose `meta` fields (configSource, activeNativeWrappers, rulesEvaluated, filesByExtension) " +
+  "are scan-confidence telemetry — pass them through when explaining a result.";
 
 // ─── Tool index ─────────────────────────────────────────────────────────────
 
