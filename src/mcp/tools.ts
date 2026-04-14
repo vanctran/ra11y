@@ -22,6 +22,7 @@ import { reviewCandidatesTool } from "./tool-review-candidates.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import {
   applyRuleSettings,
+  buildAnalysisCoverage,
   buildConfigureOpts,
   buildSourceContext,
   errorResult,
@@ -76,6 +77,11 @@ const scanTool: McpTool = {
           description:
             "Base directory for resolving relative paths. Pass your current working directory (e.g. a git worktree) to avoid picking up the server's spawn-time cwd.",
         },
+        verboseMeta: {
+          type: "boolean",
+          description:
+            "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
+        },
       },
       required: ["paths"],
     },
@@ -110,6 +116,7 @@ const scanTool: McpTool = {
         fromSession: session.config.nativeWrappers,
       },
       cwd,
+      params["verboseMeta"] === true,
     );
 
     return textResult({
@@ -152,6 +159,11 @@ const scanFileTool: McpTool = {
           type: "string",
           description: "Base directory for resolving the path if it is relative.",
         },
+        verboseMeta: {
+          type: "boolean",
+          description:
+            "When true, the response includes an `analysisCoverage` block with parse-error and opaque-component details, plus `rulesByExtension` so you can verify which rules ran on this file's type. Off by default.",
+        },
       },
       required: ["path"],
     },
@@ -169,15 +181,20 @@ const scanFileTool: McpTool = {
     }
 
     const standards = resolveStandards(strParam(params, "standard"), session);
+    const activeRules = applyRuleSettings(BUILTIN_RULES, session.config.rules);
     const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
-      rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
+      rules: activeRules,
       enabled: standards,
       files: [parsed],
       finders: BUILTIN_CANDIDATE_FINDERS,
     });
 
     const filtered = filterBySeverity(result.violations, strParam(params, "minSeverity"));
+    const verbose = params["verboseMeta"] === true;
+    const coverage = verbose
+      ? buildAnalysisCoverage([parsed], session.config.nativeWrappers, activeRules, true)
+      : undefined;
 
     return textResult({
       findings: filtered.map(formatFinding),
@@ -187,6 +204,7 @@ const scanFileTool: McpTool = {
         reason: c.reason,
         snippet: c.snippet,
       })),
+      ...(coverage ? { meta: coverage } : {}),
     });
   },
 };

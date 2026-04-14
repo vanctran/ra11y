@@ -56,6 +56,11 @@ export const scanProjectTool: McpTool = {
           description:
             "Git ref (e.g. 'main', 'HEAD~1'). Scans only files that differ between the ref and HEAD, plus uncommitted WIP. Ideal for CI on a PR diff.",
         },
+        verboseMeta: {
+          type: "boolean",
+          description:
+            "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -96,6 +101,7 @@ export const scanProjectTool: McpTool = {
         fromSession: session.config.nativeWrappers,
       },
       root,
+      params["verboseMeta"] === true,
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,

@@ -128,6 +128,30 @@ describe("MCP tool: scan", () => {
     const result = await tool.handler({ paths: [] }, session);
     expect(result.isError).toBe(true);
   });
+
+  it("omits verbose arrays by default and surfaces them under verboseMeta", async () => {
+    const tool = findTool("scan");
+    const session = new McpSession();
+    const terse = await tool.handler({ paths: [BAD_ALT] }, session);
+    const terseData = JSON.parse(terse.content[0].text) as {
+      meta: { analysisCoverage?: Record<string, unknown> };
+    };
+    const terseCov = terseData.meta.analysisCoverage ?? {};
+    expect(terseCov.parseErrorFiles).toBeUndefined();
+    expect(terseCov.opaqueCustomComponentNames).toBeUndefined();
+    expect(terseCov.rulesByExtension).toBeUndefined();
+
+    const verbose = await tool.handler({ paths: [BAD_ALT], verboseMeta: true }, session);
+    const verboseData = JSON.parse(verbose.content[0].text) as {
+      meta: { analysisCoverage?: Record<string, unknown> };
+    };
+    const cov = verboseData.meta.analysisCoverage ?? {};
+    // BAD_ALT is a .html fixture — expect rulesByExtension to include .html.
+    expect(cov.rulesByExtension).toBeDefined();
+    const byExt = cov.rulesByExtension as Record<string, string[]>;
+    expect(Array.isArray(byExt[".html"])).toBe(true);
+    expect(byExt[".html"].length).toBeGreaterThan(0);
+  });
 });
 
 describe("MCP tool: scan_project", () => {
