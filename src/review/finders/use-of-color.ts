@@ -50,6 +50,16 @@ const STATUS_WORD_TEXT =
 /** JSX components conventionally rendering an icon or glyph. */
 const ICON_COMPONENT_TAG = /^(?:[A-Z]\w*)?(?:Icon|Glyph|Symbol|Svg|Image)$/;
 
+/**
+ * Conventional shape-signal glyphs that convey meaning by shape alone —
+ * a G182 "additional visual cue" for sighted users without color
+ * perception. Geometric-only shapes (●, ■, ▲ etc.) are deliberately
+ * excluded: a colorblind user sees a gray dot and learns nothing from
+ * the shape, so those still need review. Keep this list conservative —
+ * over-including weakens F81 recall.
+ */
+const SHAPE_SIGNAL_GLYPH = /^(?:\*|\?|✓|✔|✗|✘|✖|×|⚠|→|←|↑|↓)$/;
+
 export const finder = defineCandidateFinder({
   id: "review/use-of-color",
   criterionIds: [...CRITERION_IDS],
@@ -108,6 +118,7 @@ function htmlElementHasNonColorSignal(el: HtmlElement): boolean {
   if (hasHtmlAttribute(el, "title")) return true;
   const text = collectHtmlText(el);
   if (text && STATUS_WORD_TEXT.test(text)) return true;
+  if (text && SHAPE_SIGNAL_GLYPH.test(text.trim())) return true;
   for (const child of el.children) {
     if (child.kind === "HtmlElement") {
       const tag = child.tagName.toLowerCase();
@@ -122,6 +133,7 @@ function jsxElementHasNonColorSignal(el: JsxElement): boolean {
   if (hasJsxAttribute(el, "title")) return true;
   const text = jsxTextContent(el);
   if (text && STATUS_WORD_TEXT.test(text)) return true;
+  if (text && SHAPE_SIGNAL_GLYPH.test(text.trim())) return true;
   for (const child of el.children) {
     if (child.kind === "JsxElement" && ICON_COMPONENT_TAG.test(child.tagName)) return true;
   }

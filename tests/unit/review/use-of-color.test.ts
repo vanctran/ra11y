@@ -56,6 +56,32 @@ describe("review/use-of-color", () => {
     expect(out).toEqual([]);
   });
 
+  it("does not flag a shape-signal glyph (required asterisk idiom)", () => {
+    // `*` conveys "required" by shape/convention alone — it's a G182
+    // additional visual cue, so a sighted colorblind user reading the
+    // form gets the signal independent of color.
+    const source = `const x = <span className="text-error">*</span>;`;
+    const out = runFinder(finder, source);
+    expect(out).toEqual([]);
+  });
+
+  it("does not flag shape-signal glyphs (✓ / ✗ / ⚠ / →)", () => {
+    for (const glyph of ["✓", "✗", "⚠", "→"]) {
+      const source = `const x = <span className="text-red-600">${glyph}</span>;`;
+      expect(runFinder(finder, source)).toEqual([]);
+    }
+  });
+
+  it("still flags a geometric-only shape that carries no meaning by shape", () => {
+    // Counterexample from the Codex review of the reverted aria-hidden
+    // commit: a red dot paired with sr-only text. The dot isn't a
+    // shape signal — a colorblind user sees a gray mark and learns
+    // nothing from the shape alone. Must stay flagged (WCAG F81).
+    const source = `const x = <span className="text-red-500">●</span>;`;
+    const out = runFinder(finder, source);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
   it("emits one candidate per matching criterion id", () => {
     const source = `const x = <span className="text-red-600" />;`;
     const out = runFinder(finder, source);
