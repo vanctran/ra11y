@@ -25,8 +25,9 @@ ra11y's primary consumer is an AI agent calling the MCP tools — not a human re
 - **Verbose meta is signal, not clutter.** `configSource`, `configSearchedFrom`, `activeNativeWrappers`, `rulesEvaluated`, per-extension file counts — these are scan-confidence telemetry the agent actively uses to decide whether the scan had teeth and what to call next. Don't trim them to look terse.
 - **Review *candidates*, not assertions.** For manual criteria, return locations + a short `reason` that frames the question. Don't try to be smart about "what the user really meant" — agents are better at that than heuristics.
 - **One tool call should answer "what next?"** Each response carries `nextStep` hints, criterion IDs, and counts that match the other tools' counts. Cross-surface drift (`scan` says 21, `checklist` says 4) forces wasted round trips; invariants like the manual-review-count test exist to prevent this.
+- **No heuristic suppression, even for spec carve-outs.** WCAG's exemptions (logotypes, process-page exception, essential presentation) are conceptual rules — *detecting* whether a given element falls under one is a heuristic on weaker evidence than the agent has. An `<img>` with `alt="Acme logo"` might be a brand mark, or it might be a product shot the author mislabeled. A repo with three HTML files might be an SPA shell, or it might be the start of a content site. Our attribute-level snippet is not enough to make that call; the agent reading the whole file is. Encoding a heuristic as suppression replaces honest "please verify" with false confidence and risks silent false negatives on real violations. The deterministic escape hatch is the source-level disable pragma (`<!-- ra11y-disable wcag22:1.4.5 -->` / `{/* ra11y-disable wcag22:2.4.5 */}`) — once an agent investigates and dismisses, the pragma makes that dismissal durable. No guessing required. If a specific review candidate keeps drawing field-report complaints, the fix is better `reason` text (so the agent dismisses faster), not a finder-level carve-out.
 
-When a field report suggests "reduce noise," ask first: noise for whom? If the answer is "a human reviewer," the answer is usually no — the agent is the consumer and it wants the signal.
+When a field report suggests "reduce noise," ask first: noise for whom? If the answer is "a human reviewer," the answer is usually no — the agent is the consumer and it wants the signal. If the suggestion is "encode this spec exemption as a heuristic so the agent doesn't have to verify," the answer is also no — heuristic detection and spec carve-outs operate at different confidence levels, and the deterministic source-level disable is the correct mechanism.
 
 ## 2. Current stack (as of 2026-04-11)
 
@@ -353,6 +354,7 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 - Committing without a WCAG citation in the rule header. → CI rejects.
 - Tuning heuristics for "human reviewer fatigue." → the consumer is an agent (see § 1, Consumer model). Surface honestly with enough context for the agent to triage, instead of suppressing or downgrading.
 - Trimming `meta` fields to look terse. → those fields are scan-confidence telemetry the agent uses to plan its next call.
+- Encoding a WCAG exemption (logotype, process-page, essential presentation) as a heuristic suppression in a finder. → spec exemptions are conceptual; their *detection* from static analysis is a heuristic on weaker evidence than the agent has. Point users and agents at the criterion-level disable pragma instead: `<!-- ra11y-disable wcag22:X.Y.Z -->`. Heuristic suppression risks silent false negatives on real violations.
 
 ## 18. When in doubt
 
