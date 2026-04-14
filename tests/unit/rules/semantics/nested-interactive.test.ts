@@ -213,6 +213,32 @@ describe("rule semantics/nested-interactive", () => {
       );
       expect(v).toHaveLength(0);
     });
+
+    it("HTML: <a href> inside <details> panel body (outside <summary>) does not flag", () => {
+      const v = runRule(
+        rule,
+        `<details><summary>More</summary><ul><li><a href="/x">Link</a></li></ul></details>`,
+        { filePath: "a.html" },
+      );
+      expect(v).toHaveLength(0);
+    });
+
+    it("HTML: <a href> inside <summary> inside <details> DOES flag (summary is the activator)", () => {
+      const v = runRule(
+        rule,
+        `<details><summary><a href="/x">Link</a></summary><p>body</p></details>`,
+        { filePath: "a.html" },
+      );
+      expect(v.length).toBeGreaterThan(0);
+    });
+
+    it("JSX: <button> inside <details> panel body does not flag", () => {
+      const v = runRule(
+        rule,
+        `const X = <details><summary>More</summary><button>Action</button></details>;`,
+      );
+      expect(v).toHaveLength(0);
+    });
   });
 
   describe("rule metadata", () => {

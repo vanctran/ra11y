@@ -154,11 +154,18 @@ function findInteractiveHtmlAncestor(
   parentOf: ReadonlyMap<HtmlElement, HtmlElement>,
 ): HtmlElement | null {
   const elementTag = element.tagName.toLowerCase();
+  let walkedThroughSummary = elementTag === "summary";
   let parent = parentOf.get(element);
   while (parent) {
+    const parentTag = parent.tagName.toLowerCase();
     if (isInteractiveHtml(parent)) {
-      if (!isAllowedNativeNesting(elementTag, parent.tagName.toLowerCase())) return parent;
+      // <details>'s interactive surface is its <summary>. A descendant
+      // that reached <details> without passing through its summary is in
+      // the panel body — just flow content, not a nested control.
+      const detailsOk = parentTag === "details" && !walkedThroughSummary;
+      if (!(detailsOk || isAllowedNativeNesting(elementTag, parentTag))) return parent;
     }
+    if (parentTag === "summary") walkedThroughSummary = true;
     parent = parentOf.get(parent);
   }
   return null;
@@ -261,13 +268,17 @@ function findInteractiveJsxAncestor(
   parentOf: ReadonlyMap<JsxElement, JsxElement>,
 ): JsxElement | null {
   const elementTag = element.tagName.toLowerCase();
+  let walkedThroughSummary = elementTag === "summary";
   let parent = parentOf.get(element);
   while (parent) {
     // PascalCase components are opaque — don't traverse through them.
     if (isJsxPascalCase(parent.tagName)) return null;
+    const parentTag = parent.tagName.toLowerCase();
     if (isInteractiveJsx(parent)) {
-      if (!isAllowedNativeNesting(elementTag, parent.tagName.toLowerCase())) return parent;
+      const detailsOk = parentTag === "details" && !walkedThroughSummary;
+      if (!(detailsOk || isAllowedNativeNesting(elementTag, parentTag))) return parent;
     }
+    if (parentTag === "summary") walkedThroughSummary = true;
     parent = parentOf.get(parent);
   }
   return null;
