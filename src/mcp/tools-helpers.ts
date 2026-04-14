@@ -7,6 +7,7 @@
  */
 
 import { isAbsolute, resolve } from "node:path";
+import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
@@ -264,10 +265,8 @@ export function runScanAndFormat(
     fromSession: session.config.nativeWrappers,
   };
   const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession])];
-  const { violations: withoutWrapperNoise, usedWrappers } = dropWrapperNoise(
-    result.violations,
-    wrappers,
-  );
+  const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
+  const usedWrappers = collectUsedWrappers(files, wrappers);
   const unusedWrappers = wrappers.filter((w) => !usedWrappers.has(w));
   // Names in session but not in file — flag so agents notice their ad-hoc
   // overrides masking the on-disk config. This is exactly the "edit the
@@ -398,24 +397,42 @@ export function findStandard(standardId: string): Standard | undefined {
 function dropWrapperNoise(
   violations: readonly Violation[],
   nativeWrappers: readonly string[],
-): { readonly violations: readonly Violation[]; readonly usedWrappers: ReadonlySet<string> } {
+): { readonly violations: readonly Violation[] } {
   if (nativeWrappers.length === 0) {
-    return { violations, usedWrappers: new Set() };
+    return { violations };
   }
   const allow = new Set(nativeWrappers);
-  const used = new Set<string>();
   const filtered = violations.filter((v) => {
     if (v.ruleId !== "keyboard/handler-missing") return true;
     if (v.severity !== "info") return true;
     const match = /^<([A-Z][A-Za-z0-9]*)>/.exec(v.message);
     const name = match?.[1];
-    if (name && allow.has(name)) {
-      used.add(name);
-      return false;
-    }
-    return true;
+    return !(name && allow.has(name));
   });
-  return { violations: filtered, usedWrappers: used };
+  return { violations: filtered };
+}
+
+/**
+ * Walks every parsed TSX module for JSX element tag names matching a
+ * configured wrapper. A wrapper is "used" the moment it appears as a JSX
+ * element anywhere in the scanned source — independent of whether any
+ * rule fired against it. Without this, wrappers used with correct props
+ * (so keyboard/handler-missing never emits a suppressed info) were
+ * wrongly reported unused, pushing users to delete valid config entries.
+ */
+function collectUsedWrappers(
+  files: readonly ParsedFile[],
+  nativeWrappers: readonly string[],
+): ReadonlySet<string> {
+  const allow = new Set(nativeWrappers);
+  const used = new Set<string>();
+  for (const file of files) {
+    if (file.ast.language === "html" || file.ast.language === "css") continue;
+    for (const el of walkJsxElements(file.ast.root)) {
+      if (allow.has(el.tagName)) used.add(el.tagName);
+    }
+  }
+  return used;
 }
 
 // ─── Severity filtering ─────────────────────────────────────────────────────
