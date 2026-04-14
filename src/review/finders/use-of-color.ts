@@ -106,10 +106,6 @@ function getHtmlClass(el: HtmlElement): string | null {
 function htmlElementHasNonColorSignal(el: HtmlElement): boolean {
   if (hasHtmlAttribute(el, "aria-label")) return true;
   if (hasHtmlAttribute(el, "title")) return true;
-  // aria-hidden="true" means the author has excluded this node from the
-  // AT tree deliberately — typically paired with an sr-only sibling that
-  // carries the real signal (e.g., the red "*" + "(required)" idiom).
-  if (isAriaHidden(el)) return true;
   const text = collectHtmlText(el);
   if (text && STATUS_WORD_TEXT.test(text)) return true;
   for (const child of el.children) {
@@ -124,30 +120,10 @@ function htmlElementHasNonColorSignal(el: HtmlElement): boolean {
 function jsxElementHasNonColorSignal(el: JsxElement): boolean {
   if (hasJsxAttribute(el, "aria-label")) return true;
   if (hasJsxAttribute(el, "title")) return true;
-  if (isJsxAriaHidden(el)) return true;
   const text = jsxTextContent(el);
   if (text && STATUS_WORD_TEXT.test(text)) return true;
   for (const child of el.children) {
     if (child.kind === "JsxElement" && ICON_COMPONENT_TAG.test(child.tagName)) return true;
-  }
-  return false;
-}
-
-function isAriaHidden(el: HtmlElement): boolean {
-  for (const attr of el.attributes) {
-    if (attr.name.toLowerCase() === "aria-hidden" && attr.value?.toLowerCase() === "true") {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isJsxAriaHidden(el: JsxElement): boolean {
-  const value = getJsxAttributeString(el, "aria-hidden");
-  if (value === "true") return true;
-  // Shorthand <span aria-hidden /> reads as true per HTML boolean attrs.
-  for (const attr of el.attributes) {
-    if (attr.name === "aria-hidden" && attr.value === null) return true;
   }
   return false;
 }

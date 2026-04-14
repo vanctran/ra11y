@@ -56,22 +56,6 @@ describe("review/use-of-color", () => {
     expect(out).toEqual([]);
   });
 
-  it("does not flag a decorative colored element marked aria-hidden", () => {
-    // Required-indicator idiom: the red asterisk is aria-hidden, and a
-    // sibling sr-only span carries the real "(required)" label. The
-    // colored node is explicitly not the signal for AT users, so it
-    // should not surface for review.
-    const source = `const x = <span className="text-error" aria-hidden="true">*</span>;`;
-    const out = runFinder(finder, source);
-    expect(out).toEqual([]);
-  });
-
-  it("does not flag an HTML aria-hidden decorative glyph", () => {
-    const source = `<span class="text-red-500" aria-hidden="true">*</span>`;
-    const out = runFinder(finder, source, { filePath: "input.html" });
-    expect(out).toEqual([]);
-  });
-
   it("emits one candidate per matching criterion id", () => {
     const source = `const x = <span className="text-red-600" />;`;
     const out = runFinder(finder, source);
