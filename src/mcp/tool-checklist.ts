@@ -131,12 +131,31 @@ export const checklistTool: McpTool = {
     // to the scanned files (irrelevance is itself a finding). The prior
     // `totalManualCriteria` field counted everything and kept
     // contradicting the other surfaces.
+    // Coverage pass-rate numbers, inlined so an agent doesn't need a
+    // separate `coverage` call. Keyed by standardId when the session has
+    // more than one enabled; flattened when exactly one, so the common
+    // single-standard case stays shallow.
+    const automatedCoverage =
+      coverage.length === 1
+        ? {
+            standardId: coverage[0]?.standardId,
+            automatedCriteriaPassRate: coverage[0]?.automatedPassRate,
+            criteriaAutomatable: coverage[0]?.automatable,
+            criteriaAutomatablePassing: coverage[0]?.passing,
+          }
+        : coverage.map((c) => ({
+            standardId: c.standardId,
+            automatedCriteriaPassRate: c.automatedPassRate,
+            criteriaAutomatable: c.automatable,
+            criteriaAutomatablePassing: c.passing,
+          }));
     const summary = {
       manualReviewRequired: actionable.length + untargeted.length,
       actionable: actionable.length,
       untargeted: untargeted.length,
       likelyIrrelevant: likelyIrrelevant.length,
       byPriority,
+      automatedCoverage,
     };
 
     const showUntargeted = params["showUntargeted"] === true;

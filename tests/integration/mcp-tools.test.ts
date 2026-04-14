@@ -199,6 +199,32 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     );
   });
 
+  it("checklist.summary.automatedCoverage lets a single call replace coverage+checklist", async () => {
+    // Agents calling both `coverage` and `checklist` duplicate work;
+    // the checklist summary should carry enough pass-rate context to
+    // make one call sufficient for the common clean-repo path.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      summary: {
+        automatedCoverage: {
+          standardId: string;
+          automatedCriteriaPassRate: number;
+          criteriaAutomatable: number;
+          criteriaAutomatablePassing: number;
+        };
+      };
+    };
+    expect(body.summary.automatedCoverage.standardId).toBe("wcag22");
+    expect(typeof body.summary.automatedCoverage.automatedCriteriaPassRate).toBe("number");
+    expect(body.summary.automatedCoverage.criteriaAutomatable).toBeGreaterThan(0);
+    expect(body.summary.automatedCoverage.criteriaAutomatablePassing).toBeLessThanOrEqual(
+      body.summary.automatedCoverage.criteriaAutomatable,
+    );
+  });
+
   it("checklist includes untargeted when showUntargeted: true", async () => {
     const responses = await mcpSession([
       initMsg(1),
