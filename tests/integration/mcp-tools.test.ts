@@ -202,6 +202,36 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.plan.limitations).toBeUndefined();
   });
 
+  it("analysisCoverage reports opaque custom components and template directives", async () => {
+    // Honest telemetry about what static analysis didn't reach. Not a
+    // heuristic — structural gaps the agent needs to calibrate
+    // "automated clean" against.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-coverage-"));
+    await writeFile(
+      joinPath(dir, "app.tsx"),
+      "export const App = () => <><CustomButton/><FancyInput/></>;\n",
+    );
+    await writeFile(
+      joinPath(dir, "page.html"),
+      "<html><body>{% extends 'base.html' %}<main>hi</main></body></html>\n",
+    );
+
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [dir] })]);
+    const body = bodyOf(responses[1]) as {
+      meta: {
+        analysisCoverage?: {
+          opaqueCustomComponents?: number;
+          templateDirectivesFound?: readonly string[];
+        };
+      };
+    };
+    expect(body.meta.analysisCoverage?.opaqueCustomComponents).toBeGreaterThanOrEqual(2);
+    expect(body.meta.analysisCoverage?.templateDirectivesFound).toContain("jinja-or-liquid");
+  });
+
   it("activeNativeWrappersNote is no longer repeated in every response", async () => {
     // Regression: the 60-word prose note was context tax on every
     // scan. Semantics moved to the MCP server instructions block

@@ -377,6 +377,11 @@ export async function runScanAndFormat(
             unusedNativeWrappersNote: `Components listed in nativeWrappers that weren't found in any scanned or scan-adjacent source file under cwd. Not an error — the component may live in a path the scan never reaches (outside the project root, or under a custom exclude). If the component was renamed or deleted, update or remove the entry in ra11y.config.ts; otherwise ignore.`,
           }
         : {}),
+      // Honest meta about what static analysis couldn't reach, so the
+      // agent can calibrate confidence in "automated clean." Each entry
+      // is a structural gap, not a heuristic guess — the fields are
+      // empty/omitted when there's nothing to report.
+      ...buildAnalysisCoverage(files, wrappers),
     },
   };
 
@@ -463,6 +468,84 @@ async function resolveUnusedWrappers(
     for (const name of widened) used.add(name);
   }
   return wrappers.filter((w) => !used.has(w));
+}
+
+/**
+ * Honest telemetry about what static analysis couldn't reach. Not a
+ * heuristic — each field counts or names a structural gap directly:
+ *
+ *   - `opaqueCustomComponents`: distinct PascalCase JSX tags we saw but
+ *     don't look inside. Rules that need to verify an underlying
+ *     element (e.g. "does this button have an accessible name?") can't
+ *     see through custom components except via `nativeWrappers`.
+ *   - `templateDirectivesFound`: template-engine syntax (Jinja, Liquid,
+ *     Handlebars) we detected in scanned HTML. Cross-template `extends`
+ *     / `include` relationships are not resolved — a fragment with
+ *     "view above" may render inside a parent that changes the meaning.
+ *   - `parseErrorFileCount`: files where the parser couldn't produce a
+ *     clean AST. Rules still ran on the partial tree, but may have
+ *     missed violations below the parse-error point.
+ *
+ * Emitted only when at least one field has signal, so clean projects
+ * stay terse. Fields are independent — any subset may be present.
+ */
+interface CoverageAccumulator {
+  readonly opaqueComponents: Set<string>;
+  readonly templateEngines: Set<string>;
+  parseErrorFiles: number;
+}
+
+function buildAnalysisCoverage(
+  files: readonly ParsedFile[],
+  wrappers: readonly string[],
+): { analysisCoverage?: Record<string, unknown> } {
+  const acc: CoverageAccumulator = {
+    opaqueComponents: new Set(),
+    templateEngines: new Set(),
+    parseErrorFiles: 0,
+  };
+  const wrapperSet = new Set(wrappers);
+  for (const file of files) accumulateCoverageForFile(file, wrapperSet, acc);
+
+  const coverage: {
+    opaqueCustomComponents?: number;
+    templateDirectivesFound?: readonly string[];
+    parseErrorFileCount?: number;
+  } = {};
+  if (acc.opaqueComponents.size > 0) coverage.opaqueCustomComponents = acc.opaqueComponents.size;
+  if (acc.templateEngines.size > 0) {
+    coverage.templateDirectivesFound = [...acc.templateEngines].sort();
+  }
+  if (acc.parseErrorFiles > 0) coverage.parseErrorFileCount = acc.parseErrorFiles;
+  return Object.keys(coverage).length > 0 ? { analysisCoverage: coverage } : {};
+}
+
+function accumulateCoverageForFile(
+  file: ParsedFile,
+  wrapperSet: ReadonlySet<string>,
+  acc: CoverageAccumulator,
+): void {
+  if (file.ast.errors.length > 0) acc.parseErrorFiles += 1;
+  if (file.ast.language === "html") {
+    detectTemplateEngines(file.source, acc.templateEngines);
+    return;
+  }
+  if (file.ast.language === "css") return;
+  for (const el of walkJsxElements(file.ast.root)) {
+    if (/^[A-Z]/.test(el.tagName) && !wrapperSet.has(el.tagName)) {
+      acc.opaqueComponents.add(el.tagName);
+    }
+  }
+}
+
+function detectTemplateEngines(source: string, into: Set<string>): void {
+  // Cheap structural probes. Not trying to distinguish dialects
+  // precisely — the signal "this file isn't plain HTML" is what the
+  // agent needs to know cross-file reasoning is limited.
+  if (/\{%\s*(?:extends|include|block|if|for|set)\b/.test(source)) into.add("jinja-or-liquid");
+  if (/\{\{[^}]+\}\}/.test(source) && !into.has("jinja-or-liquid"))
+    into.add("handlebars-or-mustache");
+  if (/<%[=-]?[\s\S]*?%>/.test(source)) into.add("erb-or-ejs");
 }
 
 /**
