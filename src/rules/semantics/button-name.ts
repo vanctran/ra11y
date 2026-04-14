@@ -178,7 +178,7 @@ function checkJsx(module: TsxModule, emit: Emit): void {
 function checkJsxNativeButtons(module: TsxModule, emit: Emit): void {
   for (const button of findJsxElementsByTag(module, "button")) {
     if (hasAccessibleNameJsx(button)) continue;
-    emit(buildViolation("button", button.loc.start));
+    emit(buildJsxViolation("button", button));
   }
 }
 
@@ -187,7 +187,7 @@ function checkJsxInputButtons(module: TsxModule, emit: Emit): void {
     if (!isButtonInputJsx(input)) continue;
     if (hasInputButtonNameJsx(input)) continue;
     const type = getJsxAttributeString(input, "type") ?? "";
-    emit(buildViolation(`input type="${type}"`, input.loc.start));
+    emit(buildJsxViolation(`input type="${type}"`, input));
   }
 }
 
@@ -196,8 +196,26 @@ function checkJsxRoleButtons(module: TsxModule, emit: Emit): void {
     if (el.tagName === "button" || el.tagName === "input") continue;
     if (getJsxAttributeString(el, "role") !== "button") continue;
     if (hasAccessibleNameJsx(el)) continue;
-    emit(buildViolation(`${el.tagName} role="button"`, el.loc.start));
+    emit(buildJsxViolation(`${el.tagName} role="button"`, el));
   }
+}
+
+function buildJsxViolation(subject: string, el: JsxElement) {
+  const loc = { filePath: "", line: el.loc.start.line, column: el.loc.start.column };
+  if (el.hasSpreadProps) {
+    return {
+      severity: "info" as const,
+      location: loc,
+      message: `<${subject}> has no static accessible name but receives {...spread} props — this looks like a component primitive. Whether the button has a name at render time depends on what the caller passes (aria-label, visible text children). Verify at usage sites.`,
+      suggestion: `If the primitive is only consumed by callers that pass a label via props or children, this is fine — add \`{/* ra11y-disable semantics/button-name */}\` at the top of the file to silence this info note. Otherwise require callers to pass a name.`,
+    };
+  }
+  return {
+    severity: "error" as const,
+    location: loc,
+    message: `<${subject}> has no accessible name — screen readers will announce it as "button" with no action.`,
+    suggestion: `Add visible text, aria-label="…", or aria-labelledby="<id>". If the button is icon-only, aria-label is the standard fix: <button aria-label="Close dialog"><svg>…</svg></button>.`,
+  };
 }
 
 function hasAccessibleNameJsx(element: JsxElement): boolean {

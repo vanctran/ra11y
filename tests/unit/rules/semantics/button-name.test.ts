@@ -116,6 +116,27 @@ describe("rule semantics/button-name", () => {
     });
   });
 
+  describe("JSX: primitive component (info, not error)", () => {
+    it("unnamed <button> with spread props emits info", () => {
+      const v = runRule(rule, `const Btn = (props) => <button {...props} />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+      expect(v[0]?.message).toContain("spread");
+    });
+
+    it('<div role="button"> with spread props emits info', () => {
+      const v = runRule(rule, `const DropIndicator = (props) => <div role="button" {...props} />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+    });
+
+    it("unnamed <button> without spread stays an error", () => {
+      const v = runRule(rule, `const X = <button />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("error");
+    });
+  });
+
   describe("rule metadata", () => {
     it("declares wcag22:4.1.2 and wcag21:4.1.2", () => {
       expect(rule.satisfies).toContain("wcag22:4.1.2");
