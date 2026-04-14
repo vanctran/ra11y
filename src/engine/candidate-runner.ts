@@ -71,7 +71,7 @@ function collectCandidates(
 ): void {
   if (!Array.isArray(maybe)) return;
   for (const c of maybe) {
-    if (isLineWildcardDisabled(input.disableMap, c.location.line)) continue;
+    if (isCandidateDisabled(input.disableMap, c.location.line, c.criterionId)) continue;
     out.push({
       ...c,
       location: { ...c.location, filePath: input.filePath },
@@ -80,17 +80,20 @@ function collectCandidates(
 }
 
 /**
- * A file-level `<!-- ra11y-disable -->` (no matching enable) marks every
- * line with `*` in the disableMap. Candidates respect that wildcard so
- * users can silence the whole file — critical for Jinja templates, LLM
- * prompt fragments, and other non-rendered HTML the scanner would
- * otherwise produce review noise against.
+ * A candidate is silenced when its line carries a `*` wildcard (file-
+ * level disable) or its exact criterion ID (e.g. `wcag22:2.4.5`).
+ * Criterion-ID disables let agents mark a reviewed-and-accepted
+ * candidate at the source so the next scan doesn't re-surface it —
+ * without also silencing rule violations keyed by rule ID.
  */
-function isLineWildcardDisabled(
+function isCandidateDisabled(
   disableMap: ReadonlyMap<number, ReadonlySet<string>>,
   line: number,
+  criterionId: string,
 ): boolean {
-  return disableMap.get(line)?.has("*") ?? false;
+  const disabled = disableMap.get(line);
+  if (!disabled) return false;
+  return disabled.has("*") || disabled.has(criterionId);
 }
 
 function extractExtension(filePath: string): string {

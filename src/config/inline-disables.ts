@@ -18,7 +18,14 @@
  * Comment styles supported: `//`, `/* … *\/`, `<!-- … -->` (HTML).
  * JSX `{/* … *\/}` is also recognized.
  *
- * Returns a `(line → Set<ruleId>)` map the engine's context-builder
+ * Tokens in the directive are stored opaquely — they can be rule IDs
+ * (e.g. `keyboard/handler-missing`) to silence rule violations, or
+ * criterion IDs (e.g. `wcag22:2.4.5`) to silence review candidates.
+ * The rule-runner matches on rule IDs; the candidate-runner matches on
+ * criterion IDs. A bare `ra11y-disable` with no token yields `"*"`,
+ * which silences both.
+ *
+ * Returns a `(line → Set<token>)` map the engine's context-builder
  * consumes via `ctx.isDisabled(line, ruleId)`. A set containing
  * `"*"` means "all rules disabled on this line" and is also honored by
  * the candidate runner, so a file-level `<!-- ra11y-disable -->` at the

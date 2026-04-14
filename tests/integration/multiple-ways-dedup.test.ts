@@ -48,6 +48,35 @@ describe("candidate-runner — inline-disable suppresses candidates", () => {
     });
     expect(report.candidates ?? []).toEqual([]);
   });
+
+  it("`<!-- ra11y-disable wcag22:1.3.3 -->` silences one criterion without touching others", async () => {
+    // Agent-iterative use: after investigating a 1.3.3 candidate and
+    // judging it acceptable, a source-level dismissal keyed by
+    // criterion ID keeps the next scan from re-surfacing it — without
+    // also silencing the 1.4.5 image-of-text prompt on the line.
+    const { parseInlineDisables } = await import("../../src/config/inline-disables.ts");
+    const source =
+      "<!-- ra11y-disable wcag22:1.3.3 -->\n" +
+      "<p>consider the view above</p>\n" +
+      '<img src="logo.png" class="logo" alt="Brand" />\n';
+    const r = parseHtml(source);
+    const file: ParsedFile = {
+      filePath: "/p/mixed.html",
+      source,
+      ast: { language: "html", root: r.root, errors: r.errors },
+      disableMap: parseInlineDisables(source),
+    };
+    const { report } = runScan({
+      standards: [wcag22],
+      rules: [],
+      enabled: ["wcag22"],
+      files: [file],
+      finders: (await import("../../src/review/index.ts")).BUILTIN_CANDIDATE_FINDERS,
+    });
+    const ids = new Set((report.candidates ?? []).map((c) => c.criterionId));
+    expect(ids.has("wcag22:1.3.3")).toBe(false);
+    expect(ids.has("wcag22:1.4.5")).toBe(true);
+  });
 });
 
 describe("multiple-ways finder — uniquePerCriterion dedup", () => {
