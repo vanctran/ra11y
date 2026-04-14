@@ -41,6 +41,23 @@ describe("rule forms/non-empty-label", () => {
     });
   });
 
+  describe("JSX primitive component (info, not error)", () => {
+    it("empty <label> with spread props emits info", () => {
+      const v = runRule(rule, `const Label = (props) => <label {...props} />;`, {
+        filePath: "a.tsx",
+      });
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("info");
+      expect(v[0]?.message).toContain("spread");
+    });
+
+    it("empty <label> without spread stays an error", () => {
+      const v = runRule(rule, `const X = <label htmlFor="x" />;`, { filePath: "a.tsx" });
+      expect(v).toHaveLength(1);
+      expect(v[0]?.severity).toBe("error");
+    });
+  });
+
   it("cites WCAG 2.4.6 and 1.3.1 across both 2.1 and 2.2", () => {
     expect(rule.satisfies).toContain("wcag22:2.4.6");
     expect(rule.satisfies).toContain("wcag21:2.4.6");

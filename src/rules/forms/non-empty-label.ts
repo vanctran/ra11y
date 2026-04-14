@@ -61,12 +61,20 @@ export const rule = defineRule({
       return;
     }
     if (ctx.language === "tsx" || ctx.language === "jsx") {
-      for (const label of findJsxElementsByTag(ctx.ast as TsxModule, "label")) {
-        if (isEmptyJsx(label)) ctx.emit(emitJsx(label));
-      }
+      checkJsxLabels(ctx.ast as TsxModule, (v) => ctx.emit(v));
     }
   },
 });
+
+function checkJsxLabels(
+  module: TsxModule,
+  emit: (v: ReturnType<typeof emitJsx> | ReturnType<typeof emitJsxPrimitive>) => void,
+): void {
+  for (const label of findJsxElementsByTag(module, "label")) {
+    if (!isEmptyJsx(label)) continue;
+    emit(label.hasSpreadProps ? emitJsxPrimitive(label) : emitJsx(label));
+  }
+}
 
 function isEmptyHtml(label: HtmlElement): boolean {
   return htmlTextContent(label).trim().length === 0;
@@ -101,5 +109,20 @@ function emitJsx(label: JsxElement) {
     message: "<label> is empty — add visible text that describes the control it labels.",
     suggestion:
       'Put the human-readable label text as a child of the <label> element, e.g. <label htmlFor="email">Email</label>. If the label comes from a prop, assert it\'s non-empty at the component boundary.',
+  };
+}
+
+function emitJsxPrimitive(label: JsxElement) {
+  return {
+    severity: "info" as const,
+    location: {
+      filePath: "",
+      line: label.loc.start.line,
+      column: label.loc.start.column,
+    },
+    message:
+      "<label> has no visible children but receives {...spread} props — this looks like a component primitive. Whether the label is empty at render time depends on what the caller passes. Verify at usage sites.",
+    suggestion:
+      "If the component is only ever called with text children, this is fine — add `{/* ra11y-disable forms/non-empty-label */}` at the top of the file to silence this info note. Otherwise ensure every call site passes label text.",
   };
 }
