@@ -123,6 +123,33 @@ describe("rule semantics/label-in-name", () => {
     });
   });
 
+  describe("whitespace normalization", () => {
+    it("visible text split across lines by JSX indentation still matches aria-label", () => {
+      const v = runRule(
+        rule,
+        `const X = <button aria-label="Save changes">\n  Save\n  changes\n</button>;`,
+      );
+      expect(v).toHaveLength(0);
+    });
+
+    it("reports whitespace-normalized visible text in the message", () => {
+      const v = runRule(
+        rule,
+        `const X = <a aria-label="Go home">\n            Home\n            Page\n          </a>;`,
+      );
+      expect(v).toHaveLength(1);
+      expect(v[0]?.message).toContain("Home Page");
+      expect(v[0]?.message).not.toContain("\n");
+    });
+
+    it("suggestion mentions aria-hidden as a resolution path", () => {
+      const v = runRule(rule, `<button aria-label="Submit">Send</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.suggestion).toContain("aria-hidden");
+    });
+  });
+
   it("cites wcag22:2.5.3 and wcag21:2.5.3", () => {
     expect(rule.satisfies).toContain("wcag22:2.5.3");
     expect(rule.satisfies).toContain("wcag21:2.5.3");

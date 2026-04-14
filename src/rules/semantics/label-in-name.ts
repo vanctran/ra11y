@@ -86,10 +86,11 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
     if (!isInteractiveHtml(element)) continue;
     const ariaLabel = getHtmlAttribute(element, "aria-label");
     if (ariaLabel === null || ariaLabel.trim().length === 0) continue;
-    const visibleText = visibleTextHtml(element).trim();
+    const visibleText = collapseWhitespace(visibleTextHtml(element));
+    const normalizedAria = collapseWhitespace(ariaLabel);
     if (visibleText.length === 0) continue;
-    if (containsSubstring(ariaLabel, visibleText)) continue;
-    emitViolation(element.tagName, visibleText, ariaLabel, element.loc.start, emit);
+    if (containsSubstring(normalizedAria, visibleText)) continue;
+    emitViolation(element.tagName, visibleText, normalizedAria, element.loc.start, emit);
   }
 }
 
@@ -120,9 +121,9 @@ function checkJsx(module: TsxModule, emit: Emit): void {
     // Only check string-literal aria-label — skip expressions
     const ariaAttr = getJsxAttribute(element, "aria-label");
     if (!ariaAttr?.value || ariaAttr.value.kind !== "StringLiteral") continue;
-    const ariaLabel = ariaAttr.value.value.trim();
+    const ariaLabel = collapseWhitespace(ariaAttr.value.value);
     if (ariaLabel.length === 0) continue;
-    const visibleText = visibleTextJsx(element).trim();
+    const visibleText = collapseWhitespace(visibleTextJsx(element));
     if (visibleText.length === 0) continue;
     if (containsSubstring(ariaLabel, visibleText)) continue;
     emitViolation(element.tagName, visibleText, ariaLabel, element.loc.start, emit);
@@ -154,6 +155,19 @@ function containsSubstring(name: string, visibleText: string): boolean {
   return name.toLowerCase().includes(visibleText.toLowerCase());
 }
 
+/**
+ * Collapses all whitespace runs (including newlines and tabs from JSX
+ * source indentation) to a single space and trims. This matches what a
+ * browser renders for inline-text content — a user sees one space
+ * between adjacent `<span>`s, regardless of how many newlines separated
+ * them in source. Skipping this step made the substring check fail on
+ * correctly-authored code that happened to split visible text across
+ * lines.
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function emitViolation(
   tagName: string,
   visibleText: string,
@@ -165,6 +179,6 @@ function emitViolation(
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<${tagName}> has visible text "${visibleText}" that is not contained in aria-label "${ariaLabel}" — voice-control users cannot activate this control by speaking its visible label.`,
-    suggestion: `Change aria-label to include the visible text "${visibleText}" as a substring (e.g., aria-label="${visibleText} — additional context"). Or remove aria-label and let the visible text serve as the accessible name.`,
+    suggestion: `Three resolution paths: (1) widen aria-label to contain the visible text (e.g., aria-label="${visibleText} — additional context"); (2) if part of the visible text is a decorative icon or symbol (\u25b2, arrows, glyphs), mark its container \`aria-hidden="true"\` so it isn't part of the visible label; (3) remove aria-label and let the visible text serve as the accessible name directly.`,
   });
 }
