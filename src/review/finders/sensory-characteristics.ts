@@ -36,12 +36,14 @@ const SENSORY_PATTERN =
  *
  *   A. Instructional verb IMMEDIATELY followed by "above"/"below" with
  *      no intervening object ("click below", "see above", "tap below
- *      to continue").
+ *      to continue"). The negative lookbehind excludes noun-phrase
+ *      uses of polysemous verbs — "the view above" / "a view below"
+ *      treat "view" as a noun ("the vista"), not an instruction.
  *   B. UI-element noun followed by "above"/"below" ("button above",
  *      "section below") — the directional word is the disambiguator.
  */
 const DIRECTIONAL_VERB_PATTERN =
-  /\b(?:click|press|tap|see|view|scroll)\s+(?:the\s+)?(above|below)\b/i;
+  /(?<!\b(?:the|a|an|this|that|my|your|his|her|its|our|their|any|some|no)\s)\b(?:click|press|tap|see|view|scroll)\s+(?:the\s+)?(above|below)\b/i;
 
 const DIRECTIONAL_NOUN_PATTERN =
   /\b(?:button|link|icon|image|card|section|panel|menu|dialog|form|field|input|option|tab|box|arrow)s?\s+(above|below)\b/i;
