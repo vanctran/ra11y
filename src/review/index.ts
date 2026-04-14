@@ -11,6 +11,7 @@ import { finder as mediaAlternatives } from "./finders/media-alternatives.ts";
 import { finder as motionActuation } from "./finders/motion-actuation.ts";
 import { finder as noKeyboardTrap } from "./finders/no-keyboard-trap.ts";
 import { finder as onInputChange } from "./finders/on-input-change.ts";
+import { finder as redundantEntry } from "./finders/redundant-entry.ts";
 import { finder as sectionHeadings } from "./finders/section-headings.ts";
 import { finder as sensoryCharacteristics } from "./finders/sensory-characteristics.ts";
 import { finder as useOfColor } from "./finders/use-of-color.ts";
@@ -23,6 +24,7 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   motionActuation,
   noKeyboardTrap,
   onInputChange,
+  redundantEntry,
   sectionHeadings,
   sensoryCharacteristics,
   useOfColor,
