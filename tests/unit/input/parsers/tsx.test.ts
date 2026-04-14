@@ -48,6 +48,18 @@ describe("parseTsx", () => {
     expect(div?.attributes[0]?.name).toBe("id");
   });
 
+  it("records hasSpreadProps on elements with a spread attribute", () => {
+    const { root } = parseTsx("const x = <h1 {...props} />;");
+    const h1 = findFirst(root, "h1");
+    expect(h1?.hasSpreadProps).toBe(true);
+  });
+
+  it("hasSpreadProps is false when no spread is present", () => {
+    const { root } = parseTsx("const x = <h1 id='a'>hello</h1>;");
+    const h1 = findFirst(root, "h1");
+    expect(h1?.hasSpreadProps).toBe(false);
+  });
+
   it("parses component tag names (PascalCase)", () => {
     const { root } = parseTsx("const x = <Card>inside</Card>;");
     const card = findFirst(root, "Card");

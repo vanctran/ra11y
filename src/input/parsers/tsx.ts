@@ -173,7 +173,7 @@ class TsxParser {
       return null;
     }
 
-    const { attributes, selfClosing } = this.#consumeJsxOpenTag(tagName, startPos);
+    const { attributes, selfClosing, hasSpreadProps } = this.#consumeJsxOpenTag(tagName, startPos);
     const effectiveSelfClosing =
       selfClosing || (isLowercase(tagName) && SELF_CLOSING_VOID.has(tagName));
     const children: JsxNode[] = effectiveSelfClosing ? [] : this.#consumeJsxChildren(tagName);
@@ -186,6 +186,7 @@ class TsxParser {
       attributes,
       children,
       selfClosing: effectiveSelfClosing,
+      hasSpreadProps,
     };
   }
 
@@ -193,52 +194,78 @@ class TsxParser {
   #consumeJsxOpenTag(
     tagName: string,
     startPos: SourcePosition,
-  ): { attributes: JsxAttribute[]; selfClosing: boolean } {
+  ): { attributes: JsxAttribute[]; selfClosing: boolean; hasSpreadProps: boolean } {
     const attributes: JsxAttribute[] = [];
+    let hasSpreadProps = false;
     while (!this.#eof()) {
       this.#skipWhitespace();
-      const ch = this.#peek();
-      if (ch === undefined) {
-        this.#errors.push({
-          message: `Unterminated JSX element <${tagName}>`,
-          position: startPos,
-          recoverable: true,
-        });
-        return { attributes, selfClosing: false };
-      }
-      if (ch === ">") {
-        this.#advance(1);
-        return { attributes, selfClosing: false };
-      }
-      if (ch === "/") {
-        if (this.#peek(1) === ">") {
-          this.#advance(2);
-          return { attributes, selfClosing: true };
-        }
-        this.#advance(1);
-        continue;
-      }
+      const terminator = this.#consumeOpenTagTerminator(tagName, startPos);
+      if (terminator === "close") return { attributes, selfClosing: false, hasSpreadProps };
+      if (terminator === "self-close") return { attributes, selfClosing: true, hasSpreadProps };
       const posBefore = this.#pos;
-      const attr = this.#consumeJsxAttribute();
-      if (attr) attributes.push(attr);
+      const step = this.#consumeJsxAttributeOrSpread();
+      if (step.kind === "attribute") attributes.push(step.attribute);
+      else if (step.kind === "spread") hasSpreadProps = true;
       if (this.#pos === posBefore) this.#advance(1);
     }
-    return { attributes, selfClosing: false };
+    return { attributes, selfClosing: false, hasSpreadProps };
+  }
+
+  /**
+   * Detects whether the current position ends the open tag (`>`, `/>`)
+   * or is an EOF error, advancing past the terminator. Returns `"attr"`
+   * when the caller should try to consume an attribute instead.
+   */
+  #consumeOpenTagTerminator(
+    tagName: string,
+    startPos: SourcePosition,
+  ): "close" | "self-close" | "attr" {
+    const ch = this.#peek();
+    if (ch === undefined) {
+      this.#errors.push({
+        message: `Unterminated JSX element <${tagName}>`,
+        position: startPos,
+        recoverable: true,
+      });
+      return "close";
+    }
+    if (ch === ">") {
+      this.#advance(1);
+      return "close";
+    }
+    if (ch === "/" && this.#peek(1) === ">") {
+      this.#advance(2);
+      return "self-close";
+    }
+    if (ch === "/") this.#advance(1);
+    return "attr";
   }
 
   // ---------------------------------------------------------------------
   // Attribute consumer
   // ---------------------------------------------------------------------
 
+  /**
+   * One step of the open-tag loop. A `{` opens a spread attribute
+   * (`{...props}`) whose raw expression we intentionally discard; anything
+   * else falls through to the named-attribute parser. Keeping the branch
+   * here (not inside `consumeJsxAttribute`) keeps each helper single-purpose.
+   */
+  #consumeJsxAttributeOrSpread():
+    | { kind: "attribute"; attribute: JsxAttribute }
+    | { kind: "spread" }
+    | { kind: "none" } {
+    if (this.#peek() === "{") {
+      this.#skipBraceBlock();
+      return { kind: "spread" };
+    }
+    const attribute = this.#consumeJsxAttribute();
+    return attribute ? { kind: "attribute", attribute } : { kind: "none" };
+  }
+
   #consumeJsxAttribute(): JsxAttribute | null {
     const start = this.#pos;
     const startPos = this.#position();
-
-    // Spread attribute or other expression-only attr — skip entirely.
-    if (this.#peek() === "{") {
-      this.#skipBraceBlock();
-      return null;
-    }
 
     const name = this.#readAttributeName();
     if (!name) return null;

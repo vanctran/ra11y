@@ -133,6 +133,14 @@ export interface JsxElement extends BaseNode {
   readonly attributes: readonly JsxAttribute[];
   readonly children: readonly JsxNode[];
   readonly selfClosing: boolean;
+  /**
+   * True when the opening tag contained at least one `{...spread}`
+   * expression. Finders that reason about "does this element have
+   * content / a label / required props" should treat this as
+   * "may have it via props" — static analysis cannot see what the
+   * spread expands to.
+   */
+  readonly hasSpreadProps: boolean;
 }
 
 export type JsxNode = JsxElement | JsxText | JsxExpression;
