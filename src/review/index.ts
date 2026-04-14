@@ -16,6 +16,7 @@ import { finder as motionActuation } from "./finders/motion-actuation.ts";
 import { finder as multipleWays } from "./finders/multiple-ways.ts";
 import { finder as noKeyboardTrap } from "./finders/no-keyboard-trap.ts";
 import { finder as onInputChange } from "./finders/on-input-change.ts";
+import { finder as pointerInput } from "./finders/pointer-input.ts";
 import { finder as redundantEntry } from "./finders/redundant-entry.ts";
 import { finder as sectionHeadings } from "./finders/section-headings.ts";
 import { finder as sensoryCharacteristics } from "./finders/sensory-characteristics.ts";
@@ -35,6 +36,7 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   multipleWays,
   noKeyboardTrap,
   onInputChange,
+  pointerInput,
   redundantEntry,
   sectionHeadings,
   sensoryCharacteristics,
