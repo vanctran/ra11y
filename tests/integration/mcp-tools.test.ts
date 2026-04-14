@@ -172,6 +172,52 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(typeof body.automatedCriteriaPassRate).toBe("number");
   });
 
+  it("clean scan surfaces limitations as a structured field (not buried in prose)", async () => {
+    // Agents skimming a clean response for the next action can miss a
+    // "don't claim a11y clean" caveat tucked into nextStep. Surface
+    // it as a structured field so the signal is harder to drop.
+    const goodDir = join(PROJECT_ROOT, "tests", "fixtures", "good", "alt-text-missing");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [goodDir] })]);
+    const body = bodyOf(responses[1]) as {
+      plan: {
+        totalFindings: number;
+        violations: number;
+        limitations?: readonly string[];
+      };
+    };
+    expect(body.plan.violations).toBe(0);
+    expect(Array.isArray(body.plan.limitations)).toBe(true);
+    expect(body.plan.limitations?.some((l) => /runtime/i.test(l))).toBe(true);
+    expect(body.plan.limitations?.some((l) => /conformance|sufficient/i.test(l))).toBe(true);
+  });
+
+  it("scan omits limitations when there are real findings to act on", async () => {
+    // No need to re-emphasize the caveat when the scan already has
+    // work to do — limitations only surfaces on clean results.
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [BAD_ALT_DIR] })]);
+    const body = bodyOf(responses[1]) as {
+      plan: { violations: number; limitations?: unknown };
+    };
+    expect(body.plan.violations).toBeGreaterThan(0);
+    expect(body.plan.limitations).toBeUndefined();
+  });
+
+  it("activeNativeWrappersNote is no longer repeated in every response", async () => {
+    // Regression: the 60-word prose note was context tax on every
+    // scan. Semantics moved to the MCP server instructions block
+    // once per session; per-response only the field itself remains.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "configure", { nativeWrappers: ["Button"] }),
+      toolCall(3, "scan", { paths: [BAD_ALT_DIR] }),
+    ]);
+    const body = bodyOf(responses[2]) as {
+      meta: { activeNativeWrappers?: readonly string[]; activeNativeWrappersNote?: unknown };
+    };
+    expect(body.meta.activeNativeWrappers).toContain("Button");
+    expect(body.meta.activeNativeWrappersNote).toBeUndefined();
+  });
+
   it("checklist returns actionable items and omits untargeted by default", async () => {
     const responses = await mcpSession([
       initMsg(1),

@@ -61,6 +61,10 @@ const SERVER_INSTRUCTIONS = [
   "Out of scope: runtime checks (live regions, focus traps, ARIA state, post-render contrast) live in your Playwright/Vitest suite via axe-core. Automated clean here ≠ WCAG compliant.",
   "",
   "Consumption tips: verbose `meta` fields (configSource, activeNativeWrappers, rulesEvaluated, filesByExtension) are scan-confidence telemetry — pass them through when explaining a result. `nextStep` on each response tells you the canonical next call.",
+  "",
+  "Field semantics worth remembering so responses can stay terse:",
+  "  - `activeNativeWrappers`: component names treated as native-element wrappers for the scan — rules that fire on bare `<div onClick>` skip instances of these components. Configure via `ra11y.config.ts` `nativeWrappers` or the `configure` tool.",
+  "  - `limitations` (when present on a clean scan): runtime-only checks the static scanner can't perform; don't claim a11y conformance on the strength of this tool alone.",
 ].join("\n");
 
 // ─── Tool index ─────────────────────────────────────────────────────────────

@@ -325,6 +325,18 @@ export async function runScanAndFormat(
       // actionable = untargeted WCAG prompts) is the real "size this"
       // signal for agents deciding whether to open the checklist tool.
       actionableManualItems: actionableManual,
+      // Structured out-of-scope checks so an agent scanning the response
+      // for load-bearing signal can't miss what static analysis didn't
+      // cover. Only relevant when the scan is otherwise clean — a noisy
+      // scan already has obvious follow-up work.
+      ...(violations.length === 0 && notes.length === 0
+        ? {
+            limitations: [
+              "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half.",
+              "Static analysis can prove failure but not conformance: a clean scan is necessary, not sufficient. Do not claim WCAG conformance on this result alone.",
+            ],
+          }
+        : {}),
       summary: buildPlanSummary(violations.length, notes.length, fixSuggestions, manualCount),
     },
     files: fileEntries,
@@ -341,12 +353,11 @@ export async function runScanAndFormat(
       rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
-      ...(wrappers.length > 0
-        ? {
-            activeNativeWrappers: [...wrappers],
-            activeNativeWrappersNote: `Component names treated as native-element wrappers for this scan. Rules that would fire on bare <div onClick> skip instances of these components because they are assumed to wrap a real <button>, <a>, etc. Configure via ra11y.config.ts \`nativeWrappers\` or the \`configure\` tool.`,
-          }
-        : {}),
+      // Semantics ("components treated as native-element wrappers — rules
+      // that fire on bare <div onClick> skip these") are documented in the
+      // MCP server instructions once per session. The per-response note
+      // was 60 words of repeated context tax and has been dropped.
+      ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
       // Split visibility: agents editing ra11y.config.ts need to see when
       // a session configure() call is layering extras on top of the file.
       // Without this, an ad-hoc "add Button for this session" persists
