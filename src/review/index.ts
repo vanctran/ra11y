@@ -11,6 +11,7 @@ import { finder as errorSuggestion } from "./finders/error-suggestion.ts";
 import { finder as imagesOfText } from "./finders/images-of-text.ts";
 import { finder as meaningfulSequence } from "./finders/meaningful-sequence.ts";
 import { finder as mediaAlternatives } from "./finders/media-alternatives.ts";
+import { finder as mediaVariants } from "./finders/media-variants.ts";
 import { finder as motionActuation } from "./finders/motion-actuation.ts";
 import { finder as multipleWays } from "./finders/multiple-ways.ts";
 import { finder as noKeyboardTrap } from "./finders/no-keyboard-trap.ts";
@@ -28,6 +29,7 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   imagesOfText,
   meaningfulSequence,
   mediaAlternatives,
+  mediaVariants,
   motionActuation,
   multipleWays,
   noKeyboardTrap,
