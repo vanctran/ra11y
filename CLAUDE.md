@@ -16,6 +16,18 @@ What makes ra11y different from axe-core / eslint-plugin-jsx-a11y / Pa11y:
 - **Fast.** Sub-second on typical commits. Precommit-friendly. Performance budget enforced in CI.
 - **Elite DX.** Beautiful terminal output, context-aware fix suggestions, six output formats, plugin API, deep rule metadata.
 
+### Consumer model: AI-first
+
+ra11y's primary consumer is an AI agent calling the MCP tools — not a human reading a dashboard. CLI and formatters exist, but the design center is the agent. Several common tooling defaults invert under this assumption; treat the following as load-bearing when triaging field reports or designing new surfaces:
+
+- **Surface, don't suppress.** Agents read every candidate in milliseconds; reviewer fatigue isn't the constraint a human-facing tool optimizes around. False positives a human would tune out are cheap for an agent to dismiss with one file read. Suppression discards signal the agent would use to triage. Default to surfacing with enough context for the agent to investigate.
+- **Don't downgrade priority to hide things.** "Mark as low priority" is a UX lever for human attention budgets. Agents don't have one — they just sort. Surface honestly and let the agent rank by criterion + reason + context.
+- **Verbose meta is signal, not clutter.** `configSource`, `configSearchedFrom`, `activeNativeWrappers`, `rulesEvaluated`, per-extension file counts — these are scan-confidence telemetry the agent actively uses to decide whether the scan had teeth and what to call next. Don't trim them to look terse.
+- **Review *candidates*, not assertions.** For manual criteria, return locations + a short `reason` that frames the question. Don't try to be smart about "what the user really meant" — agents are better at that than heuristics.
+- **One tool call should answer "what next?"** Each response carries `nextStep` hints, criterion IDs, and counts that match the other tools' counts. Cross-surface drift (`scan` says 21, `checklist` says 4) forces wasted round trips; invariants like the manual-review-count test exist to prevent this.
+
+When a field report suggests "reduce noise," ask first: noise for whom? If the answer is "a human reviewer," the answer is usually no — the agent is the consumer and it wants the signal.
+
 ## 2. Current stack (as of 2026-04-11)
 
 | Tool           | Version   | Source                                                                   |
@@ -339,6 +351,8 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 - Skipping `/verify`. → precommit hooks catch it, but develop the habit.
 - `// @ts-ignore`. → fix the type.
 - Committing without a WCAG citation in the rule header. → CI rejects.
+- Tuning heuristics for "human reviewer fatigue." → the consumer is an agent (see § 1, Consumer model). Surface honestly with enough context for the agent to triage, instead of suppressing or downgrading.
+- Trimming `meta` fields to look terse. → those fields are scan-confidence telemetry the agent uses to plan its next call.
 
 ## 18. When in doubt
 
