@@ -80,6 +80,9 @@ type Emit = (v: {
   suggestion: string;
 }) => void;
 
+// NOTE: the primitive-component case is JSX-only. In HTML, a top-level
+// <li> is a page-level authoring error, not a component definition.
+
 // ---------------------------------------------------------------------------
 // HTML
 // ---------------------------------------------------------------------------
@@ -145,6 +148,20 @@ function checkJsxStrayLi(
     if (li.tagName !== "li") continue;
     const parent = parentOf.get(li);
     if (parent && LIST_PARENTS.has(parent.tagName)) continue;
+    // PascalCase parent: may render a <ul>/<ol>/<menu> internally (e.g.,
+    // Radix NavigationMenuList). Mirrors the PascalCase-child skip in
+    // checkJsxListContainerChildren — native-wrapper awareness lives at
+    // the component level.
+    if (parent && isJsxPascalCase(parent.tagName)) continue;
+    if (!parent) {
+      // Top-level <li> in a JSX module: the element is the root of a
+      // component return (e.g., `function GridItem() { return <li>…</li>; }`).
+      // Static analysis can't see the call site, so we surface it as info
+      // rather than assert a violation — the agent reads the file and
+      // decides.
+      emit(buildPrimitiveLiViolation(li.loc.start));
+      continue;
+    }
     emit(buildStrayLiViolation(li.loc.start));
   }
 }
@@ -199,6 +216,20 @@ function buildStrayLiViolation(loc: { line: number; column: number }): {
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<li> is not inside a <ul>, <ol>, or <menu> — the list semantic is lost and screen readers won't announce it as a list item.`,
     suggestion: `Wrap the <li> in a <ul> or <ol>. If you need a flat text container, use a <p> or <span> instead.`,
+  };
+}
+
+function buildPrimitiveLiViolation(loc: { line: number; column: number }): {
+  severity: "info";
+  location: { filePath: string; line: number; column: number };
+  message: string;
+  suggestion: string;
+} {
+  return {
+    severity: "info",
+    location: { filePath: "", line: loc.line, column: loc.column },
+    message: `<li> is the root of a JSX return — this looks like a component primitive, so ra11y cannot see whether call sites render it inside a <ul>, <ol>, or <menu>. Verify at usage sites.`,
+    suggestion: `If this component is only ever consumed inside a list container, it is fine — add \`{/* ra11y-disable semantics/list-structure */}\` at the top of the file to silence this info note. Otherwise move the <li> inside a <ul>/<ol>, or change the root element to <p>/<span>.`,
   };
 }
 

@@ -73,6 +73,38 @@ describe("rule semantics/list-structure", () => {
       const violations = runRule(rule, `const X = <ul><ListItem>x</ListItem></ul>;`);
       expect(violations).toHaveLength(0);
     });
+
+    it("li has a PascalCase parent (mirror of child-side handling — wrapper may render <ul>)", () => {
+      const violations = runRule(
+        rule,
+        `const X = <NavigationMenuList><li>Home</li></NavigationMenuList>;`,
+      );
+      expect(violations).toHaveLength(0);
+    });
+  });
+
+  describe("JSX: primitive component definition (info, not warning)", () => {
+    it("top-level <li> in a component return emits info, not warning", () => {
+      const violations = runRule(
+        rule,
+        `function GridItem(props) { return <li {...props}>{props.children}</li>; }`,
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.severity).toBe("info");
+      expect(violations[0]?.message).toContain("primitive");
+    });
+
+    it("top-level <li> inside an MDX-style component map emits info", () => {
+      const violations = runRule(rule, `export const li = ({children}) => <li>{children}</li>;`);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.severity).toBe("info");
+    });
+
+    it("<li> wrapped in a <div> stays a warning (real stray-li, not a primitive)", () => {
+      const violations = runRule(rule, `const X = <div><li>Home</li></div>;`);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.severity).toBe("warning");
+    });
   });
 
   describe("rule metadata", () => {
