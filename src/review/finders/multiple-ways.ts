@@ -41,6 +41,11 @@ export const finder = defineCandidateFinder({
   criterionIds: [...CRITERION_IDS],
   scope: "document",
   appliesTo: { fileExtensions: [".html", ".htm", ".tsx", ".jsx", ".ts", ".js"] },
+  // 2.4.5 is page-set level. One question for the whole project, not
+  // one per root-layout file — multi-root projects (e.g. a Jinja
+  // shell serving a React SPA) otherwise get the same prompt three or
+  // four times.
+  uniquePerCriterion: true,
   docs: {
     description:
       "Finds likely root-layout files that show no search, sitemap, breadcrumb, or multi-link navigation signal, which may mean users only have one way to locate pages.",

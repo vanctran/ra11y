@@ -175,7 +175,33 @@ function collectCandidatesFromFiles(
     for (const c of perFile) out.push(c);
   }
   out.sort(compareCandidates);
-  return out;
+  return dedupUniquePerCriterion(out, finders);
+}
+
+/**
+ * Collapses multi-file emissions for finders marked uniquePerCriterion.
+ * Sorted input means "first" is deterministic (alphabetical path, then
+ * line/column) so the kept candidate is the highest-precedence root.
+ */
+function dedupUniquePerCriterion(
+  candidates: readonly ReviewCandidate[],
+  finders: readonly CandidateFinder[],
+): readonly ReviewCandidate[] {
+  const uniqueCriteria = new Set<string>();
+  for (const f of finders) {
+    if (f.uniquePerCriterion) for (const id of f.criterionIds) uniqueCriteria.add(id);
+  }
+  if (uniqueCriteria.size === 0) return candidates;
+  const seen = new Set<string>();
+  const kept: ReviewCandidate[] = [];
+  for (const c of candidates) {
+    if (uniqueCriteria.has(c.criterionId)) {
+      if (seen.has(c.criterionId)) continue;
+      seen.add(c.criterionId);
+    }
+    kept.push(c);
+  }
+  return kept;
 }
 
 /** Collects the set of manual criterion IDs across enabled standards. */

@@ -55,6 +55,14 @@ export interface CandidateFinder {
   readonly scope: CandidateFinderScope;
   readonly appliesTo?: AppliesTo;
   readonly docs: CandidateFinderDocs;
+  /**
+   * When true, the engine keeps at most one emitted candidate per
+   * criterion across all files. Used for page-set-level checks whose
+   * question ("does the site offer multiple ways to navigate?") is
+   * shared by every plausible root layout — otherwise the reviewer
+   * sees the same prompt once per root file.
+   */
+  readonly uniquePerCriterion?: boolean;
   /** Node-scoped finder — called once per file, finder iterates internally. */
   find?(ctx: RuleContext): readonly ReviewCandidate[] | undefined;
   /** Document-scoped finder — called after file parsing. */
