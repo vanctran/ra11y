@@ -15,6 +15,15 @@
  *   <div>...</div>
  *     ^^^ wildcard — all rules suppressed on that line
  *
+ *   // ra11y-disable-next-line contrast/minimum: light text is only
+ *   //   shown on a dark brand gradient that's enforced elsewhere
+ *   <div className="muted">
+ *     ^^^ reason text after `:` or `--` is captured for audit. Any
+ *         rule IDs listed before the separator still apply. The
+ *         reason is advisory — the suppression fires whether or
+ *         not one is supplied — but surfacing it in scan meta keeps
+ *         suppressions accountable.
+ *
  * Comment styles supported: `//`, `/* … *\/`, `<!-- … -->` (HTML).
  * JSX `{/* … *\/}` is also recognized.
  *
@@ -25,12 +34,12 @@
  * criterion IDs. A bare `ra11y-disable` with no token yields `"*"`,
  * which silences both.
  *
- * Returns a `(line → Set<token>)` map the engine's context-builder
- * consumes via `ctx.isDisabled(line, ruleId)`. A set containing
- * `"*"` means "all rules disabled on this line" and is also honored by
- * the candidate runner, so a file-level `<!-- ra11y-disable -->` at the
- * top of a non-rendered HTML fragment (Jinja template, LLM prompt)
- * silences review candidates alongside violations.
+ * `parseInlineDisables(source)` returns the `(line → Set<token>)` map
+ * the engine's context-builder consumes via `ctx.isDisabled(line,
+ * ruleId)`. `parseInlineDisablesDetailed(source)` returns the same map
+ * plus an ordered list of every declaration (line, ruleIds, optional
+ * reason) so MCP surfaces can surface a durable audit trail without
+ * re-parsing the source.
  */
 
 const COMMENT_PATTERNS: readonly RegExp[] = [
@@ -46,13 +55,34 @@ const COMMENT_PATTERNS: readonly RegExp[] = [
 
 export type DisableMap = Map<number, Set<string>>;
 
+export interface SuppressionDeclaration {
+  readonly kind: "disable" | "disable-next-line" | "enable";
+  readonly line: number;
+  readonly ruleIds: readonly string[];
+  readonly reason?: string;
+}
+
 /**
  * Scans `source` and builds a (line → set of disabled rule IDs) map.
  * Lines are 1-based.
  */
 export function parseInlineDisables(source: string): DisableMap {
+  return parseInlineDisablesDetailed(source).disableMap;
+}
+
+/**
+ * Same as `parseInlineDisables` but also returns every pragma
+ * declaration (including any captured reason text). Consumers that
+ * want to surface the audit trail — e.g. `scan_project` meta — can
+ * read `declarations` instead of re-parsing the source.
+ */
+export function parseInlineDisablesDetailed(source: string): {
+  readonly disableMap: DisableMap;
+  readonly declarations: readonly SuppressionDeclaration[];
+} {
   const lines = source.split("\n");
   const disableMap: DisableMap = new Map();
+  const declarations: SuppressionDeclaration[] = [];
   const regionStack: Array<{ ruleIds: readonly string[] }> = [];
 
   for (let idx = 0; idx < lines.length; idx += 1) {
@@ -62,14 +92,21 @@ export function parseInlineDisables(source: string): DisableMap {
 
     const pragma = findPragma(line);
     if (!pragma) continue;
+    declarations.push({
+      kind: pragma.kind,
+      line: lineNumber,
+      ruleIds: pragma.ruleIds,
+      ...(pragma.reason === undefined ? {} : { reason: pragma.reason }),
+    });
     handlePragma(pragma, lineNumber, regionStack, disableMap);
   }
-  return disableMap;
+  return { disableMap, declarations };
 }
 
 interface PragmaMatch {
   readonly kind: "disable" | "disable-next-line" | "enable";
   readonly ruleIds: readonly string[];
+  readonly reason?: string;
 }
 
 function findPragma(line: string): PragmaMatch | null {
@@ -79,7 +116,12 @@ function findPragma(line: string): PragmaMatch | null {
     const directive = m[1];
     const tail = m[2] ?? "";
     if (!directive) return null;
-    return { kind: pragmaKind(directive), ruleIds: parseRuleList(tail) };
+    const { ruleIds, reason } = splitRuleListAndReason(tail);
+    return {
+      kind: pragmaKind(directive),
+      ruleIds,
+      ...(reason === undefined ? {} : { reason }),
+    };
   }
   return null;
 }
@@ -90,13 +132,59 @@ function pragmaKind(directive: string): PragmaMatch["kind"] {
   return "disable";
 }
 
+/**
+ * Separates the rule-IDs portion of a pragma from the optional reason.
+ * The first `:` that is not part of a criterion ID (`wcag22:2.4.5`) or
+ * the first `--` sequence terminates the list; everything after is
+ * captured as free-form reason text. Blank reasons are normalized to
+ * undefined so the declaration stays shaped-terse.
+ */
+function splitRuleListAndReason(tail: string): {
+  readonly ruleIds: readonly string[];
+  readonly reason?: string;
+} {
+  const split = findReasonBoundary(tail);
+  const head = split === null ? tail : tail.slice(0, split.index);
+  const reasonRaw = split === null ? "" : tail.slice(split.index + split.len);
+  const ruleIds = parseRuleList(head);
+  const reason = normalizeReason(reasonRaw);
+  return reason === undefined ? { ruleIds } : { ruleIds, reason };
+}
+
+function findReasonBoundary(tail: string): { index: number; len: number } | null {
+  const dashes = tail.indexOf("--");
+  let boundary: { index: number; len: number } | null =
+    dashes >= 0 ? { index: dashes, len: 2 } : null;
+  // Criterion IDs use `<standard>:<number>` — the char after the `:`
+  // is always a digit (e.g. `wcag22:2.4.5`). A colon that is NOT
+  // followed by a digit is therefore the reason separator. Rule IDs
+  // use `/`, not `:`, so this rule is unambiguous.
+  const colonPattern = /:(?!\d)/g;
+  const colonMatch = colonPattern.exec(tail);
+  if (colonMatch !== null && (boundary === null || colonMatch.index < boundary.index)) {
+    boundary = { index: colonMatch.index, len: 1 };
+  }
+  return boundary;
+}
+
+function normalizeReason(raw: string): string | undefined {
+  // Strip trailing `*/`, `-->`, or `}` tokens that belong to the
+  // comment syntax, then collapse whitespace. Empty reasons become
+  // undefined so downstream consumers can distinguish "no reason
+  // supplied" from "empty reason string".
+  const stripped = raw
+    .replace(/\*\/\s*\}?\s*$/, "")
+    .replace(/-->\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped.length === 0 ? undefined : stripped;
+}
+
 function parseRuleList(tail: string): readonly string[] {
-  // Strip trailing reason comments like `-- reason: ...`
-  const withoutReason = tail.split(/--|reason:/i)[0] ?? "";
-  const tokens = withoutReason
+  const tokens = tail
     .split(/[\s,]+/)
     .map((t) => t.trim())
-    .filter((t) => t.length > 0 && !t.startsWith("*/"));
+    .filter((t) => t.length > 0 && !t.startsWith("*/") && !t.startsWith("-->"));
   return tokens.length === 0 ? ["*"] : tokens;
 }
 

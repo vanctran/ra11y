@@ -8,6 +8,7 @@
 
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
+import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
@@ -333,6 +334,7 @@ export async function runScanAndFormat(
     if (manualIds.has(c.criterionId)) actionableManualIds.add(c.criterionId);
   }
   const actionableManual = actionableManualIds.size;
+  const suppressions = suppressionAudit(files);
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
@@ -412,10 +414,59 @@ export async function runScanAndFormat(
       // is a structural gap, not a heuristic guess — the fields are
       // empty/omitted when there's nothing to report.
       ...buildAnalysisCoverage(files, wrappers, activeRules, verboseMeta),
+      // Audit trail for every in-source `ra11y-disable` pragma the scan
+      // encountered, with the captured reason text when supplied. Keeps
+      // suppressions visible and accountable — an agent reviewing a
+      // clean scan can see where silence was bought. Omitted when no
+      // pragmas exist in any scanned file.
+      ...suppressionsMetaBlock(suppressions),
     },
   };
 
   return { formatted, durationMs: result.durationMs, filesScanned: result.filesScanned };
+}
+
+function suppressionsMetaBlock(entries: readonly SuppressionAuditEntry[]): Record<string, unknown> {
+  if (entries.length === 0) return {};
+  return {
+    suppressions: entries,
+    suppressionsNote:
+      "Each in-source `ra11y-disable` pragma found across scanned files. Reasons captured from the optional `: reason` or `-- reason` suffix on the pragma itself — e.g. `// ra11y-disable-next-line contrast/minimum: light text on brand gradient`. Entries without a reason indicate an un-justified suppression the agent should consider replacing or documenting.",
+  };
+}
+
+interface SuppressionAuditEntry {
+  readonly path: string;
+  readonly line: number;
+  readonly kind: "disable" | "disable-next-line" | "enable";
+  readonly ruleIds: readonly string[];
+  readonly reason?: string;
+}
+
+/**
+ * Walks each parsed file's source for `ra11y-disable` pragmas and
+ * flattens them into a per-file audit list. The reason-capture path
+ * of the pragma parser is used so MCP consumers see both the
+ * declaration and the justification (when supplied). Entries without
+ * a reason surface as "suppression without a stated reason" — the
+ * exact thing an agent reviewing a clean scan should flag for
+ * follow-up.
+ */
+function suppressionAudit(files: readonly ParsedFile[]): readonly SuppressionAuditEntry[] {
+  const out: SuppressionAuditEntry[] = [];
+  for (const file of files) {
+    const { declarations } = parseInlineDisablesDetailed(file.source);
+    for (const d of declarations) {
+      out.push({
+        path: file.filePath,
+        line: d.line,
+        kind: d.kind,
+        ruleIds: d.ruleIds,
+        ...(d.reason === undefined ? {} : { reason: d.reason }),
+      });
+    }
+  }
+  return out;
 }
 
 /**
