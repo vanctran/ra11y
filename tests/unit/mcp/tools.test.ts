@@ -716,6 +716,49 @@ describe("MCP tool: coverage", () => {
   });
 });
 
+describe("MCP tool: audit", () => {
+  it("returns { scan, coverage, checklist, nextStep } in one round-trip", async () => {
+    const tool = findTool("audit");
+    const session = new McpSession();
+    const result = await tool.handler(
+      { cwd: join(FIXTURE_DIR, "good", "alt-text-missing") },
+      session,
+    );
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text) as {
+      scan: unknown;
+      coverage: unknown;
+      checklist: unknown;
+      nextStep: unknown;
+    };
+    expect(typeof data.nextStep).toBe("string");
+    expect(data.scan).toBeTruthy();
+    expect(data.coverage).toBeTruthy();
+    expect(data.checklist).toBeTruthy();
+    const checklist = data.checklist as { summary: { actionable: number } };
+    expect(typeof checklist.summary.actionable).toBe("number");
+  });
+
+  it("forwards scan-only parameters to the scan leg", async () => {
+    // autoDetectWrappers is a scan_project-only flag; verify audit
+    // doesn't choke when a union-of-params is passed and that the
+    // checklist/coverage legs still complete.
+    const tool = findTool("audit");
+    const session = new McpSession();
+    const result = await tool.handler(
+      { cwd: join(FIXTURE_DIR, "good", "alt-text-missing"), autoDetectWrappers: true },
+      session,
+    );
+
+    expect(result.isError).toBeUndefined();
+    const data = JSON.parse(result.content[0].text) as {
+      scan: { meta: { autoDetectedWrappers?: unknown } };
+    };
+    expect(Array.isArray(data.scan.meta.autoDetectedWrappers)).toBe(true);
+  });
+});
+
 describe("MCP tool: suggest_fix", () => {
   it("returns fix suggestion for a known violation", async () => {
     const tool = findTool("suggest_fix");
