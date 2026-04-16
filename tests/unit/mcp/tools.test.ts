@@ -266,6 +266,45 @@ describe("MCP tool: scan_project", () => {
       expect(session.config.nativeWrappers).not.toContain("Widget");
     });
 
+    it("does NOT mis-attribute auto-detected wrappers to sessionNativeWrappers", async () => {
+      // Regression: prior impl dumped detected names into fromSession so
+      // the sessionOverridesNote falsely warned that configure() had
+      // added them. The audit should stay pristine when the agent only
+      // used autoDetectWrappers.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-auto-detect-attrib-"));
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <DesignSystemButton onClick={a} />",
+          "      <DesignSystemCard onClick={b} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          autoDetectedWrappers?: string[];
+          sessionNativeWrappers?: string[];
+          sessionOverridesNote?: string;
+        };
+      };
+      expect(data.meta.autoDetectedWrappers).toEqual(["DesignSystemButton", "DesignSystemCard"]);
+      expect(data.meta.sessionNativeWrappers).toBeUndefined();
+      expect(data.meta.sessionOverridesNote).toBeUndefined();
+    });
+
     it("reports zero-detection plainly when no candidates are found", async () => {
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");

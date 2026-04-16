@@ -263,6 +263,14 @@ export interface NativeWrapperSources {
   readonly fromFile: readonly string[];
   /** Added via configure() calls this session. */
   readonly fromSession: readonly string[];
+  /**
+   * Auto-detected for THIS scan only (e.g. scan_project's
+   * `autoDetectWrappers: true`). Tracked separately so the
+   * session-override audit (`sessionNativeWrappers` + `sessionOverridesNote`)
+   * doesn't mis-attribute them to a stale configure() call. Scan-scoped
+   * by contract — never touches session.config.
+   */
+  readonly fromAutoDetect?: readonly string[];
 }
 
 export async function runScanAndFormat(
@@ -296,17 +304,9 @@ export async function runScanAndFormat(
     finders: BUILTIN_CANDIDATE_FINDERS,
   });
 
-  const sources = wrapperSources ?? {
-    fromFile: [],
-    fromSession: session.config.nativeWrappers,
-  };
-  const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession])];
+  const { wrappers, sessionOnly } = resolveWrapperSources(wrapperSources, session);
   const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
   const unusedWrappers = await resolveUnusedWrappers(wrappers, files, cwd);
-  // Names in session but not in file — flag so agents notice their ad-hoc
-  // overrides masking the on-disk config. This is exactly the "edit the
-  // file, session state silently keeps old entries" footgun.
-  const sessionOnly = sources.fromSession.filter((w) => !sources.fromFile.includes(w));
   const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
   const grouped = groupViolationsByFile(filtered);
   const fileEntries = [...grouped.entries()]
@@ -424,6 +424,28 @@ export async function runScanAndFormat(
   };
 
   return { formatted, durationMs: result.durationMs, filesScanned: result.filesScanned };
+}
+
+/**
+ * Resolves the final wrapper set from the three channels (file, session,
+ * auto-detect) and derives the session-only audit list used for the
+ * `sessionNativeWrappers` meta warning. Auto-detected wrappers are
+ * deliberately excluded from `sessionOnly` — they come from this scan,
+ * not a stale configure() call, and flow into their own
+ * `autoDetectedWrappers` meta block.
+ */
+function resolveWrapperSources(
+  wrapperSources: NativeWrapperSources | undefined,
+  session: McpSession,
+): { readonly wrappers: readonly string[]; readonly sessionOnly: readonly string[] } {
+  const sources: NativeWrapperSources = wrapperSources ?? {
+    fromFile: [],
+    fromSession: session.config.nativeWrappers,
+  };
+  const autoDetect = sources.fromAutoDetect ?? [];
+  const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession, ...autoDetect])];
+  const sessionOnly = sources.fromSession.filter((w) => !sources.fromFile.includes(w));
+  return { wrappers, sessionOnly };
 }
 
 function suppressionsMetaBlock(entries: readonly SuppressionAuditEntry[]): Record<string, unknown> {

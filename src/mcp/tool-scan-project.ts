@@ -120,10 +120,12 @@ export const scanProjectTool: McpTool = {
       session.effectiveRules(projectConfig),
       {
         fromFile: projectConfig.nativeWrappers,
-        // Inline-detected wrappers are transient: scoped to this one
-        // scan, not persisted to session or project config. Keeps the
-        // opt-in from silently mutating state behind the agent's back.
-        fromSession: [...session.config.nativeWrappers, ...detectedNames],
+        fromSession: session.config.nativeWrappers,
+        // Auto-detected wrappers ride their own channel — the session-
+        // override audit (sessionNativeWrappers) must not mis-attribute
+        // them to a stale configure() call. Still scan-scoped: never
+        // written to session or project config.
+        ...(detectedNames.length > 0 ? { fromAutoDetect: detectedNames } : {}),
       },
       root,
       params["verboseMeta"] === true,
