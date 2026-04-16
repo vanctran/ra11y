@@ -203,5 +203,20 @@ describe("rule semantics/label-in-name", () => {
       expect(v[0]?.suggestion).toContain("expanded label");
       expect(v[0]?.suggestion).toMatch(/Primary fix: rephrase aria-label/);
     });
+
+    it("surfaces case mismatches on visible-text words (Assessment vs assessment)", () => {
+      // Additive reason-text enrichment: detection is case-insensitive
+      // per WCAG 2.5.3, but case divergence can matter for AT
+      // pronunciation and voice-control. Surface the delta; the agent
+      // decides whether this context cares.
+      const v = runRule(
+        rule,
+        `<button aria-label="Start the 8-question Perception Gap assessment">Start the Assessment</button>`,
+        { filePath: "index.html" },
+      );
+      expect(v).toHaveLength(1);
+      expect(v[0]?.suggestion).toContain("case mismatch");
+      expect(v[0]?.suggestion).toContain('"Assessment"');
+    });
   });
 });

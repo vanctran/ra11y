@@ -255,6 +255,27 @@ function isInterleavedExpansion(ariaLabel: string, visibleText: string): boolean
   return true;
 }
 
+/**
+ * Returns visible-text words that appear in aria-label with a
+ * different case ("Assessment" visible vs "assessment" in the label).
+ * WCAG 2.5.3 allows case-insensitive matching, but case divergence can
+ * matter for some AT pronunciation engines and for voice-control users
+ * who speak proper nouns expecting capitalization. Surfacing the delta
+ * lets the agent decide whether this context cares; does not affect
+ * detection.
+ */
+function findCaseMismatchedWords(ariaLabel: string, visibleText: string): readonly string[] {
+  const ariaWordsLower = new Set(ariaLabel.split(/\s+/).map((w) => w.toLowerCase()));
+  const ariaWordsExact = new Set(ariaLabel.split(/\s+/));
+  const out: string[] = [];
+  for (const visibleWord of visibleText.split(/\s+/)) {
+    if (visibleWord.length === 0) continue;
+    if (ariaWordsExact.has(visibleWord)) continue;
+    if (ariaWordsLower.has(visibleWord.toLowerCase())) out.push(visibleWord);
+  }
+  return out;
+}
+
 function emitViolation(
   tagName: string,
   visibleText: string,
@@ -264,11 +285,16 @@ function emitViolation(
 ): void {
   const ranked = rankFixPaths(visibleText, ariaLabel);
   const interleaved = isInterleavedExpansion(ariaLabel, visibleText);
-  const prelude = interleaved
+  const caseMismatches = findCaseMismatchedWords(ariaLabel, visibleText);
+  const expansionNote = interleaved
     ? `Looks like an expanded label — every word of "${visibleText}" appears in aria-label in order, but with extra words inserted between them. WCAG 2.5.3 requires a contiguous substring, so the fix is to rephrase, not to replace. `
     : "";
+  const caseNote =
+    caseMismatches.length > 0
+      ? `Also note case mismatch on ${caseMismatches.map((w) => `"${w}"`).join(", ")} — WCAG 2.5.3 matches case-insensitively, but some AT pronunciation engines and voice-control users preserve case; prefer the visible capitalization. `
+      : "";
   const suggestion =
-    `${prelude}Primary fix: ${ranked.primary}. ` +
+    `${expansionNote}${caseNote}Primary fix: ${ranked.primary}. ` +
     `Alternatives (less likely): (a) ${ranked.alternatives[0]}; (b) ${ranked.alternatives[1]}.`;
   const fixPaths: FixPaths = {
     primary: { label: ranked.primary },
