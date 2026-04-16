@@ -172,6 +172,39 @@ describe("MCP tool: scan_project", () => {
     expect(data.meta.filesScanned).toBeGreaterThan(0);
   });
 
+  describe("directive nextStep", () => {
+    it("on a fixture with violations, names the first file:line and the recommended tool", async () => {
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const fixtureDir = BAD_ALT.replace(/\/[^/]+$/, "");
+      const result = await tool.handler({ cwd: fixtureDir }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        plan: { violations?: number; fixSuggestionAvailable?: number };
+        meta: { nextStep: string };
+      };
+      // The fixture at tests/fixtures/bad/alt-text-missing/ has violations.
+      expect(data.plan.violations).toBeGreaterThan(0);
+      // Directive guidance: calls out suggest_fix or explain_rule, names a file:line.
+      expect(data.meta.nextStep).toMatch(/suggest_fix|explain_rule/);
+      expect(data.meta.nextStep).toMatch(/\.html:\d+|\.tsx:\d+|\.jsx:\d+/);
+    });
+
+    it("on a clean directory, points at checklist for the manual-review half", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-clean-"));
+      await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <div />;");
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir }, session);
+      const data = JSON.parse(result.content[0].text) as { meta: { nextStep: string } };
+      expect(data.meta.nextStep).toContain("checklist");
+    });
+  });
+
   describe("autoDetectWrappers", () => {
     it("registers PascalCase-with-onClick components inline and surfaces them in meta", async () => {
       const { mkdtemp, writeFile } = await import("node:fs/promises");

@@ -16,6 +16,7 @@ import {
   parseFiles,
   resolveStandards,
   runScanAndFormat,
+  type ScanFormatted,
   strArrayParam,
   strParam,
   textResult,
@@ -130,11 +131,7 @@ export const scanProjectTool: McpTool = {
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
     );
-    const totalFindings =
-      typeof formatted.plan["totalFindings"] === "number"
-        ? (formatted.plan["totalFindings"] as number)
-        : 0;
-    const nextStep = suggestNextStep(totalFindings === 0, describeMode(params));
+    const nextStep = suggestNextStep(formatted, describeMode(params));
     return textResult({
       ...formatted,
       scannedRoot: root,
@@ -238,19 +235,108 @@ function findNearbyConfig(startDir: string): string | null {
 }
 
 /**
- * Points agents at the next tool in the workflow. Static analysis is only
- * half of WCAG; a clean scan should nudge toward the manual-review path
- * rather than implying conformance.
+ * Points agents at the next tool in the workflow. Static analysis is
+ * only half of WCAG; a clean scan should nudge toward manual review
+ * rather than implying conformance. When findings or actionable manual
+ * items exist, the guidance is directive — names a specific tool and
+ * the first file:line worth calling it on — so the agent doesn't have
+ * to parse the response twice to figure out where to start.
  */
-function suggestNextStep(pass: boolean, mode: string): string {
-  const iterativeTip =
-    mode === "full"
-      ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
-      : "";
-  if (pass) {
-    return `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${iterativeTip} To gate commits on this, wire \`ra11y scan --changed\` into lint-staged or a pre-commit hook — it scans only git-staged files, so feedback is near-instant. Caveat: runtime checks (focus traps, live regions, ARIA state, post-render contrast) are out of scope here; pair with axe-core in Playwright/Vitest for the runtime half. Do not claim "a11y clean" from this result alone.`;
+interface NextStepInputs {
+  readonly violations: number;
+  readonly fixable: number;
+  readonly actionableManual: number;
+  readonly notes: number;
+  readonly first: FirstFinding | null;
+  readonly iterativeTip: string;
+}
+
+function suggestNextStep(formatted: ScanFormatted, mode: string): string {
+  const inputs: NextStepInputs = {
+    violations: numFromPlan(formatted.plan, "violations"),
+    fixable: numFromPlan(formatted.plan, "fixSuggestionAvailable"),
+    actionableManual: numFromPlan(formatted.plan, "actionableManualItems"),
+    notes: numFromPlan(formatted.plan, "notes"),
+    first: firstCallableFinding(formatted.files),
+    iterativeTip:
+      mode === "full"
+        ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
+        : "",
+  };
+  if (inputs.violations === 0 && inputs.notes === 0) return cleanScanNextStep(inputs);
+  if (inputs.violations > 0 && inputs.first !== null)
+    return violationNextStep(inputs, inputs.first);
+  if (inputs.notes > 0 && inputs.first !== null) return notesNextStep(inputs, inputs.first);
+  return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${inputs.iterativeTip}`;
+}
+
+function cleanScanNextStep(inputs: NextStepInputs): string {
+  if (inputs.actionableManual > 0) {
+    const pl = inputs.actionableManual === 1 ? "on has" : "a have";
+    return `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next.${inputs.iterativeTip}`;
   }
-  return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${iterativeTip}`;
+  return `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone.`;
+}
+
+function violationNextStep(inputs: NextStepInputs, first: FirstFinding): string {
+  const vPlural = inputs.violations === 1 ? "" : "s";
+  if (inputs.fixable > 0) {
+    const fPlural = inputs.fixable === 1 ? "" : "s";
+    return `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`;
+  }
+  return `${inputs.violations} violation${vPlural} with no machine-generated fix. Call \`explain_rule\` on \`${first.ruleId}\` and apply manually; verify with \`scan_file ${first.path}\` after editing.${inputs.iterativeTip}`;
+}
+
+function notesNextStep(inputs: NextStepInputs, first: FirstFinding): string {
+  const nPlural = inputs.notes === 1 ? "" : "s";
+  return `No errors/warnings, ${inputs.notes} info-level note${nPlural} (scanner flagged things it can't fully verify). Open \`scan_file ${first.path}\` or read the source to resolve.${manualTail(inputs)}${inputs.iterativeTip}`;
+}
+
+function manualTail(inputs: NextStepInputs): string {
+  if (inputs.actionableManual <= 0) return "";
+  const plural = inputs.actionableManual === 1 ? "" : "s";
+  return ` Then \`checklist\` for the ${inputs.actionableManual} grounded manual-review item${plural}.`;
+}
+
+function numFromPlan(plan: Record<string, unknown>, key: string): number {
+  const raw = plan[key];
+  return typeof raw === "number" ? raw : 0;
+}
+
+interface FirstFinding {
+  readonly path: string;
+  readonly line: number;
+  readonly ruleId: string;
+}
+
+/**
+ * Pulls the first finding's (file, line, ruleId) from the sorted
+ * `files` entries so the next-step hint can name a concrete call site.
+ * Falls back to null when the response has no findings or the shape
+ * doesn't expose the fields we want — the caller degrades to generic
+ * text in that case.
+ */
+function firstCallableFinding(
+  files: readonly { readonly path: string; readonly findings: unknown[] }[],
+): FirstFinding | null {
+  for (const file of files) {
+    for (const raw of file.findings) {
+      const extracted = readFindingRuleIdAndLine(raw);
+      if (extracted !== null) return { path: file.path, ...extracted };
+    }
+  }
+  return null;
+}
+
+function readFindingRuleIdAndLine(
+  raw: unknown,
+): { readonly ruleId: string; readonly line: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const ruleId = f["ruleId"];
+  const line = f["line"];
+  if (typeof ruleId !== "string" || typeof line !== "number") return null;
+  return { ruleId, line };
 }
 
 /**
