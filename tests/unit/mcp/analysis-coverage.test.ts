@@ -214,6 +214,17 @@ describe("buildAnalysisCoverage — hints", () => {
       expect(top?.length).toBe(5);
     });
 
+    it("returns the full ranked list (not just top 5) when verbose is true", () => {
+      // Agent triaging wrapper coverage needs every candidate, not
+      // just the head — the top-5 truncation is a human-attention
+      // optimization that hurts agent triage. verbose removes the cap.
+      const tags = Array.from({ length: 12 }, (_, i) => `Comp${i}`);
+      const files = [tsxFile("a.tsx", tags, { interactive: true })];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, true);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as { name: string }[] | undefined;
+      expect(top?.length).toBe(12);
+    });
+
     it("breaks ties alphabetically so output is deterministic across runs", () => {
       const files = [tsxFile("a.tsx", ["Zeta", "Alpha", "Mike"], { interactive: true })];
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);

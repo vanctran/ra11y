@@ -113,10 +113,12 @@ function elementIsInteractive(el: {
 }
 
 /**
- * Upper bound on how many top-by-count opaque components we surface
+ * Default cap on how many top-by-count opaque components we surface
  * inline. Five is enough to identify the design system's hot paths
- * without bloating the response; the full list is still available
- * under `verboseMeta: true` via `opaqueCustomComponentNames`.
+ * without bloating the response. Under `verboseMeta: true` the cap is
+ * removed and the full ranked list (with call-site counts) is
+ * returned, because the agent triaging wrapper coverage needs every
+ * candidate, not just the head.
  */
 const OPAQUE_COMPONENT_TOP_N = 5;
 
@@ -147,10 +149,8 @@ export function buildAnalysisCoverage(
   } = {};
   if (acc.opaqueComponents.size > 0) {
     coverage.opaqueCustomComponents = acc.opaqueComponents.size;
-    coverage.opaqueCustomComponentsTop = rankOpaqueByCallSites(acc.opaqueComponents).slice(
-      0,
-      OPAQUE_COMPONENT_TOP_N,
-    );
+    const ranked = rankOpaqueByCallSites(acc.opaqueComponents);
+    coverage.opaqueCustomComponentsTop = verbose ? ranked : ranked.slice(0, OPAQUE_COMPONENT_TOP_N);
     if (verbose) coverage.opaqueCustomComponentNames = [...acc.opaqueComponents.keys()].sort();
   }
   if (acc.templateEngines.size > 0) {
