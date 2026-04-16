@@ -115,4 +115,73 @@ describe("parseTsx", () => {
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0]?.recoverable).toBe(true);
   });
+
+  describe("TypeScript generics — disambiguation from JSX", () => {
+    it("does not treat multi-arg generics as JSX", () => {
+      const src = "type X = Pick<Crypto, 'randomUUID' | 'getRandomValues'>;";
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("does not treat nested generics as JSX", () => {
+      const src = "type X = Partial<Pick<Foo, 'a'>>; type Y = Array<Map<string, number>>;";
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("does not treat single-arg generics in type annotations as JSX", () => {
+      const src = `
+        const arr: Array<string> = [];
+        const fn: (x: Promise<void>) => Readonly<Foo> = null as any;
+      `;
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("does not treat generic type parameters as JSX", () => {
+      const src = "function f<T extends Foo>(x: T): T { return x; }";
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("does not treat generic function invocations as JSX", () => {
+      const src = "const x = identity<string>('hello'); arr.map<number>(toNum);";
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("does not treat React.forwardRef type signatures as JSX", () => {
+      const src = "type ButtonRef = ForwardRefRenderFunction<HTMLButtonElement, typeof Button>;";
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(0);
+    });
+
+    it("still parses self-closing JSX followed by a statement terminator", () => {
+      // `<img src='a'>;` — lowercase tag name stays JSX even though `;`
+      // is in the post-`>` generic-signal set.
+      const { root, errors } = parseTsx("const x = <img src='a'>;");
+      expect(errors.length).toBe(0);
+      expect(root.jsxElements.length).toBe(1);
+    });
+
+    it("parses mixed TS generics and real JSX in the same module", () => {
+      const src = `
+        type Props = Pick<HTMLAttributes<HTMLDivElement>, 'id' | 'className'>;
+        export function View(props: Props) {
+          return <div id={props.id}><span>hi</span></div>;
+        }
+      `;
+      const { root, errors } = parseTsx(src);
+      expect(errors.length).toBe(0);
+      const div = findFirst(root, "div");
+      expect(div).not.toBeNull();
+      expect(div?.attributes[0]?.name).toBe("id");
+    });
+  });
 });

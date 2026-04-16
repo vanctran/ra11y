@@ -34,6 +34,7 @@ import type {
   SourcePosition,
   TsxModule,
 } from "../../types/ast.ts";
+import { classifyAngleBracket } from "./tsx-generic-classifier.ts";
 
 export interface TsxParseResult {
   readonly root: TsxModule;
@@ -102,7 +103,14 @@ class TsxParser {
       const c = this.#peek();
       if (c === undefined) return;
       if (this.#skipSkippable(c)) continue;
-      if (c === "<" && isTagStart(this.#peek(1))) return;
+      if (c === "<" && isTagStart(this.#peek(1))) {
+        const classified = classifyAngleBracket(this.#source, this.#pos);
+        if (classified?.isGeneric) {
+          this.#advance(classified.endPos - this.#pos);
+          continue;
+        }
+        return;
+      }
       this.#advance(1);
     }
   }
