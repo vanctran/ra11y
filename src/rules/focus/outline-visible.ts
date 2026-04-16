@@ -188,7 +188,7 @@ function buildMessage(selector: string): string {
 function buildSuggestion(selector: string): string {
   const base = `Add a visible focus indicator to '${selector}'. Replace \`outline: none\` with a custom outline (e.g., \`outline: 2px solid #0066cc\`), or add \`box-shadow: 0 0 0 2px #0066cc\` as an alternative. If you're resetting only to re-style, keep the replacement in the same rule block.`;
   if (isScopedSelector(selector)) {
-    return `${base} If this element uses Tailwind's \`focus-visible:ring-*\` or \`focus-visible:outline-*\` classes on the component, the focus indicator is already provided — this note can be suppressed.`;
+    return `${base} If this element uses Tailwind's \`focus-visible:ring-*\` or \`focus-visible:outline-*\` classes on the component, the focus indicator is already provided — suppress this note by adding \`/* ra11y-disable-next-line focus/outline-visible */\` on the line above the CSS rule (or \`/* ra11y-disable focus/outline-visible */\` at the top of the file). Criterion-level pragmas (\`wcag22:2.4.7\`) work too.`;
   }
   return base;
 }
