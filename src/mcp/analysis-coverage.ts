@@ -32,18 +32,84 @@ import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import type { Rule } from "../types/rule.ts";
 
+interface OpaqueComponentUsage {
+  callSites: number;
+  /**
+   * True once ANY call site of this component has an attribute that
+   * signals DOM interactivity (onClick, onKeyDown, role, tabIndex,
+   * href, to, onSubmit, ...) OR uses `{...spread}` props which static
+   * analysis cannot introspect. Wrapper candidates — the components
+   * users most want surfaced by `nativeWrappers` onboarding — have
+   * this true somewhere. Framework primitives like react-router's
+   * `<Route>` stay false and drop out of the top-N ranking.
+   */
+  interactive: boolean;
+}
+
 interface CoverageAccumulator {
   /**
-   * Map of PascalCase tag name → number of JSX call sites. We track the
-   * count (not just the set) so the coverage output can always surface
-   * the top-N by usage inline, without requiring the agent to flip
-   * `verboseMeta: true` and count names manually. High-traffic wrappers
-   * are where registering `nativeWrappers` has the biggest coverage
-   * payoff.
+   * Map of PascalCase tag name → call-site count + interactive flag.
+   * Count drives the top-N ranking so the coverage output can surface
+   * the hot-path wrappers without the agent flipping `verboseMeta` and
+   * counting manually. The interactive flag filters the ranking to
+   * components actually used in an interactive context — non-DOM
+   * framework primitives (Route, Provider, Suspense, ErrorBoundary)
+   * never appear with interactive attrs and so drop out structurally,
+   * without a hardcoded carve-out list.
    */
-  readonly opaqueComponents: Map<string, number>;
+  readonly opaqueComponents: Map<string, OpaqueComponentUsage>;
   readonly templateEngines: Set<string>;
   readonly parseErrorFiles: string[];
+}
+
+/**
+ * Attribute names that signal the surrounding element is used in an
+ * interactive context. A single match on any call site flips the
+ * component's `interactive` flag — so a component used mostly
+ * declaratively but occasionally with `onClick` still surfaces as a
+ * wrapper candidate. Over-includes on purpose: the goal is to keep real
+ * wrappers ranked, not to perfectly classify. `{...spread}` props also
+ * trip the flag because we cannot see what the spread expands to.
+ */
+const INTERACTIVE_ATTRS: ReadonlySet<string> = new Set([
+  "onClick",
+  "onKeyDown",
+  "onKeyPress",
+  "onKeyUp",
+  "onMouseDown",
+  "onMouseUp",
+  "onPointerDown",
+  "onPointerUp",
+  "onTouchStart",
+  "onTouchEnd",
+  "onSubmit",
+  "onChange",
+  "onInput",
+  "onFocus",
+  "onBlur",
+  "role",
+  "tabIndex",
+  "href",
+  "to",
+  "formAction",
+  "aria-pressed",
+  "aria-expanded",
+  "aria-haspopup",
+  "aria-checked",
+  "aria-selected",
+  "aria-disabled",
+  "disabled",
+]);
+
+function elementIsInteractive(el: {
+  readonly attributes: readonly { readonly name: string }[];
+  readonly hasSpreadProps: boolean;
+}): boolean {
+  if (el.hasSpreadProps) return true;
+  for (const attr of el.attributes) {
+    if (INTERACTIVE_ATTRS.has(attr.name)) return true;
+  }
+  return false;
 }
 
 /**
@@ -131,11 +197,12 @@ const CSS_TO_MARKUP_THIN_RATIO = 0.05;
  * trip just to read counts.
  */
 function rankOpaqueByCallSites(
-  opaque: ReadonlyMap<string, number>,
+  opaque: ReadonlyMap<string, OpaqueComponentUsage>,
 ): readonly { readonly name: string; readonly callSites: number }[] {
   return [...opaque.entries()]
-    .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
-    .map(([name, callSites]) => ({ name, callSites }));
+    .filter(([, usage]) => usage.interactive)
+    .sort(([aName, a], [bName, b]) => b.callSites - a.callSites || aName.localeCompare(bName))
+    .map(([name, usage]) => ({ name, callSites: usage.callSites }));
 }
 
 function buildHints(files: readonly ParsedFile[], acc: CoverageAccumulator): readonly string[] {
@@ -321,8 +388,15 @@ function accumulateCoverageForFile(
   }
   if (file.ast.language === "css") return;
   for (const el of walkJsxElements(file.ast.root)) {
-    if (/^[A-Z]/.test(el.tagName) && !wrapperSet.has(el.tagName)) {
-      acc.opaqueComponents.set(el.tagName, (acc.opaqueComponents.get(el.tagName) ?? 0) + 1);
+    if (!/^[A-Z]/.test(el.tagName)) continue;
+    if (wrapperSet.has(el.tagName)) continue;
+    const interactive = elementIsInteractive(el);
+    const existing = acc.opaqueComponents.get(el.tagName);
+    if (existing) {
+      existing.callSites += 1;
+      if (interactive) existing.interactive = true;
+    } else {
+      acc.opaqueComponents.set(el.tagName, { callSites: 1, interactive });
     }
   }
 }

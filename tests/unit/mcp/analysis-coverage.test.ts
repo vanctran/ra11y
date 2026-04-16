@@ -10,8 +10,32 @@ import type { ParsedFile } from "../../../src/engine/scanner.ts";
 import { buildAnalysisCoverage } from "../../../src/mcp/analysis-coverage.ts";
 import type { Rule } from "../../../src/types/rule.ts";
 
-function tsxFile(path: string, tagNames: readonly string[]): ParsedFile {
+function tsxFile(
+  path: string,
+  tagNames: readonly string[],
+  options: { readonly interactive?: boolean } = {},
+): ParsedFile {
   const source = tagNames.map((t) => `<${t} />`).join("\n");
+  const interactive = options.interactive === true;
+  // An `onClick` attribute makes the scanner treat the component as a
+  // wrapper candidate (used in an interactive context). Tests that
+  // exercise the top-N ranking set interactive: true; tests that
+  // exercise the total opaque count or the "never interactive"
+  // structural filter leave it off.
+  const interactiveAttr = interactive
+    ? [
+        {
+          kind: "JsxAttribute" as const,
+          range: { start: 0, end: 0 },
+          loc: {
+            start: { line: 1, column: 1, offset: 0 },
+            end: { line: 1, column: 1, offset: 0 },
+          },
+          name: "onClick",
+          value: { kind: "Expression" as const, raw: "{() => {}}" },
+        },
+      ]
+    : [];
   const jsxElements = tagNames.map((tagName) => ({
     kind: "JsxElement" as const,
     range: { start: 0, end: 0 },
@@ -20,7 +44,7 @@ function tsxFile(path: string, tagNames: readonly string[]): ParsedFile {
       end: { line: 1, column: 1, offset: 0 },
     },
     tagName,
-    attributes: [],
+    attributes: interactiveAttr,
     children: [],
     selfClosing: true,
     hasSpreadProps: false,
@@ -143,7 +167,7 @@ describe("buildAnalysisCoverage — hints", () => {
 
     it("hints with example names when opaque components are plentiful", () => {
       const tags = Array.from({ length: 10 }, (_, i) => `Comp${i}`);
-      const files = [tsxFile("a.tsx", tags)];
+      const files = [tsxFile("a.tsx", tags, { interactive: true })];
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       const hints = analysisCoverage?.["hints"] as string[] | undefined;
       expect(hints).toBeDefined();
@@ -162,8 +186,14 @@ describe("buildAnalysisCoverage — hints", () => {
     });
 
     it("always surfaces the top-by-call-site list inline (no verboseMeta needed)", () => {
-      // 3 call sites of Button, 2 of Card, 1 of Widget.
-      const files = [tsxFile("a.tsx", ["Button", "Button", "Button", "Card", "Card", "Widget"])];
+      // 3 call sites of Button, 2 of Card, 1 of Widget. All used with
+      // onClick so the structural "wrapper candidate" filter keeps them
+      // in the ranking.
+      const files = [
+        tsxFile("a.tsx", ["Button", "Button", "Button", "Card", "Card", "Widget"], {
+          interactive: true,
+        }),
+      ];
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
         | { name: string; callSites: number }[]
@@ -176,19 +206,98 @@ describe("buildAnalysisCoverage — hints", () => {
     });
 
     it("caps the top list at 5 entries so the response stays compact", () => {
-      // 10 unique components, one call site each.
+      // 10 unique components, one call site each, all interactive.
       const tags = Array.from({ length: 10 }, (_, i) => `Comp${i}`);
-      const files = [tsxFile("a.tsx", tags)];
+      const files = [tsxFile("a.tsx", tags, { interactive: true })];
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       const top = analysisCoverage?.["opaqueCustomComponentsTop"] as { name: string }[] | undefined;
       expect(top?.length).toBe(5);
     });
 
     it("breaks ties alphabetically so output is deterministic across runs", () => {
-      const files = [tsxFile("a.tsx", ["Zeta", "Alpha", "Mike"])];
+      const files = [tsxFile("a.tsx", ["Zeta", "Alpha", "Mike"], { interactive: true })];
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       const top = analysisCoverage?.["opaqueCustomComponentsTop"] as { name: string }[] | undefined;
       expect(top?.map((e) => e.name)).toEqual(["Alpha", "Mike", "Zeta"]);
+    });
+
+    it("excludes components never used with an interactive attribute from the top-N", () => {
+      // Route-style non-DOM components: appear plenty but never get
+      // onClick/role/tabIndex/href. Previously dominated the top-5;
+      // now the structural usage filter drops them. Genuine wrapper
+      // candidates (Button with onClick) stay ranked.
+      const nonInteractive = Array.from({ length: 20 }, () => "Route");
+      const interactive = ["Button", "Button", "Button"];
+      const files = [
+        tsxFile("a.tsx", nonInteractive, { interactive: false }),
+        tsxFile("b.tsx", interactive, { interactive: true }),
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
+        | { name: string; callSites: number }[]
+        | undefined;
+      expect(top?.map((e) => e.name)).toEqual(["Button"]);
+      // Total count still reports both — Route remains "opaque", it's
+      // just not a wrapper candidate. Don't hide the inventory signal.
+      expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(2);
+    });
+
+    it("keeps a component in the ranking when ANY call site is interactive", () => {
+      // Mixed usage: <MyBtn /> bare in file A, <MyBtn onClick=...> in
+      // file B. Still a wrapper candidate on the strength of file B.
+      const files = [
+        tsxFile("a.tsx", ["MyBtn", "MyBtn"], { interactive: false }),
+        tsxFile("b.tsx", ["MyBtn"], { interactive: true }),
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
+        | { name: string; callSites: number }[]
+        | undefined;
+      expect(top).toEqual([{ name: "MyBtn", callSites: 3 }]);
+    });
+
+    it("treats {...spread} props as possibly interactive (conservative)", () => {
+      // Static analysis can't see inside spread, so the component
+      // stays ranked rather than silently dropping a design-system
+      // wrapper that forwards interactivity via spread.
+      const files: ParsedFile[] = [
+        {
+          filePath: "a.tsx",
+          source: "<Wrapper {...props} />",
+          ast: {
+            language: "tsx",
+            root: {
+              kind: "TsxModule",
+              range: { start: 0, end: 22 },
+              loc: {
+                start: { line: 1, column: 1, offset: 0 },
+                end: { line: 1, column: 1, offset: 22 },
+              },
+              jsxElements: [
+                {
+                  kind: "JsxElement",
+                  range: { start: 0, end: 22 },
+                  loc: {
+                    start: { line: 1, column: 1, offset: 0 },
+                    end: { line: 1, column: 1, offset: 22 },
+                  },
+                  tagName: "Wrapper",
+                  attributes: [],
+                  children: [],
+                  selfClosing: true,
+                  hasSpreadProps: true,
+                },
+              ],
+            },
+            errors: [],
+          },
+        },
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
+        | { name: string; callSites: number }[]
+        | undefined;
+      expect(top).toEqual([{ name: "Wrapper", callSites: 1 }]);
     });
 
     it("omits the top list when no opaque components were seen", () => {
