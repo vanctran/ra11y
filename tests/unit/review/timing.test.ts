@@ -61,39 +61,35 @@ describe("review/timing", () => {
     expect(offsets.size).toBeGreaterThanOrEqual(2);
   });
 
-  describe("filename role hints (AI-first dismissal context)", () => {
-    // Per CLAUDE.md §1 we never suppress — but we enrich the `reason`
-    // with a filename-derived role hint so an MCP agent can dismiss
-    // the candidate in one pass instead of opening the file.
-    const cases: readonly { file: string; role: string }[] = [
-      { file: "src/hooks/useDebouncedCallback.ts", role: "debounce" },
-      { file: "lib/useThrottledScroll.ts", role: "throttle" },
-      { file: "services/authManager.ts", role: "auth" },
-      { file: "services/telemetryService.ts", role: "telemetry" },
-      { file: "lib/indexedDbTransport.ts", role: "transport" },
-      { file: "workers/backgroundWorker.ts", role: "worker" },
-      { file: "utils/retry.ts", role: "retry" },
-      { file: "lib/heartbeat.ts", role: "keepalive" },
+  describe("no filename-based classification (CLAUDE.md §1 regression guard)", () => {
+    // Prior design attached "(file looks like a X — likely not user-facing)"
+    // hints to setTimeout/setInterval candidates, keyed off filename
+    // regexes for debounce/telemetry/authManager/etc. That's the tool
+    // duplicating agent-side classification — and risking confidently
+    // wrong output when, say, authManager legitimately houses a session
+    // timeout or useDebouncedCallback governs user-perceived latency.
+    // Pin the removal so the hints never sneak back in.
+    const suspectFiles: readonly string[] = [
+      "src/hooks/useDebouncedCallback.ts",
+      "lib/useThrottledScroll.ts",
+      "services/authManager.ts",
+      "services/telemetryService.ts",
+      "lib/indexedDbTransport.ts",
+      "workers/backgroundWorker.ts",
+      "utils/retry.ts",
+      "lib/heartbeat.ts",
     ];
-    for (const { file, role } of cases) {
-      it(`annotates ${role} role for ${file}`, () => {
+    for (const file of suspectFiles) {
+      it(`does NOT attach filename-derived user-facing judgments for ${file}`, () => {
         const out = runFinder(finder, `setTimeout(() => x(), 1000);`, { filePath: file });
         const hit = out.find((c) => c.reason.includes("setTimeout"));
         expect(hit).toBeDefined();
-        expect(hit?.reason).toMatch(/file looks like a .+ — likely not user-facing/);
+        expect(hit?.reason).not.toContain("file looks like");
+        expect(hit?.reason).not.toContain("likely not user-facing");
       });
     }
 
-    it("does NOT annotate for an ordinary component file", () => {
-      const out = runFinder(finder, `setTimeout(() => logout(), 60_000);`, {
-        filePath: "src/ui/Session.tsx",
-      });
-      const hit = out.find((c) => c.reason.includes("setTimeout"));
-      expect(hit).toBeDefined();
-      expect(hit?.reason).not.toContain("file looks like");
-    });
-
-    it("never replaces the normative review prompt — hint is additive", () => {
+    it("keeps the normative review prompt so the agent knows what to check", () => {
       const out = runFinder(finder, `setTimeout(() => x(), 1000);`, {
         filePath: "src/hooks/useDebouncedCallback.ts",
       });
