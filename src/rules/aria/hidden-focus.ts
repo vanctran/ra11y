@@ -42,6 +42,7 @@ import type {
   JsxNode,
   TsxModule,
 } from "../../types/ast.ts";
+import type { FixPaths } from "../../types/violation.ts";
 
 /**
  * HTML tag names that are natively focusable. Some of these are
@@ -112,6 +113,7 @@ type Emit = (v: {
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
+  fixPaths: FixPaths;
 }) => void;
 
 type Violation = {
@@ -119,6 +121,7 @@ type Violation = {
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
+  fixPaths: FixPaths;
 };
 
 // ---------------------------------------------------------------------------
@@ -295,11 +298,32 @@ function keepsInTabOrder(raw: string): boolean {
 // ---------------------------------------------------------------------------
 
 function buildDirectViolation(tagName: string, loc: { line: number; column: number }): Violation {
+  const nonFocusablePath =
+    tagName === "a" || tagName === "area"
+      ? "make the element non-focusable by removing href (an anchor without href is not in the tab order)"
+      : tagName === "input"
+        ? 'make the element non-focusable by using type="hidden" (or replacing it with a non-interactive element)'
+        : "make the element non-focusable by replacing the native control with an inert element like <span>";
+  const fixPaths: FixPaths = {
+    primary: {
+      label: `replace aria-hidden="true" with the \`inert\` attribute — inert hides the subtree from the accessibility tree AND removes it from the tab order in one declaration (Baseline widely available since 2024)`,
+    },
+    alternatives: [
+      {
+        label:
+          'remove aria-hidden="true" — if the control should remain operable by sighted keyboard users, it must also be in the accessibility tree',
+      },
+      {
+        label: `${nonFocusablePath}, then keep aria-hidden="true" for the decorative case; optionally add tabindex="-1" to belt-and-suspenders the tab-order removal`,
+      },
+    ],
+  };
   return {
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<${tagName}> has aria-hidden="true" but is still focusable — keyboard users will tab to it and the screen reader will announce nothing.`,
-    suggestion: `Either remove aria-hidden, make the element non-focusable (for ${tagName === "a" || tagName === "area" ? "this anchor, remove href" : tagName === "input" ? 'this input, use type="hidden" or a different approach' : "a native control, replace it with a non-interactive element like <span>"}), or — if the intent is purely decorative — set tabindex="-1" so the element is out of the tab order and then hide it.`,
+    suggestion: `Primary fix: ${fixPaths.primary.label}. Alternatives (less likely): (a) ${fixPaths.alternatives[0]?.label}; (b) ${fixPaths.alternatives[1]?.label}.`,
+    fixPaths,
   };
 }
 
@@ -308,10 +332,24 @@ function buildDescendantViolation(
   childTag: string,
   loc: { line: number; column: number },
 ): Violation {
+  const fixPaths: FixPaths = {
+    primary: {
+      label: `replace aria-hidden="true" on the <${parentTag}> with the \`inert\` attribute — inert makes the whole subtree unfocusable AND hidden from AT in one declaration (Baseline widely available since 2024)`,
+    },
+    alternatives: [
+      {
+        label: `remove aria-hidden="true" from the <${parentTag}> — if any descendant should be reachable, the ancestor cannot be hidden from AT`,
+      },
+      {
+        label: `keep aria-hidden="true" on the <${parentTag}> and add tabindex="-1" (plus \`disabled\` where applicable) to every focusable descendant, starting with the <${childTag}> flagged here`,
+      },
+    ],
+  };
   return {
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<${parentTag}> has aria-hidden="true" but contains a focusable <${childTag}> descendant — keyboard focus will land inside the hidden subtree and produce silent focus for AT users.`,
-    suggestion: `aria-hidden propagates to descendants but focus does not. Either remove aria-hidden from the <${parentTag}>, or add tabindex="-1" (and disable/hide) the inner <${childTag}> so nothing inside the subtree is tabbable. The 'inert' attribute is the modern alternative that handles both at once.`,
+    suggestion: `Primary fix: ${fixPaths.primary.label}. Alternatives (less likely): (a) ${fixPaths.alternatives[0]?.label}; (b) ${fixPaths.alternatives[1]?.label}.`,
+    fixPaths,
   };
 }

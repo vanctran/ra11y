@@ -191,5 +191,28 @@ describe("rule aria/hidden-focus", () => {
       });
       expect(v[0]?.suggestion).toMatch(/inert|tabindex/);
     });
+
+    it("emits structured fixPaths with inert as primary for direct-focus violations", () => {
+      // suggest_fix surfaces fixPaths so the agent gets labeled
+      // alternatives instead of echoing prose. The primary should be
+      // `inert` because it handles both focus removal AND AT hiding in
+      // one attribute — the two alternatives are the partial fixes.
+      const v = runRule(rule, `<button aria-hidden="true">Close</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.fixPaths?.primary.label).toContain("inert");
+      expect(v[0]?.fixPaths?.alternatives).toHaveLength(2);
+      const altLabels = v[0]?.fixPaths?.alternatives.map((a) => a.label).join(" | ") ?? "";
+      expect(altLabels).toContain("remove aria-hidden");
+      expect(altLabels).toContain("non-focusable");
+    });
+
+    it("emits structured fixPaths with inert as primary for descendant violations", () => {
+      const v = runRule(rule, `<div aria-hidden="true"><button>Inside</button></div>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.fixPaths?.primary.label).toContain("inert");
+      expect(v[0]?.fixPaths?.alternatives).toHaveLength(2);
+    });
   });
 });

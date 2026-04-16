@@ -64,6 +64,7 @@ export function runRule(
     message: v.message,
     ...(v.suggestion !== undefined && { suggestion: v.suggestion }),
     ...(v.fix !== undefined && { fix: v.fix }),
+    ...(v.fixPaths !== undefined && { fixPaths: v.fixPaths }),
     ...(v.snippet !== undefined && { snippet: v.snippet }),
   }));
 }
