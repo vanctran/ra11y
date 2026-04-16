@@ -77,4 +77,51 @@ describe("review/images-of-text", () => {
     expect(ids.has("wcag21:1.4.9")).toBe(true);
     expect(out.length).toBe(6);
   });
+
+  describe("logotype exemption annotation", () => {
+    // Per CLAUDE.md § 1 we never suppress on a spec carve-out — logos
+    // are the canonical blocked example. The finder still emits the
+    // candidate; the reason text carries the exemption hint so the
+    // agent can verify in one read.
+    it("annotates 1.4.5 (AA) with the logotype exemption hint when class=logo fires", () => {
+      const out = runFinder(
+        finder,
+        `const x = <img className="site-logo" src="/b.png" alt="Acme" />;`,
+      );
+      const hit = out.find((c) => c.criterionId === "wcag22:1.4.5");
+      expect(hit?.reason).toContain("logotype exemption");
+    });
+
+    it("annotates when the src filename signals a logo", () => {
+      const out = runFinder(finder, `<img src="/brand-logo.svg" alt="Acme">`, {
+        filePath: "x.html",
+      });
+      const hit = out.find((c) => c.criterionId === "wcag22:1.4.5");
+      expect(hit?.reason).toContain("logotype exemption");
+    });
+
+    it("does NOT annotate 1.4.9 (AAA no-exception variant) — logos still apply at AAA", () => {
+      const out = runFinder(
+        finder,
+        `const x = <img className="site-logo" src="/b.png" alt="Acme" />;`,
+      );
+      const aaa = out.find((c) => c.criterionId === "wcag22:1.4.9");
+      expect(aaa?.reason).not.toContain("logotype exemption");
+    });
+
+    it("does NOT annotate when the keyword is banner/heading/title/header", () => {
+      const out = runFinder(finder, `<img src="/site-banner.png" alt="Hero">`, {
+        filePath: "x.html",
+      });
+      const hit = out.find((c) => c.criterionId === "wcag22:1.4.5");
+      expect(hit?.reason).not.toContain("logotype exemption");
+    });
+
+    it("does not suppress the candidate — every logo hit still surfaces", () => {
+      const out = runFinder(finder, `<img src="/brand-logo.svg" alt="Acme">`, {
+        filePath: "x.html",
+      });
+      expect(out.length).toBeGreaterThan(0);
+    });
+  });
 });

@@ -110,11 +110,13 @@ function emitHtmlImageCandidate(
 ): void {
   if (element.tagName.toLowerCase() !== "img") return;
   const alt = shortImageText(getHtmlAttribute(element, "alt"));
+  const classVal = getHtmlAttribute(element, "class");
+  const srcVal = getHtmlAttribute(element, "src");
   const signals = collectSignals(
     alt,
     parentText,
     adjacentHtmlText(siblings, index),
-    keywordHint(getHtmlAttribute(element, "class"), getHtmlAttribute(element, "src")),
+    keywordHint(classVal, srcVal),
   );
   if (signals.length === 0) return;
   pushForAllCriteria(
@@ -123,6 +125,7 @@ function emitHtmlImageCandidate(
     element.loc.start.line,
     element.loc.start.column,
     renderReason(signals),
+    logoLike(classVal, srcVal),
   );
 }
 
@@ -159,14 +162,14 @@ function emitJsxImageCandidate(
 ): void {
   if (element.tagName !== "img") return;
   const alt = shortImageText(literalJsxAttribute(element, "alt"));
+  const classVal =
+    literalJsxAttribute(element, "className") ?? literalJsxAttribute(element, "class");
+  const srcVal = literalJsxAttribute(element, "src");
   const signals = collectSignals(
     alt,
     parentText,
     adjacentJsxText(siblings, index),
-    keywordHint(
-      literalJsxAttribute(element, "className") ?? literalJsxAttribute(element, "class"),
-      literalJsxAttribute(element, "src"),
-    ),
+    keywordHint(classVal, srcVal),
   );
   if (signals.length === 0) return;
   pushForAllCriteria(
@@ -175,6 +178,7 @@ function emitJsxImageCandidate(
     element.loc.start.line,
     element.loc.start.column,
     renderReason(signals),
+    logoLike(classVal, srcVal),
   );
 }
 
@@ -311,10 +315,50 @@ function pushForAllCriteria(
   line: number,
   column: number,
   reason: string,
+  logoLikelyExempt: boolean,
 ): void {
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    const augmented =
+      logoLikelyExempt && criterionAllowsLogotypeExemption(criterionId)
+        ? `${reason} — if this is a logo or brand mark, WCAG 1.4.5 has a logotype exemption (essential presentation); the AAA "no exception" variant (1.4.9) still applies`
+        : reason;
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason: augmented,
+    });
   }
+}
+
+/**
+ * True for criteria that carry the logotype exemption baked into their
+ * normative text. 1.4.5 and its Section 508 / EN 301 549 equivalents
+ * exempt "text that is part of a logo or brand name"; 1.4.9 is the AAA
+ * "No Exception" variant and therefore does NOT exempt logos. Per
+ * CLAUDE.md § 1 we never suppress based on this heuristic — the hint
+ * is added to `reason` text so the agent can verify in one read.
+ */
+function criterionAllowsLogotypeExemption(criterionId: string): boolean {
+  return criterionId !== "wcag22:1.4.9" && criterionId !== "wcag21:1.4.9";
+}
+
+/**
+ * Returns true when the image's class or src filename contains a
+ * word ra11y classifies as logo-like. Keeps the heuristic inline so
+ * the caller can pass the boolean to `pushForAllCriteria` without
+ * re-parsing the attributes. Other keywords we match on (banner,
+ * heading, title, header) don't earn the exemption hint — a banner
+ * with text is exactly the 1.4.5 failure pattern.
+ */
+function logoLike(classValue: string | null, srcValue: string | null): boolean {
+  return (
+    isLogoKeyword(keywordMatch(classValue)) ||
+    isLogoKeyword(keywordMatch(fileNameFromPath(srcValue)))
+  );
+}
+
+function isLogoKeyword(match: string | null): boolean {
+  return match === "logo";
 }
 
 interface ImageText {
