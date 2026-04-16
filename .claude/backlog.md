@@ -266,3 +266,82 @@ Three batches of unbiased feedback against ~/dev/leela converged on the same sha
 - [ ] `src/review/finders/on-input-body.ts` — tighten 3.2.2 confidence. Inspect the onChange handler's function body (arrow/named) for a call to `router.push`, `navigate`, `history.push`, `window.location.*`, or `.submit()`. Handlers with those calls get `confidence: "high"`; handlers without get `confidence: "low"` so reviewers can skip filter-bar noise in seconds.
 - [ ] `src/mcp/tool-audit.ts` — meta-tool that runs scan + coverage + checklist in one round-trip and returns all three payloads under `{ scan, coverage, checklist }`. Keeps the existing three tools intact; just saves the round-trips for agents that want one-shot workflow.
 - [ ] `tests/unit/review/finders/*` — each new finder gets the standard ≥3 positive, ≥3 negative, ≥1 edge-case suite against fixtures under `tests/fixtures/review/<finder>/`.
+
+## Phase 23 — Real-world fixture corpus (regression moat)
+
+CLAUDE.md's `fixture-curator` subagent is described as "the project's moat — edge cases discovered in production codebases that existing a11y tools miss." The directory it's meant to write to — `tests/fixtures/real-world/` — doesn't exist yet. Current test shape is dominated by implementation-shaped unit tests ("the top-5 cap returns 5 entries," "the ranker orders alphabetically on ties") that need to change with every refactor. Real-world fixtures lock in the *bug*, not the code; they survive refactors.
+
+The Apr 2026 leela-feedback rounds surfaced ~8 real-world bug categories (parser generics, SPA shell, Tailwind coverage, logotype annotation, timing role hints, template-directive handling, opaque-component ranking, ra11y-disable reason slot). Each landed with unit tests. Each should ALSO live as a sanitized snippet under real-world/ so a future parser rewrite (or any refactor) doesn't silently reopen them.
+
+**Design questions to resolve before building** (take a position, commit an ADR):
+
+- **Assertion shape.** Snapshot match on full scan output is brittle (every meta-field change breaks every fixture); property-based assertions (`expectReasonContains`, `expectMetaHintIncludes`, `expectZeroParseErrors`, `expectCriterionPresent`) survive shape drift but require an enumeration. Lean property-based; golden-snapshot only for stable high-value shapes (e.g., the full `formatted.plan` of a canonical clean scan).
+- **Per-fixture config.** Some fixtures need `ra11y.config.ts` to exercise the flag under test (autoDetectWrappers, additionalPaths, suppressions with reasons). Some don't. Convention: bare source-only directory means "run scan_project with defaults"; fixture dir containing `ra11y.config.ts` overrides. Document the contract on the harness, not per-fixture.
+- **Relationship to existing `tests/fixtures/bad/<rule>/` and `tests/fixtures/good/<rule>/`.** Those are *rule-level* per-rule positive/negative cases driving unit rule tests. `real-world/<case>/` is *cross-cutting* — one snippet might hit parser + coverage hint + review candidate + meta field. Keep them separate namespaces; don't merge.
+- **Sanitization policy.** Snippets come from real codebases; must not carry the original project's identifiers, copy, or visual style verbatim. Minimum rewrite: replace brand/component names with generic equivalents ("Button" → "Widget", "ComposerSendButton" → "ComposerFooButton"), strip business copy, keep the structural pattern intact. If rewriting would destroy the reproduction, the pattern is too specific — capture the minimum structural skeleton instead.
+- **Golden-output generation vs hand-written assertions.** Generated expectations are tempting but lock in every coincidence of current behavior; a hand-written assertion explicitly names the *one thing* the fixture is guarding. Default hand-written; allow generated-golden only for "full canonical output" smoke tests where the whole shape is load-bearing.
+
+**Harness architecture** (sketch — refine in the ADR):
+
+```
+tests/fixtures/real-world/
+  <case-id>/
+    source/            # sanitized snippets — scanner input
+      *.ts|*.tsx|*.html|*.css|*.ra11y.config.ts?
+    assertions.ts      # typed expectations (see below)
+    README.md          # which commit/feedback-round introduced this case + what it guards
+```
+
+`assertions.ts` exports a typed object:
+
+```ts
+export const assertions: FixtureAssertions = {
+  description: "TS generics (Pick<T,K>, ForwardRefRenderFunction<...>) parse without emitting JSX parse errors",
+  origin: { commit: "2968d87", feedbackRound: "leela-round-1" },
+  toolInput: { autoDetectWrappers: false, verboseMeta: false },
+  expectations: [
+    { kind: "zero-parse-errors" },
+    { kind: "no-violation-with-rule", ruleId: "*" },  // no rule fires on type-only code
+  ],
+};
+```
+
+`FixtureExpectation` primitives (round-trip-safe, decoupled from output-shape internals):
+
+- `zero-parse-errors` — `formatted.meta.analysisCoverage.parseErrorFileCount` absent or `=== 0`
+- `parse-errors-at-path` — specific file failed to parse (for guarding known-bad syntax)
+- `violation-present { ruleId, reasonIncludes? }` — at least one finding for ruleId, optionally with substring in reason/message/suggestion
+- `no-violation { ruleId }` — rule never fires on this fixture
+- `candidate-present { criterionId, reasonIncludes? }` — same shape for review candidates
+- `no-candidate { criterionId }` — criterion not flagged (lets a fixture assert e.g. "SPA shell annotation suppressed the false-positive nav finding on wcag22:2.4.5")
+- `meta-hint-includes { substring }` — `analysisCoverage.hints` array contains a matching hint
+- `meta-field { path: string[]; predicate: "present" | "absent" | { equals: unknown } | { contains: string } }` — generic accessor for one-off cases (sessionNativeWrappers, autoDetectedWrappers, suppressions)
+
+One integration test walks `tests/fixtures/real-world/`, reads each `assertions.ts` dynamically, runs scan_project, evaluates. Failure message names the fixture + the failing expectation: "real-world/tsx-generics: expected zero-parse-errors, got 3 parse errors (uuid-like.ts, forward-ref.tsx, array-promise.ts)."
+
+**Cases to populate on first landing** (each ~15-30 min once the harness is in place):
+
+- [ ] `real-world/tsx-generics/` — Pick<T,K>, ForwardRefRenderFunction<...>, Array<string>, Promise<void>, generic function calls. Guards commit `2968d87`. Assertion: zero-parse-errors.
+- [ ] `real-world/spa-shell-vite/` — Vite-style `<div id="root">` + module script index.html. Guards commit `bc3aae4`. Assertion: wcag22:2.4.5 candidate reason includes "SPA index shell".
+- [ ] `real-world/tailwind-coverage/` — 60 JSX files with utility-class strings, zero CSS. Guards commit `4700a13`. Assertion: analysisCoverage.hints includes "Tailwind usage detected" + `additionalPaths: ["dist/assets"]`.
+- [ ] `real-world/logotype-annotation/` — `<img className="site-logo" alt="Acme">`. Guards commit `71b9954`. Assertions: wcag22:1.4.5 reason contains "logotype exemption"; wcag22:1.4.9 reason does NOT contain it.
+- [ ] `real-world/timing-role-hints/` — useDebouncedCallback.ts, authManager.ts, telemetryService.ts. Guards commit `3ada44a`. Assertion: wcag22:2.2.1 candidate reason contains "likely not user-facing" for each.
+- [ ] `real-world/template-directives/` — Jinja `{% extends %}` + `{{ x }}`. Guards commit `a554d27`. Assertion: analysisCoverage.templateDirectiveHandling includes "parsed as literal".
+- [ ] `real-world/opaque-components-top/` — 10 PascalCase components with varied call-site counts. Guards commit `0ee28e1`. Assertion: analysisCoverage.opaqueCustomComponentsTop is a ranked list of length ≤5.
+- [ ] `real-world/suppression-reason-slot/` — pragma with `: reason` syntax. Guards commit `d820186`. Assertion: meta.suppressions contains an entry with `reason: "..."` present.
+- [ ] `real-world/autodetect-attribution/` — autoDetectWrappers scan; assert sessionNativeWrappers is absent (regression on `6821b77`).
+
+**Policy / process change this phase requires** (update `CLAUDE.md` §7 "How to add a new rule" and §17 "Common mistakes"):
+
+- When fixing a real-world bug (not adding a new rule from spec), add a sanitized repro to `tests/fixtures/real-world/<case>/` FIRST. That's the regression guard.
+- Unit tests are for *invariants* (properties that survive refactors: "every pragma declaration has a line number," "no finder emits suppressions by filename"), not behavior rehearsals ("the ranker orders alphabetically on ties" — covered by the fixture).
+- The "case tests disguised as unit tests" pattern — where a unit test encodes a real-world failure mode verbatim — is a symptom of missing fixture infrastructure. Migrate those on touch.
+
+**Open design work before starting implementation:**
+
+- [ ] ADR — `docs/adr/NNNN-real-world-fixture-corpus.md` capturing the five design questions above with a chosen position.
+- [ ] Prototype harness against 1 fixture (tsx-generics) to validate the assertion primitives before committing to the shape.
+- [ ] Decide whether to backfill the 9 cases above in one phase or staged alongside each fixture-relevant refactor.
+- [ ] Extend the `fixture-curator` subagent definition in `.claude/agents/` with the new directory conventions once the ADR is cut.
+
+Dispatch the harness to `fixture-curator` + `test-author` collaboratively, with `fixture-curator` owning the sanitized snippets and `test-author` owning the harness + assertion primitives. Do NOT spawn either before the ADR lands — the assertion shape needs a durable decision first.
