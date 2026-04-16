@@ -33,10 +33,26 @@ import type { ParsedFile } from "../engine/scanner.ts";
 import type { Rule } from "../types/rule.ts";
 
 interface CoverageAccumulator {
-  readonly opaqueComponents: Set<string>;
+  /**
+   * Map of PascalCase tag name → number of JSX call sites. We track the
+   * count (not just the set) so the coverage output can always surface
+   * the top-N by usage inline, without requiring the agent to flip
+   * `verboseMeta: true` and count names manually. High-traffic wrappers
+   * are where registering `nativeWrappers` has the biggest coverage
+   * payoff.
+   */
+  readonly opaqueComponents: Map<string, number>;
   readonly templateEngines: Set<string>;
   readonly parseErrorFiles: string[];
 }
+
+/**
+ * Upper bound on how many top-by-count opaque components we surface
+ * inline. Five is enough to identify the design system's hot paths
+ * without bloating the response; the full list is still available
+ * under `verboseMeta: true` via `opaqueCustomComponentNames`.
+ */
+const OPAQUE_COMPONENT_TOP_N = 5;
 
 export function buildAnalysisCoverage(
   files: readonly ParsedFile[],
@@ -45,7 +61,7 @@ export function buildAnalysisCoverage(
   verbose: boolean,
 ): { analysisCoverage?: Record<string, unknown> } {
   const acc: CoverageAccumulator = {
-    opaqueComponents: new Set(),
+    opaqueComponents: new Map(),
     templateEngines: new Set(),
     parseErrorFiles: [],
   };
@@ -54,6 +70,7 @@ export function buildAnalysisCoverage(
 
   const coverage: {
     opaqueCustomComponents?: number;
+    opaqueCustomComponentsTop?: readonly { readonly name: string; readonly callSites: number }[];
     opaqueCustomComponentNames?: readonly string[];
     templateDirectivesFound?: readonly string[];
     templateDirectiveHandling?: string;
@@ -64,7 +81,11 @@ export function buildAnalysisCoverage(
   } = {};
   if (acc.opaqueComponents.size > 0) {
     coverage.opaqueCustomComponents = acc.opaqueComponents.size;
-    if (verbose) coverage.opaqueCustomComponentNames = [...acc.opaqueComponents].sort();
+    coverage.opaqueCustomComponentsTop = rankOpaqueByCallSites(acc.opaqueComponents).slice(
+      0,
+      OPAQUE_COMPONENT_TOP_N,
+    );
+    if (verbose) coverage.opaqueCustomComponentNames = [...acc.opaqueComponents.keys()].sort();
   }
   if (acc.templateEngines.size > 0) {
     coverage.templateDirectivesFound = [...acc.templateEngines].sort();
@@ -102,13 +123,31 @@ const MARKUP_FILES_FOR_CSS_HINT_MIN = 30;
 /** CSS-to-markup ratio below which the thin-CSS hint fires. */
 const CSS_TO_MARKUP_THIN_RATIO = 0.05;
 
+/**
+ * Ranks opaque components by raw call-site count (desc), breaking ties
+ * alphabetically so the output is deterministic across runs. Exposed
+ * inline via `opaqueCustomComponentsTop` so an agent prioritizing which
+ * wrappers to register doesn't need a second `verboseMeta: true` round
+ * trip just to read counts.
+ */
+function rankOpaqueByCallSites(
+  opaque: ReadonlyMap<string, number>,
+): readonly { readonly name: string; readonly callSites: number }[] {
+  return [...opaque.entries()]
+    .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
+    .map(([name, callSites]) => ({ name, callSites }));
+}
+
 function buildHints(files: readonly ParsedFile[], acc: CoverageAccumulator): readonly string[] {
   const hints: string[] = [];
   const opaqueCount = acc.opaqueComponents.size;
   if (opaqueCount >= OPAQUE_COMPONENT_HINT_MIN) {
-    const examples = [...acc.opaqueComponents].sort().slice(0, 3).join(", ");
+    const examples = rankOpaqueByCallSites(acc.opaqueComponents)
+      .slice(0, 3)
+      .map((e) => `${e.name} (${e.callSites} call sites)`)
+      .join(", ");
     hints.push(
-      `${opaqueCount} PascalCase components are opaque to the scanner (e.g. ${examples}). ` +
+      `${opaqueCount} PascalCase components are opaque to the scanner (top: ${examples}). ` +
         `Rules needing the underlying element (button-name, alt-text, link-purpose) skip these. ` +
         `Wire common wrappers via \`nativeWrappers\` in ra11y.config.ts — e.g. ` +
         `{ Button: "button", Link: "a", Image: "img" } — to unlock analysis. ` +
@@ -214,7 +253,7 @@ function accumulateCoverageForFile(
   if (file.ast.language === "css") return;
   for (const el of walkJsxElements(file.ast.root)) {
     if (/^[A-Z]/.test(el.tagName) && !wrapperSet.has(el.tagName)) {
-      acc.opaqueComponents.add(el.tagName);
+      acc.opaqueComponents.set(el.tagName, (acc.opaqueComponents.get(el.tagName) ?? 0) + 1);
     }
   }
 }

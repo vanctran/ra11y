@@ -114,6 +114,42 @@ describe("buildAnalysisCoverage — hints", () => {
       expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(6);
       expect(analysisCoverage?.["hints"]).toBeUndefined();
     });
+
+    it("always surfaces the top-by-call-site list inline (no verboseMeta needed)", () => {
+      // 3 call sites of Button, 2 of Card, 1 of Widget.
+      const files = [tsxFile("a.tsx", ["Button", "Button", "Button", "Card", "Card", "Widget"])];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
+        | { name: string; callSites: number }[]
+        | undefined;
+      expect(top).toEqual([
+        { name: "Button", callSites: 3 },
+        { name: "Card", callSites: 2 },
+        { name: "Widget", callSites: 1 },
+      ]);
+    });
+
+    it("caps the top list at 5 entries so the response stays compact", () => {
+      // 10 unique components, one call site each.
+      const tags = Array.from({ length: 10 }, (_, i) => `Comp${i}`);
+      const files = [tsxFile("a.tsx", tags)];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as { name: string }[] | undefined;
+      expect(top?.length).toBe(5);
+    });
+
+    it("breaks ties alphabetically so output is deterministic across runs", () => {
+      const files = [tsxFile("a.tsx", ["Zeta", "Alpha", "Mike"])];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as { name: string }[] | undefined;
+      expect(top?.map((e) => e.name)).toEqual(["Alpha", "Mike", "Zeta"]);
+    });
+
+    it("omits the top list when no opaque components were seen", () => {
+      const files = [tsxFile("a.tsx", [])];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      expect(analysisCoverage?.["opaqueCustomComponentsTop"]).toBeUndefined();
+    });
   });
 
   describe("thin CSS coverage", () => {
