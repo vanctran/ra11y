@@ -162,6 +162,11 @@ export const checklistTool: McpTool = {
       actionable: actionable.length,
       byPriority,
       untargeted: untargeted.length,
+      // One-line gloss: untargeted count is cryptic on its own — the
+      // agent's read-order goes summary → items, so the definition
+      // belongs here, not buried in the tool docstring.
+      untargetedMeaning:
+        "manual-review criteria whose candidate finder could not ground them in code; pass `showUntargeted: true` to see the full WCAG prompts for them.",
       likelyIrrelevant: likelyIrrelevant.length,
       manualReviewRequired: actionable.length + untargeted.length,
       automatedCoverage,

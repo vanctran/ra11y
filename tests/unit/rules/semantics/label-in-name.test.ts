@@ -154,4 +154,40 @@ describe("rule semantics/label-in-name", () => {
     expect(rule.satisfies).toContain("wcag22:2.5.3");
     expect(rule.satisfies).toContain("wcag21:2.5.3");
   });
+
+  describe("ranked fix paths (deterministic fix-verify)", () => {
+    it("leads with widen-aria-label by default", () => {
+      const v = runRule(rule, `<button aria-label="Close dialog">Cancel</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.suggestion).toMatch(/^Primary fix: widen aria-label/);
+      expect(v[0]?.suggestion).toContain("Alternatives (less likely)");
+    });
+
+    it("promotes mark-icon-hidden when visible text has an arrow glyph", () => {
+      const v = runRule(rule, `<button aria-label="Next slide">→ Continue</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.suggestion).toMatch(
+        /^Primary fix: if the visible text contains a decorative icon/,
+      );
+    });
+
+    it("promotes mark-icon-hidden when visible text has an emoji", () => {
+      const v = runRule(rule, `<button aria-label="Submit form">Send 📤</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.suggestion).toMatch(
+        /^Primary fix: if the visible text contains a decorative icon/,
+      );
+    });
+
+    it("always lists exactly 2 alternatives so the agent can pipe them in order", () => {
+      const v = runRule(rule, `<button aria-label="Submit form">Send</button>`, {
+        filePath: "index.html",
+      });
+      const matches = v[0]?.suggestion?.match(/\([ab]\) /g);
+      expect(matches).toHaveLength(2);
+    });
+  });
 });

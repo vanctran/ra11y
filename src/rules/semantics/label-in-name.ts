@@ -168,6 +168,57 @@ function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Heuristic to rank the three resolution paths. The primary is what
+ * the fix-verify loop should try first; alternatives are listed in
+ * decreasing likelihood. Picking a ranking from cheap structural
+ * signals (presence of icon chars, aria-label-that-extends-visible-
+ * text, etc.) beats handing the agent three equal options — that
+ * forced it to re-read the source to disambiguate.
+ */
+function rankFixPaths(
+  visibleText: string,
+  ariaLabel: string,
+): { primary: string; alternatives: readonly string[] } {
+  const pathWiden = `widen aria-label to contain the visible text, e.g. aria-label="${visibleText} — additional context"`;
+  const pathIconHidden = `if the visible text contains a decorative icon or symbol (arrows, glyphs, emoji), wrap the icon in a span and mark it \`aria-hidden="true"\` so it is not part of the visible label`;
+  const pathRemove =
+    "remove aria-label entirely and let the visible text serve as the accessible name directly";
+
+  if (containsIconLikeChar(visibleText)) {
+    return { primary: pathIconHidden, alternatives: [pathWiden, pathRemove] };
+  }
+  if (ariaLabelIsExtendedVisibleText(ariaLabel, visibleText)) {
+    // aria-label is a superset-adjacent phrase — removing it loses
+    // context, widening is natural. Remove is a weak last resort.
+    return { primary: pathWiden, alternatives: [pathRemove, pathIconHidden] };
+  }
+  return { primary: pathWiden, alternatives: [pathIconHidden, pathRemove] };
+}
+
+/**
+ * Detects characters commonly used as decorative icons (arrows, box-
+ * drawing, dingbats, emoji, geometric symbols). When visible text
+ * contains one of these, the icon-hidden path is usually the right fix.
+ */
+function containsIconLikeChar(text: string): boolean {
+  // \u2190-\u21FF arrows; \u25A0-\u25FF geometric; \u2600-\u27BF dingbats;
+  // \u2B00-\u2BFF misc symbols and arrows; emoji via \p{Extended_Pictographic}.
+  return (
+    /[\u2190-\u21FF\u25A0-\u25FF\u2600-\u27BF\u2B00-\u2BFF]/.test(text) ||
+    /\p{Extended_Pictographic}/u.test(text)
+  );
+}
+
+function ariaLabelIsExtendedVisibleText(ariaLabel: string, visibleText: string): boolean {
+  const a = ariaLabel.toLowerCase();
+  const v = visibleText.toLowerCase();
+  if (a.length <= v.length) return false;
+  // Shares a meaningful prefix or suffix word with the visible text.
+  const firstWord = v.split(/\s+/)[0] ?? "";
+  return firstWord.length > 2 && a.includes(firstWord);
+}
+
 function emitViolation(
   tagName: string,
   visibleText: string,
@@ -175,10 +226,14 @@ function emitViolation(
   loc: { line: number; column: number },
   emit: Emit,
 ): void {
+  const ranked = rankFixPaths(visibleText, ariaLabel);
+  const suggestion =
+    `Primary fix: ${ranked.primary}. ` +
+    `Alternatives (less likely): (a) ${ranked.alternatives[0]}; (b) ${ranked.alternatives[1]}.`;
   emit({
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<${tagName}> has visible text "${visibleText}" that is not contained in aria-label "${ariaLabel}" — voice-control users cannot activate this control by speaking its visible label.`,
-    suggestion: `Three resolution paths: (1) widen aria-label to contain the visible text (e.g., aria-label="${visibleText} — additional context"); (2) if part of the visible text is a decorative icon or symbol (\u25b2, arrows, glyphs), mark its container \`aria-hidden="true"\` so it isn't part of the visible label; (3) remove aria-label and let the visible text serve as the accessible name directly.`,
+    suggestion,
   });
 }
