@@ -78,11 +78,10 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
     ]);
     const body = bodyOf(responses[1]) as {
-      scannedRoot: string;
       plan: { totalFindings: number };
-      meta: { scanMode: string };
+      meta: { scanMode: string; scannedRoot: string };
     };
-    expect(body.scannedRoot).toBe(BAD_ALT_DIR);
+    expect(body.meta.scannedRoot).toBe(BAD_ALT_DIR);
     expect(body.plan.totalFindings).toBeGreaterThan(0);
     expect(body.meta.scanMode).toBe("full");
   });

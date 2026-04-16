@@ -163,11 +163,14 @@ describe("MCP tool: scan_project", () => {
 
     expect(result.isError).toBeUndefined();
     const data = JSON.parse(result.content[0].text) as {
-      scannedRoot: string;
       plan: { totalFindings: number };
       meta: { filesScanned: number; scannedRoot: string };
+      scannedRoot?: string;
     };
-    expect(data.scannedRoot).toBe(fixtureDir);
+    // scannedRoot lives inside meta only — the top-level duplicate was
+    // removed. Assert the top-level field is gone so the shape stays
+    // de-duplicated.
+    expect(data.scannedRoot).toBeUndefined();
     expect(data.meta.scannedRoot).toBe(fixtureDir);
     expect(data.meta.filesScanned).toBeGreaterThan(0);
   });
@@ -345,6 +348,54 @@ describe("MCP tool: scan_project", () => {
       expect(data.meta.autoDetectedWrappers).toEqual(["DesignSystemButton", "DesignSystemCard"]);
       expect(data.meta.sessionNativeWrappers).toBeUndefined();
       expect(data.meta.sessionOverridesNote).toBeUndefined();
+    });
+
+    it("attributes activeNativeWrappers to their source (config / session / autoDetect)", async () => {
+      // Debugging "why is X active?" needs the source per wrapper.
+      // configure() contributes session names, autoDetect contributes
+      // scan-scoped names, and ra11y.config.ts contributes config names.
+      // bySource shows all three.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapper-provenance-"));
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <ActionButton onClick={a} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      // Simulate a prior configure() call contributing a wrapper that
+      // isn't present in this scan's source — so fromSession and
+      // fromAutoDetect stay cleanly non-overlapping.
+      session.config = { ...session.config, nativeWrappers: ["SessionOnlyWidget"] };
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          activeNativeWrappers?: string[];
+          activeNativeWrappersBySource?: {
+            fromConfig?: string[];
+            fromSession?: string[];
+            fromAutoDetect?: string[];
+          };
+        };
+      };
+      expect(data.meta.activeNativeWrappers).toEqual(
+        expect.arrayContaining(["ActionButton", "SessionOnlyWidget"]),
+      );
+      expect(data.meta.activeNativeWrappersBySource?.fromConfig).toBeUndefined();
+      expect(data.meta.activeNativeWrappersBySource?.fromSession).toEqual(["SessionOnlyWidget"]);
+      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual(["ActionButton"]);
     });
 
     it("reports zero-detection plainly when no candidates are found", async () => {

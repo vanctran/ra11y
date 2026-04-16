@@ -6,10 +6,8 @@
  * on tool schemas and handler logic.
  */
 
-import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
-import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
@@ -22,8 +20,15 @@ import type { Violation } from "../types/violation.ts";
 import { buildAnalysisCoverage } from "./analysis-coverage.ts";
 import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
 import type { McpSession } from "./session.ts";
+import {
+  type NativeWrapperSources,
+  resolveUnusedWrappers,
+  resolveWrapperSources,
+  wrappersMetaBlock,
+} from "./wrappers-meta.ts";
 
 export { buildAnalysisCoverage } from "./analysis-coverage.ts";
+export type { NativeWrapperSources } from "./wrappers-meta.ts";
 
 // ─── Tool metadata types ────────────────────────────────────────────────────
 
@@ -258,20 +263,6 @@ export interface ScanFormatted {
  * into the agent-facing shape (plan, files, meta). Factored out so both
  * `scan` and `scan_project` share identical semantics.
  */
-export interface NativeWrapperSources {
-  /** From ra11y.config.ts. */
-  readonly fromFile: readonly string[];
-  /** Added via configure() calls this session. */
-  readonly fromSession: readonly string[];
-  /**
-   * Auto-detected for THIS scan only (e.g. scan_project's
-   * `autoDetectWrappers: true`). Tracked separately so the
-   * session-override audit (`sessionNativeWrappers` + `sessionOverridesNote`)
-   * doesn't mis-attribute them to a stale configure() call. Scan-scoped
-   * by contract — never touches session.config.
-   */
-  readonly fromAutoDetect?: readonly string[];
-}
 
 export async function runScanAndFormat(
   files: readonly ParsedFile[],
@@ -305,7 +296,11 @@ export async function runScanAndFormat(
     level: session.config.level,
   });
 
-  const { wrappers, sessionOnly } = resolveWrapperSources(wrapperSources, session);
+  const {
+    wrappers,
+    sessionOnly,
+    bySource: wrapperProvenance,
+  } = resolveWrapperSources(wrapperSources, session);
   const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
   const unusedWrappers = await resolveUnusedWrappers(wrappers, files, cwd);
   const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
@@ -386,30 +381,7 @@ export async function runScanAndFormat(
       rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
-      // Semantics ("components treated as native-element wrappers — rules
-      // that fire on bare <div onClick> skip these") are documented in the
-      // MCP server instructions once per session. The per-response note
-      // was 60 words of repeated context tax and has been dropped.
-      ...(wrappers.length > 0 ? { activeNativeWrappers: [...wrappers] } : {}),
-      // Split visibility: agents editing ra11y.config.ts need to see when
-      // a session configure() call is layering extras on top of the file.
-      // Without this, an ad-hoc "add Button for this session" persists
-      // silently even after the file is edited to remove it.
-      ...(sessionOnly.length > 0
-        ? {
-            sessionNativeWrappers: sessionOnly,
-            sessionOverridesNote: `${sessionOnly.length} wrapper${sessionOnly.length === 1 ? "" : "s"} added by this session's configure() call, not in ra11y.config.ts. If you've since removed these from the file, the session additions still apply for this connection — restart the MCP server or call configure() again to sync.`,
-          }
-        : {}),
-      // Surface wrappers registered in config that didn't match any component
-      // this run. Helps catch config rot — a renamed/deleted component whose
-      // allowlist entry lingers and silently does nothing.
-      ...(unusedWrappers.length > 0
-        ? {
-            unusedNativeWrappers: unusedWrappers,
-            unusedNativeWrappersNote: `Components listed in nativeWrappers that weren't found in any scanned or scan-adjacent source file under cwd. Not an error — the component may live in a path the scan never reaches (outside the project root, or under a custom exclude). If the component was renamed or deleted, update or remove the entry in ra11y.config.ts; otherwise ignore.`,
-          }
-        : {}),
+      ...wrappersMetaBlock({ wrappers, sessionOnly, unusedWrappers, wrapperProvenance }),
       // Honest meta about what static analysis couldn't reach, so the
       // agent can calibrate confidence in "automated clean." Each entry
       // is a structural gap, not a heuristic guess — the fields are
@@ -425,28 +397,6 @@ export async function runScanAndFormat(
   };
 
   return { formatted, durationMs: result.durationMs, filesScanned: result.filesScanned };
-}
-
-/**
- * Resolves the final wrapper set from the three channels (file, session,
- * auto-detect) and derives the session-only audit list used for the
- * `sessionNativeWrappers` meta warning. Auto-detected wrappers are
- * deliberately excluded from `sessionOnly` — they come from this scan,
- * not a stale configure() call, and flow into their own
- * `autoDetectedWrappers` meta block.
- */
-function resolveWrapperSources(
-  wrapperSources: NativeWrapperSources | undefined,
-  session: McpSession,
-): { readonly wrappers: readonly string[]; readonly sessionOnly: readonly string[] } {
-  const sources: NativeWrapperSources = wrapperSources ?? {
-    fromFile: [],
-    fromSession: session.config.nativeWrappers,
-  };
-  const autoDetect = sources.fromAutoDetect ?? [];
-  const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession, ...autoDetect])];
-  const sessionOnly = sources.fromSession.filter((w) => !sources.fromFile.includes(w));
-  return { wrappers, sessionOnly };
 }
 
 function suppressionsMetaBlock(entries: readonly SuppressionAuditEntry[]): Record<string, unknown> {
@@ -549,96 +499,6 @@ function dropWrapperNoise(
     return !(name && allow.has(name));
   });
   return { violations: filtered };
-}
-
-/**
- * Returns the wrappers that appear nowhere — neither in the scanned
- * files (AST-level check) nor, when a project root is given, in paths
- * the scanner excluded by default (text-level check). Split out from
- * runScanAndFormat to keep that function's cognitive complexity under
- * the biome limit.
- */
-async function resolveUnusedWrappers(
-  wrappers: readonly string[],
-  files: readonly ParsedFile[],
-  cwd: string | undefined,
-): Promise<readonly string[]> {
-  if (wrappers.length === 0) return [];
-  const used = new Set(collectUsedWrappers(files, wrappers));
-  const stillCandidate = wrappers.filter((w) => !used.has(w));
-  if (cwd && stillCandidate.length > 0) {
-    const scanned = new Set(files.map((f) => f.filePath));
-    const widened = await findWrappersInExcludedSources(cwd, stillCandidate, scanned);
-    for (const name of widened) used.add(name);
-  }
-  return wrappers.filter((w) => !used.has(w));
-}
-
-/**
- * Text-based best-effort search for wrapper usages in files the scan
- * excluded (stories, dev-tools, tests). Matches `<Wrapper ` or `<Wrapper>`
- * or `<Wrapper/>` as a whole-token. Cheap: reads each file once, regex
- * short-circuits on first hit per wrapper.
- *
- * This is a transparency fix, not a correctness-critical signal — a
- * false negative only means we warn about a config entry that isn't
- * actually stale, which is exactly the Leela feedback we're addressing.
- */
-async function findWrappersInExcludedSources(
-  cwd: string,
-  candidates: readonly string[],
-  alreadyScanned: ReadonlySet<string>,
-): Promise<ReadonlySet<string>> {
-  const found = new Set<string>();
-  const remaining = new Set(candidates);
-  // Re-discover with every default exclusion turned off so we see
-  // stories/dev-tools/tests. .gitignore still applies — we don't want
-  // to read node_modules or build output.
-  const all = await discoverFiles([cwd], { includeTests: true });
-  for (const path of all) {
-    if (remaining.size === 0) break;
-    if (alreadyScanned.has(path)) continue;
-    if (!/\.(tsx|jsx|ts|js)$/i.test(path)) continue;
-    let source: string;
-    try {
-      source = await readFile(path, "utf8");
-    } catch {
-      continue;
-    }
-    for (const name of remaining) {
-      // `<Name` followed by whitespace, `/`, or `>` — avoids matching
-      // substrings like `<NameMore>` or `ActionButtonGroup`.
-      const pattern = new RegExp(`<${name}(?=[\\s/>])`);
-      if (pattern.test(source)) {
-        found.add(name);
-        remaining.delete(name);
-      }
-    }
-  }
-  return found;
-}
-
-/**
- * Walks every parsed TSX module for JSX element tag names matching a
- * configured wrapper. A wrapper is "used" the moment it appears as a JSX
- * element anywhere in the scanned source — independent of whether any
- * rule fired against it. Without this, wrappers used with correct props
- * (so keyboard/handler-missing never emits a suppressed info) were
- * wrongly reported unused, pushing users to delete valid config entries.
- */
-function collectUsedWrappers(
-  files: readonly ParsedFile[],
-  nativeWrappers: readonly string[],
-): ReadonlySet<string> {
-  const allow = new Set(nativeWrappers);
-  const used = new Set<string>();
-  for (const file of files) {
-    if (file.ast.language === "html" || file.ast.language === "css") continue;
-    for (const el of walkJsxElements(file.ast.root)) {
-      if (allow.has(el.tagName)) used.add(el.tagName);
-    }
-  }
-  return used;
 }
 
 // ─── Severity filtering ─────────────────────────────────────────────────────

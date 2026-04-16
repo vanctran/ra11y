@@ -102,7 +102,6 @@ export const scanProjectTool: McpTool = {
     if (files.length === 0) {
       logger.debug(`scan_project: 0 parseable files (${parseMs}ms discover)`);
       return textResult({
-        scannedRoot: root,
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
         meta: { filesScanned: 0, scannedRoot: root, scanMode: describeMode(params) },
@@ -148,8 +147,6 @@ export const scanProjectTool: McpTool = {
     const nextStep = suggestNextStep(formatted, describeMode(params));
     return textResult({
       ...formatted,
-      scannedRoot: root,
-      configSource: projectConfig.sourcePath,
       meta: {
         ...formatted.meta,
         scannedRoot: root,
