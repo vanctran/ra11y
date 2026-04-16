@@ -60,4 +60,45 @@ describe("review/timing", () => {
     const offsets = new Set(out.map((c) => `${c.location.line}:${c.location.column}`));
     expect(offsets.size).toBeGreaterThanOrEqual(2);
   });
+
+  describe("filename role hints (AI-first dismissal context)", () => {
+    // Per CLAUDE.md §1 we never suppress — but we enrich the `reason`
+    // with a filename-derived role hint so an MCP agent can dismiss
+    // the candidate in one pass instead of opening the file.
+    const cases: readonly { file: string; role: string }[] = [
+      { file: "src/hooks/useDebouncedCallback.ts", role: "debounce" },
+      { file: "lib/useThrottledScroll.ts", role: "throttle" },
+      { file: "services/authManager.ts", role: "auth" },
+      { file: "services/telemetryService.ts", role: "telemetry" },
+      { file: "lib/indexedDbTransport.ts", role: "transport" },
+      { file: "workers/backgroundWorker.ts", role: "worker" },
+      { file: "utils/retry.ts", role: "retry" },
+      { file: "lib/heartbeat.ts", role: "keepalive" },
+    ];
+    for (const { file, role } of cases) {
+      it(`annotates ${role} role for ${file}`, () => {
+        const out = runFinder(finder, `setTimeout(() => x(), 1000);`, { filePath: file });
+        const hit = out.find((c) => c.reason.includes("setTimeout"));
+        expect(hit).toBeDefined();
+        expect(hit?.reason).toMatch(/file looks like a .+ — likely not user-facing/);
+      });
+    }
+
+    it("does NOT annotate for an ordinary component file", () => {
+      const out = runFinder(finder, `setTimeout(() => logout(), 60_000);`, {
+        filePath: "src/ui/Session.tsx",
+      });
+      const hit = out.find((c) => c.reason.includes("setTimeout"));
+      expect(hit).toBeDefined();
+      expect(hit?.reason).not.toContain("file looks like");
+    });
+
+    it("never replaces the normative review prompt — hint is additive", () => {
+      const out = runFinder(finder, `setTimeout(() => x(), 1000);`, {
+        filePath: "src/hooks/useDebouncedCallback.ts",
+      });
+      const hit = out.find((c) => c.reason.includes("setTimeout"));
+      expect(hit?.reason).toContain("verify the user can pause, extend, or disable");
+    });
+  });
 });

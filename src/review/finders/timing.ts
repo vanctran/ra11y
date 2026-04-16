@@ -64,6 +64,40 @@ const META_REFRESH_REASON =
 const JS_REASON_PREFIX =
   " — verify the user can pause, extend, or disable any user-facing time limit this governs (not required for session-keepalive / debounce / animation)";
 
+/**
+ * Filename/path fragments that strongly suggest a setTimeout/setInterval
+ * is NOT a user-facing timer and thus NOT in scope for WCAG 2.2.x. We
+ * don't suppress the candidate (the agent still sees it, matching the
+ * AI-first consumer rule in CLAUDE.md §1) but we attach a one-phrase
+ * hint so the agent can dismiss in a single pass without reading the
+ * file. Each entry maps a substring match to the common-case role.
+ */
+const FILENAME_ROLE_HINTS: readonly { readonly match: RegExp; readonly role: string }[] = [
+  { match: /debounce/i, role: "debounce/throttle utility" },
+  { match: /throttle/i, role: "debounce/throttle utility" },
+  { match: /telemetry|analytics|metrics/i, role: "telemetry/batch-flush" },
+  { match: /auth(?:Manager|-manager|Context)?/i, role: "auth/token refresh" },
+  { match: /refresh(?:Token|-token)/i, role: "token refresh" },
+  { match: /retry|backoff/i, role: "retry/backoff scheduling" },
+  { match: /poll|polling/i, role: "background polling" },
+  { match: /keepalive|keep-alive|heartbeat/i, role: "connection keepalive" },
+  { match: /transport|websocket|socket\b/i, role: "network transport" },
+  { match: /queue|buffer|flush/i, role: "batch flush" },
+  { match: /worker\b/i, role: "worker scheduling" },
+  { match: /animation|raf\b|tween/i, role: "animation frame scheduling" },
+  { match: /indexedDb|idb\b|storage/i, role: "storage transaction" },
+  { match: /sentry|datadog|newrelic/i, role: "observability client" },
+];
+
+function fileRoleHint(filePath: string): string | null {
+  const lastSlash = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  const basename = filePath.slice(lastSlash + 1);
+  for (const { match, role } of FILENAME_ROLE_HINTS) {
+    if (match.test(basename)) return role;
+  }
+  return null;
+}
+
 export const finder = defineCandidateFinder({
   id: "review/timing",
   criterionIds: [...CRITERION_IDS],
@@ -120,6 +154,9 @@ function findMetaRefreshJsx(module: TsxModule): readonly JsxElement[] {
 }
 
 function findSourceCandidates(ctx: RuleContext, out: ReviewCandidate[]): void {
+  const roleHint = fileRoleHint(ctx.filePath);
+  const hintSuffix =
+    roleHint === null ? "" : ` (file looks like a ${roleHint} — likely not user-facing)`;
   const seen = new Set<number>();
   for (const { pattern, label } of SOURCE_PATTERNS) {
     pattern.lastIndex = 0;
@@ -132,7 +169,7 @@ function findSourceCandidates(ctx: RuleContext, out: ReviewCandidate[]): void {
         out.push({
           criterionId,
           location: { filePath: ctx.filePath, line, column },
-          reason: `${label}${JS_REASON_PREFIX}`,
+          reason: `${label}${hintSuffix}${JS_REASON_PREFIX}`,
         });
       }
     }
