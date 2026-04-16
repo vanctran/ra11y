@@ -839,4 +839,44 @@ describe("MCP tool: suggest_fix", () => {
     const result = await tool.handler({ ruleId: "media/alt-text-missing" }, session);
     expect(result.isError).toBe(true);
   });
+
+  it("surfaces structured primary + alternatives for rules that emit fixPaths", async () => {
+    // label-in-name emits ranked fix paths; the agent should see
+    // labeled primary + alternatives, not concatenated prose.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-suggest-fix-paths-"));
+    const file = joinPath(dir, "index.html");
+    await writeFile(file, `<button aria-label="Submit form">Send</button>`);
+
+    const tool = findTool("suggest_fix");
+    const session = new McpSession();
+    const result = await tool.handler(
+      { ruleId: "semantics/label-in-name", file, line: 1 },
+      session,
+    );
+    const data = JSON.parse(result.content[0].text) as {
+      kind: string;
+      primary?: { label: string };
+      alternatives?: Array<{ label: string }>;
+      explanation: string;
+    };
+    expect(data.kind).toBe("guidance");
+    expect(data.primary?.label).toBeTruthy();
+    expect(data.alternatives).toHaveLength(2);
+    expect(data.alternatives?.every((a) => a.label.length > 0)).toBe(true);
+  });
+
+  it("returns kind: 'none' when no violation matches at the given line", async () => {
+    const tool = findTool("suggest_fix");
+    const session = new McpSession();
+    const result = await tool.handler(
+      { ruleId: "media/alt-text-missing", file: BAD_ALT, line: 9999 },
+      session,
+    );
+    const data = JSON.parse(result.content[0].text) as { kind: string };
+    expect(data.kind).toBe("none");
+  });
 });

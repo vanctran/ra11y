@@ -27,6 +27,7 @@ import {
   walkJsxElements,
 } from "../../engine/ast-helpers.ts";
 import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
+import type { FixPaths } from "../../types/violation.ts";
 
 /** Interactive elements whose visible label must be contained in their accessible name. */
 const HTML_INTERACTIVE_TAGS: ReadonlySet<string> = new Set([
@@ -79,6 +80,7 @@ type Emit = (v: {
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
+  fixPaths: FixPaths;
 }) => void;
 
 function checkHtml(doc: HtmlDocument, emit: Emit): void {
@@ -268,10 +270,15 @@ function emitViolation(
   const suggestion =
     `${prelude}Primary fix: ${ranked.primary}. ` +
     `Alternatives (less likely): (a) ${ranked.alternatives[0]}; (b) ${ranked.alternatives[1]}.`;
+  const fixPaths: FixPaths = {
+    primary: { label: ranked.primary },
+    alternatives: ranked.alternatives.map((label) => ({ label })),
+  };
   emit({
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
     message: `<${tagName}> has visible text "${visibleText}" that is not contained in aria-label "${ariaLabel}" — voice-control users cannot activate this control by speaking its visible label.`,
     suggestion,
+    fixPaths,
   });
 }

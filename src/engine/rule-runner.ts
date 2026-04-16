@@ -99,6 +99,7 @@ function stampViolation(
     message: emitted.message,
     ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
     ...(emitted.fix !== undefined && { fix: emitted.fix }),
+    ...(emitted.fixPaths !== undefined && { fixPaths: emitted.fixPaths }),
     ...(emitted.snippet !== undefined && { snippet: emitted.snippet }),
   };
 }

@@ -30,6 +30,27 @@ export interface Fix {
   readonly safety: "safe" | "unsafe";
 }
 
+/**
+ * Ranked resolution paths for a violation, split into the most-likely
+ * fix and lower-likelihood alternatives. Labels are human-readable
+ * sentences the agent can act on ("widen aria-label to contain the
+ * visible text…"). When a rule can also produce a mechanical edit it
+ * may populate `edit` on a path; absent `edit`, the path is guidance
+ * only (still more useful than an empty oldText/newText pair).
+ */
+export interface FixPath {
+  readonly label: string;
+  readonly edit?: {
+    readonly oldText: string;
+    readonly newText: string;
+  };
+}
+
+export interface FixPaths {
+  readonly primary: FixPath;
+  readonly alternatives: readonly FixPath[];
+}
+
 /** A single accessibility finding emitted by a rule. */
 export interface Violation {
   readonly ruleId: string;
@@ -40,6 +61,7 @@ export interface Violation {
   readonly message: string;
   readonly suggestion?: string;
   readonly fix?: Fix;
+  readonly fixPaths?: FixPaths;
   readonly snippet?: string;
 }
 
