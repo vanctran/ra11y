@@ -1,6 +1,6 @@
 # ra11y
 
-> Multi-standard accessibility scanner. Zero runtime dependencies. Built for precommit speed and WCAG certification.
+> **AI-first accessibility scanner.** Multi-standard. Zero runtime dependencies. Designed for MCP agents, usable from the CLI.
 
 [![npm version](https://img.shields.io/npm/v/@ra11y/core)](https://www.npmjs.com/package/@ra11y/core)
 [![CI](https://img.shields.io/github/actions/workflow/status/vanctran/ra11y/ci.yml?branch=main)](https://github.com/vanctran/ra11y/actions)
@@ -8,7 +8,9 @@
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](./package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 
-**`ra11y`** (pronounced "rally") is an accessibility scanner for JSX/TSX, HTML, and CSS. It ships with four accessibility standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. It produces VPAT-ready compliance reports and a certification readiness scorecard alongside line-level violations, so the same tool that catches the bug in your precommit also tells your legal team where you stand on ADA conformance.
+**`ra11y`** (pronounced "rally") is built primarily for an AI coding agent calling its tools — not a human staring at a dashboard. Every response shape, noise-vs-signal decision, and per-finding hint is designed for one-shot agent triage: a scan returns ranked findings with WCAG citations, ready-to-paste suppression comments, primary fix paths, and a `nextStep` pointer so the loop closes in one round-trip.
+
+That doesn't make it agent-only. ra11y ships a CLI with beautiful terminal output, four report formats, and precommit integration. It covers JSX/TSX, HTML, and CSS across four standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. Coverage reports and a VPAT-ready certification scorecard sit alongside line-level violations, so the same tool your agent runs in Cursor also tells your legal team where you stand on ADA conformance.
 
 > **Status: pre-release (v0.0.x).** The engine, plugin API, 49 rules, four built-in standards, eight output formatters, four report kinds (coverage, checklist, VPAT, certification), and a 12-tool MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
@@ -16,6 +18,8 @@
 
 | | ra11y | axe-core | eslint-plugin-jsx-a11y | Pa11y |
 |---|:---:|:---:|:---:|:---:|
+| AI-first MCP server (scan, checklist, suggest_fix, …) | yes | no | no | no |
+| Agent-optimized response shape (ranked fixes, hints, nextStep) | yes | no | no | no |
 | Zero runtime dependencies | yes | no | no | no |
 | Multi-standard (WCAG + Section 508 + EN 301 549) | yes | partial | no | partial |
 | VPAT + certification scorecard | yes | no | no | no |
@@ -120,7 +124,14 @@ Full CLI reference: [`docs/cli.md`](./docs/cli.md).
 
 ## Agent mode
 
-ra11y is designed for AI coding agents. `--format agent` outputs compact JSON optimized for LLM context windows:
+ra11y's primary consumer is an AI agent calling its tools. Every response is built to answer "what do I do next?" in a single round-trip — structured findings, ranked fix paths, per-finding suppression syntax, scan-confidence telemetry, and a `nextStep` hint. What that looks like in practice:
+
+- **Surface, don't suppress.** False positives a human might tune out are cheap for an agent to dismiss with one file read. Heuristic suppression loses signal the agent would actually use.
+- **Honest telemetry about gaps.** Counts of opaque custom components, files with template directives, parse-error files, CSS vs markup coverage — with one-line hints the agent can act on ("call `detect_native_wrappers`", "point `additionalPaths` at `dist/`").
+- **Ranked fixes.** Where a rule has multiple resolution paths, ra11y picks a primary from source signals (icon chars in visible text, aria-label shape, etc.) so `suggest_fix` output can be piped deterministically.
+- **Context-aware noise filtering.** A `setTimeout` in `authManager.ts` or `useDebouncedCallback.ts` is pre-annotated "likely not user-facing" so the agent dismisses in one pass instead of opening the file.
+
+`--format agent` outputs the same shape from the CLI for pipeline use:
 
 ```sh
 ra11y src/ --format agent | claude-code --stdin
@@ -258,6 +269,22 @@ Or start the server directly: `ra11y --mcp`
 | `configure` | Set session defaults (standard, level, excludes) |
 
 **Typical agent workflow:** `scan_project` to get findings → `explain_rule` for unclear ones → apply fixes → `scan_file` to verify → `coverage` to check overall compliance.
+
+**First-run flags (for an agent meeting a new codebase):**
+
+```jsonc
+// scan_project args
+{
+  "cwd": "/abs/path/to/project",
+  "autoDetectWrappers": true,          // auto-register PascalCase-with-onClick as nativeWrappers
+                                       // for this scan — closes the "47 opaque components" gap
+                                       // in one call. Scope is scan-only; session stays pristine.
+  "additionalPaths": ["dist/assets"],  // bypass .gitignore + default build-dir skips to scan
+                                       // post-compile Tailwind/CSS-in-JS output.
+  "verboseMeta": true                  // expand analysisCoverage to include file lists and
+                                       // rulesByExtension for scan-confidence debugging.
+}
+```
 
 Full setup guide: [`docs/mcp/server-setup.md`](./docs/mcp/server-setup.md).
 
