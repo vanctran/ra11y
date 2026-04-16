@@ -109,9 +109,21 @@ export const scanProjectTool: McpTool = {
       });
     }
     const autoDetect = params["autoDetectWrappers"] === true;
-    const detected = autoDetect ? collectWrapperCandidates(files) : [];
+    // When config is missing, also run the detector so the agent can
+    // see what `nativeWrappers` would cover for this codebase — silent
+    // misses on onboarding were the most common field report. The
+    // detector is O(parsed files) and runs on files we've already
+    // parsed, so the extra cost is negligible. Registration is still
+    // gated on autoDetect === true; suggestion-only when it's off.
+    const configMissing = projectConfig.sourcePath === null;
+    const shouldDetect = autoDetect || configMissing;
+    const detected = shouldDetect ? collectWrapperCandidates(files) : [];
     const detectedNames = detected.map((c) => c.component);
     const t1 = performance.now();
+    // Only hand detected names to the scanner when autoDetect is true —
+    // suggestion-only mode (config missing, flag off) must not silently
+    // register anything.
+    const registeredWrappers = autoDetect ? detectedNames : [];
     const { formatted } = await runScanAndFormat(
       files,
       session,
@@ -125,7 +137,7 @@ export const scanProjectTool: McpTool = {
         // override audit (sessionNativeWrappers) must not mis-attribute
         // them to a stale configure() call. Still scan-scoped: never
         // written to session or project config.
-        ...(detectedNames.length > 0 ? { fromAutoDetect: detectedNames } : {}),
+        ...(registeredWrappers.length > 0 ? { fromAutoDetect: registeredWrappers } : {}),
       },
       root,
       params["verboseMeta"] === true,
@@ -150,15 +162,7 @@ export const scanProjectTool: McpTool = {
             }
           : {}),
         ...(configHint === null ? {} : { configHint }),
-        ...(autoDetect
-          ? {
-              autoDetectedWrappers: detectedNames,
-              autoDetectedWrappersNote:
-                detectedNames.length === 0
-                  ? "autoDetectWrappers ran but found no PascalCase components with onClick to register."
-                  : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. Copy the names you confirm to \`nativeWrappers\` in ra11y.config.ts for durable registration; remove any that actually render a <div>/<span> internally — those are real bugs.`,
-            }
-          : {}),
+        ...buildWrapperMeta({ autoDetect, configMissing, detectedNames }),
         ...(additionalPaths.length > 0
           ? {
               additionalPathsScanned: {
@@ -173,6 +177,38 @@ export const scanProjectTool: McpTool = {
     });
   },
 };
+
+/**
+ * Builds the wrapper-related meta fields. Two distinct shapes:
+ *   - `autoDetectedWrappers` + note: registered for this scan (flag on).
+ *   - `suggestedNativeWrappers` + note: onboarding hint only (config
+ *     missing, flag off) — NOT registered. The agent retries with
+ *     `autoDetectWrappers: true` or writes a config.
+ * Empty object when neither applies.
+ */
+function buildWrapperMeta(args: {
+  autoDetect: boolean;
+  configMissing: boolean;
+  detectedNames: readonly string[];
+}): Record<string, unknown> {
+  const { autoDetect, configMissing, detectedNames } = args;
+  if (autoDetect) {
+    return {
+      autoDetectedWrappers: detectedNames,
+      autoDetectedWrappersNote:
+        detectedNames.length === 0
+          ? "autoDetectWrappers ran but found no PascalCase components with onClick to register."
+          : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. Copy the names you confirm to \`nativeWrappers\` in ra11y.config.ts for durable registration; remove any that actually render a <div>/<span> internally — those are real bugs.`,
+    };
+  }
+  if (configMissing && detectedNames.length > 0) {
+    return {
+      suggestedNativeWrappers: detectedNames,
+      suggestedNativeWrappersNote: `No ra11y.config.ts was found, but the detector spotted ${detectedNames.length} PascalCase component(s) with onClick that look like native-element wrappers. To use them for this scan, re-call scan_project with \`autoDetectWrappers: true\`. To make it durable, add them to \`nativeWrappers\` in a ra11y.config.ts at the project root. Not yet registered for this scan.`,
+    };
+  }
+  return {};
+}
 
 /**
  * When config discovery failed AND the caller didn't pass `cwd` explicitly,

@@ -252,6 +252,48 @@ describe("MCP tool: scan_project", () => {
       expect(data.meta["autoDetectedWrappersNote"]).toBeUndefined();
     });
 
+    it("surfaces wrapper candidates as suggestions (not registrations) when config is missing and the flag is off", async () => {
+      // Onboarding signal: the agent should see what a nativeWrappers
+      // list would look like before writing ra11y.config.ts, without
+      // implicitly registering anything. Silent onboarding was the
+      // most common field-report friction.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-config-miss-hint-"));
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <ActionButton onClick={a} />",
+          "      <Card onClick={c} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          configSource: string | null;
+          autoDetectedWrappers?: string[];
+          suggestedNativeWrappers?: string[];
+          suggestedNativeWrappersNote?: string;
+        };
+      };
+      expect(data.meta.configSource).toBeNull();
+      expect(data.meta.autoDetectedWrappers).toBeUndefined();
+      expect(data.meta.suggestedNativeWrappers).toEqual(["ActionButton", "Card"]);
+      expect(data.meta.suggestedNativeWrappersNote).toContain("Not yet registered");
+      expect(data.meta.suggestedNativeWrappersNote).toContain("autoDetectWrappers: true");
+    });
+
     it("keeps session config pristine — detected wrappers are scan-scoped only", async () => {
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
