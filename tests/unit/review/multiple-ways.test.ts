@@ -118,4 +118,78 @@ describe("review/multiple-ways", () => {
     expect(ids.has("section508:2.4.5")).toBe(true);
     expect(ids.has("en301549:9.2.4.5")).toBe(true);
   });
+
+  describe("SPA-shell annotation", () => {
+    // Per CLAUDE.md §1 we never suppress — the candidate still surfaces.
+    // The annotation redirects the agent's review to the router config
+    // instead of treating the index HTML as the failure point.
+    it("annotates when a Vite-style index has a root mount div + module script", () => {
+      const source = `
+        <html>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.tsx"></script>
+          </body>
+        </html>
+      `;
+      const out = runFinder(finder, source, { filePath: "index.html" });
+      expect(out.length).toBeGreaterThan(0);
+      expect(out[0]?.reason).toContain("SPA index shell");
+      expect(out[0]?.reason).toContain("router config");
+    });
+
+    it("annotates for a bundled /assets/ script (CRA / Vite build output)", () => {
+      const source = `
+        <html>
+          <body>
+            <div id="app"></div>
+            <script src="/assets/bundle.abc123.js"></script>
+          </body>
+        </html>
+      `;
+      const out = runFinder(finder, source, { filePath: "index.html" });
+      expect(out[0]?.reason).toContain("SPA index shell");
+    });
+
+    it("does NOT annotate when the root div has real content", () => {
+      const source = `
+        <html>
+          <body>
+            <div id="root">
+              <header>Acme</header>
+              <main>Welcome</main>
+            </div>
+            <script type="module" src="/src/main.tsx"></script>
+          </body>
+        </html>
+      `;
+      const out = runFinder(finder, source, { filePath: "index.html" });
+      expect(out[0]?.reason).not.toContain("SPA index shell");
+    });
+
+    it("does NOT annotate a plain HTML page with no mount div", () => {
+      const source = `
+        <html>
+          <body>
+            <main>Dashboard</main>
+          </body>
+        </html>
+      `;
+      const out = runFinder(finder, source, { filePath: "index.html" });
+      expect(out[0]?.reason).not.toContain("SPA index shell");
+    });
+
+    it("still emits candidates (never suppresses the shell's 2.4.5 prompt)", () => {
+      const source = `
+        <html>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.tsx"></script>
+          </body>
+        </html>
+      `;
+      const out = runFinder(finder, source, { filePath: "index.html" });
+      expect(out.length).toBe(4);
+    });
+  });
 });

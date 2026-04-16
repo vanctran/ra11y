@@ -69,7 +69,12 @@ function findHtmlCandidates(ctx: FileContext, root: HtmlDocument): readonly Revi
   if (!looksLikeHtmlRootLayout(root, ctx.filePath)) return [];
   if (hasHtmlMultipleWaysSignal(root)) return [];
   const location = firstHtmlLocation(root);
-  return candidatesForAllCriteria(ctx.filePath, location.line, location.column);
+  // SPA index shells (Vite/CRA/React Router root) carry no navigation
+  // signal because the nav lives in JS. Annotate the candidate so the
+  // agent redirects its review to the router config instead of trying
+  // to fix "missing nav" in the index HTML.
+  const spaHint = looksLikeSpaShell(root) ? SPA_SHELL_HINT : null;
+  return candidatesForAllCriteria(ctx.filePath, location.line, location.column, spaHint);
 }
 
 function findJsxCandidates(ctx: FileContext, root: TsxModule): readonly ReviewCandidate[] {
@@ -264,12 +269,71 @@ function candidatesForAllCriteria(
   filePath: string,
   line: number,
   column: number,
+  annotation: string | null = null,
 ): readonly ReviewCandidate[] {
-  const reason =
+  const base =
     "Likely root layout has no search, sitemap, breadcrumb, or 3-link navigation signal; verify users have more than one way to locate pages";
+  const reason = annotation === null ? base : `${base} — ${annotation}`;
   return CRITERION_IDS.map((criterionId) => ({
     criterionId,
     location: { filePath, line, column },
     reason,
   }));
+}
+
+const SPA_SHELL_HINT =
+  "this HTML looks like an SPA index shell (root mount div + module bundle script); navigation likely lives in the client-side router config, not this file";
+
+const SPA_MOUNT_ID_RE = /^(?:root|app|__next|___gatsby|main|mount)$/;
+
+/**
+ * Structural signals that this HTML is the index shell for a
+ * client-rendered SPA (Vite/CRA/Next pages-router/Gatsby). Two markers
+ * together — an empty or near-empty mount `<div id="...">` and a
+ * module script loading a JS bundle — are a reliable structural
+ * classifier. No filename heuristics; the decision is made from HTML
+ * content only so templates named `index.html` that actually contain
+ * server-rendered content don't get annotated.
+ */
+function looksLikeSpaShell(root: HtmlDocument): boolean {
+  let hasMountDiv = false;
+  let hasModuleScript = false;
+  for (const el of walkHtmlElements(root)) {
+    if (!hasMountDiv && isSpaMountDiv(el)) hasMountDiv = true;
+    if (!hasModuleScript && isModuleBundleScript(el)) hasModuleScript = true;
+    if (hasMountDiv && hasModuleScript) return true;
+  }
+  return false;
+}
+
+function isSpaMountDiv(el: HtmlElement): boolean {
+  if (el.tagName.toLowerCase() !== "div") return false;
+  const id = normalizeLower(getHtmlAttribute(el, "id"));
+  if (id === null || !SPA_MOUNT_ID_RE.test(id)) return false;
+  // A root div with substantial children is probably a real rendered
+  // page that just happens to use id="app", not an SPA shell.
+  return hasOnlyTrivialContent(el);
+}
+
+function hasOnlyTrivialContent(el: HtmlElement): boolean {
+  for (const child of el.children) {
+    if (child.kind !== "HtmlElement") continue;
+    const tag = child.tagName.toLowerCase();
+    // Noscript fallback and inline comments are common even in SPA
+    // shells; anything else means the page has real content.
+    if (tag !== "noscript") return false;
+  }
+  return true;
+}
+
+function isModuleBundleScript(el: HtmlElement): boolean {
+  if (el.tagName.toLowerCase() !== "script") return false;
+  const type = normalizeLower(getHtmlAttribute(el, "type"));
+  const src = getHtmlAttribute(el, "src");
+  // Vite emits `type="module"` with an `/src/...` or `/assets/...`
+  // src. CRA/Gatsby emit non-module chunk scripts; covered by a
+  // wider /static/js/ or /build/ src pattern below.
+  if (type === "module" && src !== null) return true;
+  if (src === null) return false;
+  return /\/(?:assets|static\/js|build|_next)\//.test(src);
 }
