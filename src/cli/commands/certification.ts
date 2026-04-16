@@ -42,6 +42,7 @@ export async function runCertification(options: CliOptions): Promise<ScanExit> {
     rules: BUILTIN_RULES,
     enabled: options.standards,
     files: parsed,
+    level: options.level,
   });
 
   const manual = await loadManualReview(cwd);

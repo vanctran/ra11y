@@ -187,6 +187,7 @@ const scanFileTool: McpTool = {
       enabled: standards,
       files: [parsed],
       finders: BUILTIN_CANDIDATE_FINDERS,
+      level: session.config.level,
     });
 
     const filtered = filterBySeverity(result.violations, strParam(params, "minSeverity"));
@@ -299,6 +300,7 @@ const suggestFixTool: McpTool = {
       rules: applyRuleSettings(BUILTIN_RULES, session.config.rules),
       enabled: standards,
       files: [parsed],
+      level: session.config.level,
     });
 
     // Find the matching violation.

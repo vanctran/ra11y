@@ -302,6 +302,7 @@ export async function runScanAndFormat(
     enabled,
     files,
     finders: BUILTIN_CANDIDATE_FINDERS,
+    level: session.config.level,
   });
 
   const { wrappers, sessionOnly } = resolveWrapperSources(wrapperSources, session);

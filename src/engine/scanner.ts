@@ -29,7 +29,7 @@ import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
 import { runRulesForFile } from "./rule-runner.ts";
-import { createStandardFilter } from "./standard-filter.ts";
+import { type ConformanceLevel, createStandardFilter } from "./standard-filter.ts";
 
 /** A file that has already been parsed and is ready for rule execution. */
 export interface ParsedFile {
@@ -48,6 +48,12 @@ export interface ScanInputs {
   readonly isTTY?: boolean;
   /** Optional candidate finders for assisted manual review. */
   readonly finders?: readonly CandidateFinder[];
+  /**
+   * Active conformance level. When set, rules whose only cited criteria
+   * are above this level are skipped — e.g., `contrast/enhanced`
+   * (AAA-only) won't fire at `"AA"`. Undefined = no level gating.
+   */
+  readonly level?: ConformanceLevel;
 }
 
 export interface ScanProducts {
@@ -77,7 +83,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     }
   }
 
-  const filter = createStandardFilter(enabled, criteriaRegistry);
+  const filter = createStandardFilter(enabled, criteriaRegistry, inputs.level);
 
   const allViolations: Violation[] = [];
   for (const file of inputs.files) {

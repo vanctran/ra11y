@@ -37,7 +37,7 @@ import type { CssStylesheet } from "../../types/ast.ts";
 import { WCAG_AA_MIN_LARGE, WCAG_AA_MIN_NORMAL } from "../../utils/contrast.ts";
 import { buildContrastMessage, buildContrastSuggestion, findContrastFailures } from "./_shared.ts";
 
-const SC_LABEL = "WCAG 1.4.3";
+const SC_LABEL = "WCAG 1.4.3 AA";
 
 export const rule = defineRule({
   id: "contrast/minimum",

@@ -40,6 +40,7 @@ export async function runChecklist(options: CliOptions): Promise<ScanExit> {
     enabled: options.standards,
     files: parsed,
     finders: BUILTIN_CANDIDATE_FINDERS,
+    level: options.level,
   });
 
   // Format violations using the user's chosen format (default: markdown).

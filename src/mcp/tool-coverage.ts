@@ -61,6 +61,7 @@ export const coverageTool: McpTool = {
       enabled: standards,
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
+      level,
     });
 
     const candidateCriteria = new Set((report.candidates ?? []).map((c) => c.criterionId));

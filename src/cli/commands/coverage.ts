@@ -42,6 +42,7 @@ export async function runCoverage(options: CliOptions): Promise<ScanExit> {
     rules: BUILTIN_RULES,
     enabled: options.standards,
     files: parsed,
+    level: options.level,
   });
 
   const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);

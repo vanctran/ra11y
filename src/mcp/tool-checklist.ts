@@ -105,6 +105,7 @@ export const checklistTool: McpTool = {
       enabled: standards,
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
+      level,
     });
 
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);

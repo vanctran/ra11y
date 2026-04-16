@@ -73,6 +73,7 @@ export const reviewCandidatesTool: McpTool = {
       enabled: standards,
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
+      level,
     });
 
     const filterCriterion = strParam(params, "criterionId");

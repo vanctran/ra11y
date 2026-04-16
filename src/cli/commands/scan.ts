@@ -109,6 +109,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     files: parsed,
     finders: BUILTIN_CANDIDATE_FINDERS,
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
+    level: options.level,
   });
 
   // Baseline mode — create, check, or update. Each branch returns

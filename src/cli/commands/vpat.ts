@@ -34,6 +34,7 @@ export async function runVpat(options: CliOptions): Promise<ScanExit> {
     enabled: options.standards,
     files: parsed,
     finders: BUILTIN_CANDIDATE_FINDERS,
+    level: options.level,
   });
 
   const report = buildVpatReport(
