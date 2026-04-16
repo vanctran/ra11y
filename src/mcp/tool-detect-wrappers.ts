@@ -13,19 +13,9 @@
  * exist?" — same input, opposite intent.
  */
 
-import { hasJsxAttribute, walkJsxElements } from "../engine/ast-helpers.ts";
-import type { ParsedFile } from "../engine/scanner.ts";
-import type { TsxModule } from "../types/ast.ts";
 import { gitRoot } from "../utils/git.ts";
+import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { type McpTool, parseFiles, strParam, textResult } from "./tools-helpers.ts";
-
-const SAMPLE_LIMIT = 3;
-
-interface Candidate {
-  readonly component: string;
-  readonly occurrences: number;
-  readonly sampleLocations: readonly { readonly path: string; readonly line: number }[];
-}
 
 export const detectNativeWrappersTool: McpTool = {
   def: {
@@ -59,7 +49,7 @@ export const detectNativeWrappersTool: McpTool = {
       });
     }
 
-    const candidates = collectCandidates(files);
+    const candidates = collectWrapperCandidates(files);
     const detectedNames = new Set(candidates.map((c) => c.component));
     const declared = [
       ...new Set([...projectConfig.nativeWrappers, ...session.config.nativeWrappers]),
@@ -94,39 +84,4 @@ function buildNextStep(
     );
   }
   return parts.join("");
-}
-
-/**
- * Walk every parsed JSX/TSX file and group PascalCase elements with an
- * onClick prop by component name. Up to SAMPLE_LIMIT locations per
- * component — enough for verification without blowing up the response.
- */
-function collectCandidates(files: readonly ParsedFile[]): readonly Candidate[] {
-  const groups = new Map<string, { count: number; locations: { path: string; line: number }[] }>();
-  for (const file of files) {
-    if (file.ast.language !== "tsx") continue;
-    const tsx = file.ast.root as TsxModule;
-    for (const el of walkJsxElements(tsx)) {
-      if (!isPascalCase(el.tagName)) continue;
-      if (!hasJsxAttribute(el, "onClick")) continue;
-      const entry = groups.get(el.tagName) ?? { count: 0, locations: [] };
-      entry.count += 1;
-      if (entry.locations.length < SAMPLE_LIMIT) {
-        entry.locations.push({ path: file.filePath, line: el.loc.start.line });
-      }
-      groups.set(el.tagName, entry);
-    }
-  }
-  return [...groups.entries()]
-    .sort(([a, x], [b, y]) => y.count - x.count || a.localeCompare(b))
-    .map(([component, { count, locations }]) => ({
-      component,
-      occurrences: count,
-      sampleLocations: locations,
-    }));
-}
-
-function isPascalCase(name: string): boolean {
-  const first = name[0];
-  return first !== undefined && first >= "A" && first <= "Z";
 }

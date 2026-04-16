@@ -171,6 +171,86 @@ describe("MCP tool: scan_project", () => {
     expect(data.meta.scannedRoot).toBe(fixtureDir);
     expect(data.meta.filesScanned).toBeGreaterThan(0);
   });
+
+  describe("autoDetectWrappers", () => {
+    it("registers PascalCase-with-onClick components inline and surfaces them in meta", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-auto-detect-"));
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <ActionButton onClick={a} />",
+          "      <ActionButton onClick={b} />",
+          "      <Card onClick={c} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          autoDetectedWrappers?: string[];
+          autoDetectedWrappersNote?: string;
+        };
+      };
+      expect(data.meta.autoDetectedWrappers).toEqual(["ActionButton", "Card"]);
+      expect(data.meta.autoDetectedWrappersNote).toContain("Copy the names you confirm");
+    });
+
+    it("omits the meta fields entirely when the flag is off", async () => {
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const fixtureDir = BAD_ALT.replace(/\/[^/]+$/, "");
+      const result = await tool.handler({ cwd: fixtureDir }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: Record<string, unknown>;
+      };
+      expect(data.meta["autoDetectedWrappers"]).toBeUndefined();
+      expect(data.meta["autoDetectedWrappersNote"]).toBeUndefined();
+    });
+
+    it("keeps session config pristine — detected wrappers are scan-scoped only", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-auto-detect-scope-"));
+      await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <Widget onClick={x} />;");
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      expect(session.config.nativeWrappers).not.toContain("Widget");
+    });
+
+    it("reports zero-detection plainly when no candidates are found", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-auto-detect-empty-"));
+      await writeFile(joinPath(dir, "app.ts"), "export const x = 1;");
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: { autoDetectedWrappers?: string[]; autoDetectedWrappersNote?: string };
+      };
+      expect(data.meta.autoDetectedWrappers).toEqual([]);
+      expect(data.meta.autoDetectedWrappersNote).toContain("found no");
+    });
+  });
 });
 
 describe("MCP tool: scan_file", () => {

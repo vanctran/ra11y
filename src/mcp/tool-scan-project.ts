@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
+import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import {
   type McpTool,
   ms,
@@ -61,6 +62,11 @@ export const scanProjectTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
         },
+        autoDetectWrappers: {
+          type: "boolean",
+          description:
+            "When true, run the `detect_native_wrappers` heuristic inline and register PascalCase-with-onClick components as nativeWrappers for this scan. Use on the first run of a codebase so the opaqueCustomComponents count is accurate without an onboarding round-trip. The detected list is surfaced in `meta.autoDetectedWrappers` — copy the names you confirm to your ra11y.config.ts for durable registration. Scope is scan-only; session and project config are unaffected.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -89,6 +95,9 @@ export const scanProjectTool: McpTool = {
         meta: { filesScanned: 0, scannedRoot: root, scanMode: describeMode(params) },
       });
     }
+    const autoDetect = params["autoDetectWrappers"] === true;
+    const detected = autoDetect ? collectWrapperCandidates(files) : [];
+    const detectedNames = detected.map((c) => c.component);
     const t1 = performance.now();
     const { formatted } = await runScanAndFormat(
       files,
@@ -98,7 +107,10 @@ export const scanProjectTool: McpTool = {
       session.effectiveRules(projectConfig),
       {
         fromFile: projectConfig.nativeWrappers,
-        fromSession: session.config.nativeWrappers,
+        // Inline-detected wrappers are transient: scoped to this one
+        // scan, not persisted to session or project config. Keeps the
+        // opt-in from silently mutating state behind the agent's back.
+        fromSession: [...session.config.nativeWrappers, ...detectedNames],
       },
       root,
       params["verboseMeta"] === true,
@@ -127,6 +139,15 @@ export const scanProjectTool: McpTool = {
             }
           : {}),
         ...(configHint === null ? {} : { configHint }),
+        ...(autoDetect
+          ? {
+              autoDetectedWrappers: detectedNames,
+              autoDetectedWrappersNote:
+                detectedNames.length === 0
+                  ? "autoDetectWrappers ran but found no PascalCase components with onClick to register."
+                  : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. Copy the names you confirm to \`nativeWrappers\` in ra11y.config.ts for durable registration; remove any that actually render a <div>/<span> internally — those are real bugs.`,
+            }
+          : {}),
         nextStep,
       },
     });
