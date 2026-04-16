@@ -44,6 +44,52 @@ function tsxFile(path: string, tagNames: readonly string[]): ParsedFile {
   };
 }
 
+function tsxFileWithClassName(path: string, className: string): ParsedFile {
+  const source = `<div className="${className}" />`;
+  return {
+    filePath: path,
+    source,
+    ast: {
+      language: "tsx",
+      root: {
+        kind: "TsxModule",
+        range: { start: 0, end: source.length },
+        loc: {
+          start: { line: 1, column: 1, offset: 0 },
+          end: { line: 1, column: 1, offset: source.length },
+        },
+        jsxElements: [
+          {
+            kind: "JsxElement",
+            range: { start: 0, end: source.length },
+            loc: {
+              start: { line: 1, column: 1, offset: 0 },
+              end: { line: 1, column: 1, offset: source.length },
+            },
+            tagName: "div",
+            attributes: [
+              {
+                kind: "JsxAttribute",
+                range: { start: 0, end: 0 },
+                loc: {
+                  start: { line: 1, column: 1, offset: 0 },
+                  end: { line: 1, column: 1, offset: 0 },
+                },
+                name: "className",
+                value: { kind: "StringLiteral", value: className },
+              },
+            ],
+            children: [],
+            selfClosing: true,
+            hasSpreadProps: false,
+          },
+        ],
+      },
+      errors: [],
+    },
+  };
+}
+
 function cssFile(path: string): ParsedFile {
   return {
     filePath: path,
@@ -174,6 +220,31 @@ describe("buildAnalysisCoverage — hints", () => {
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       const hints = (analysisCoverage?.["hints"] as string[] | undefined) ?? [];
       expect(hints.some((h) => h.includes("CSS"))).toBe(false);
+    });
+
+    it("strengthens the hint with additionalPaths when Tailwind usage is detected", () => {
+      // 60 Tailwind-looking JSX files + 0 CSS → thin-CSS hint fires
+      // AND the Tailwind-specific strengthening kicks in.
+      const files = Array.from({ length: 60 }, (_, i) =>
+        tsxFileWithClassName(`c${i}.tsx`, "flex items-center bg-red-500 text-white"),
+      );
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const hints = (analysisCoverage?.["hints"] as string[] | undefined) ?? [];
+      const cssHint = hints.find((h) => h.includes("CSS file(s)"));
+      expect(cssHint).toBeDefined();
+      expect(cssHint).toContain("Tailwind usage detected");
+      expect(cssHint).toContain('additionalPaths: ["dist/assets"]');
+    });
+
+    it("does not flip to the Tailwind variant when class names aren't utility-shaped", () => {
+      const files = Array.from({ length: 60 }, (_, i) =>
+        tsxFileWithClassName(`c${i}.tsx`, "site-header active"),
+      );
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      const hints = (analysisCoverage?.["hints"] as string[] | undefined) ?? [];
+      const cssHint = hints.find((h) => h.includes("CSS file(s)"));
+      expect(cssHint).toBeDefined();
+      expect(cssHint).not.toContain("Tailwind usage detected");
     });
   });
 

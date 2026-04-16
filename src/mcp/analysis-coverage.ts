@@ -160,15 +160,84 @@ function buildHints(files: readonly ParsedFile[], acc: CoverageAccumulator): rea
     markupFiles >= MARKUP_FILES_FOR_CSS_HINT_MIN &&
     counts.css <= Math.max(1, Math.floor(markupFiles * CSS_TO_MARKUP_THIN_RATIO))
   ) {
-    hints.push(
-      `Only ${counts.css} CSS file(s) scanned vs ${markupFiles} JSX/HTML file(s). ` +
-        `Post-compile output (Tailwind, CSS-in-JS, SCSS) isn't parsed — color-contrast ` +
-        `and focus-visible coverage may be undercounted. Build the site and point ` +
-        `\`scan\` at the emitted .css, or scan the Tailwind source config alongside JSX.`,
-    );
+    hints.push(buildCssThinHint(files, counts.css, markupFiles));
   }
   return hints;
 }
+
+/**
+ * Builds the thin-CSS-coverage hint, strengthened with a Tailwind-
+ * specific follow-up when Tailwind usage is detected. On a Tailwind
+ * codebase the only realistic way to get contrast/focus-visible
+ * coverage is to run the build and point scan_project at the emitted
+ * CSS — naming the exact `additionalPaths` argument saves the agent
+ * a discovery round trip.
+ */
+function buildCssThinHint(files: readonly ParsedFile[], css: number, markup: number): string {
+  const base =
+    `Only ${css} CSS file(s) scanned vs ${markup} JSX/HTML file(s). ` +
+    "Post-compile output (Tailwind, CSS-in-JS, SCSS) isn't parsed — color-contrast " +
+    "and focus-visible coverage may be undercounted.";
+  if (hasTailwindSignal(files)) {
+    return (
+      `${base} Tailwind usage detected: run the build, then re-run scan_project with ` +
+      '`additionalPaths: ["dist/assets"]` (or wherever your bundler emits CSS) to ' +
+      "include the generated stylesheet. `additionalPaths` bypasses `.gitignore` and " +
+      "the default build-dir skips for the paths you list."
+    );
+  }
+  return `${base} Build the site and point \`scan\` at the emitted .css, or scan the Tailwind source config alongside JSX.`;
+}
+
+/**
+ * Cheap Tailwind detector: a `class`/`className` attribute anywhere in
+ * the scanned JSX whose value contains two or more tokens with the
+ * `prefix-value` shape characteristic of Tailwind utilities. We
+ * deliberately don't parse tailwind.config.*; that would require
+ * filesystem access and version-specific config support for zero
+ * marginal signal. Two utility-shaped tokens together is both sparse
+ * enough to avoid false positives on class names like "site-header
+ * active" and common enough to catch any real Tailwind project on the
+ * first JSX file we look at.
+ */
+function hasTailwindSignal(files: readonly ParsedFile[]): boolean {
+  for (const f of files) {
+    if (f.ast.language !== "tsx" && f.ast.language !== "jsx") continue;
+    if (fileHasTailwindClass(f.ast.root as import("../types/ast.ts").TsxModule)) return true;
+  }
+  return false;
+}
+
+function fileHasTailwindClass(root: import("../types/ast.ts").TsxModule): boolean {
+  for (const el of walkJsxElements(root)) {
+    for (const attr of el.attributes) {
+      if (attr.name !== "className" && attr.name !== "class") continue;
+      if (attr.value?.kind !== "StringLiteral") continue;
+      if (looksLikeTailwindClassString(attr.value.value)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Two tokens of shape `<letters>-<letters-or-digits>` (e.g. `bg-red-500
+ * text-center`, `md:hover:text-white flex`) are a strong Tailwind
+ * signal. Variants with `:` (`md:`, `hover:`, `dark:`) count. Arbitrary
+ * values in `[...]` also count when attached to a utility prefix.
+ */
+function looksLikeTailwindClassString(classString: string): boolean {
+  const tokens = classString.trim().split(/\s+/);
+  let matches = 0;
+  for (const token of tokens) {
+    if (TAILWIND_TOKEN_RE.test(token)) {
+      matches += 1;
+      if (matches >= 2) return true;
+    }
+  }
+  return false;
+}
+
+const TAILWIND_TOKEN_RE = /^(?:[a-z]+:)*-?[a-z]+(?:-[a-z0-9/.%]+)+(?:\[[^\]]*\])?$/i;
 
 interface ParsedFileCounts {
   readonly jsx: number;
