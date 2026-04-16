@@ -151,12 +151,7 @@ function emit(
   source: string,
   candidates: ReviewCandidate[],
 ): void {
-  const label = detectContextChange(source);
-  const reason = label
-    ? `${handler} handler on <${tag}> invokes ${label} -- verify the context change is expected on this event (high confidence: static nav/submit call detected in handler body)`
-    : looksLikeFunctionReference(source)
-      ? `${handler} handler on <${tag}> passes a function reference ("${truncate(source)}") -- verify the referenced body does not invoke a router, window.location, or .submit() that would trigger an unexpected context change (low confidence: handler body not inline, static analysis cannot inspect it)`
-      : `${handler} handler on <${tag}> -- no static navigation or submission signal detected in the handler source; verify the handler does not trigger an unexpected context change (low confidence: inline body visible but patterns may vary)`;
+  const reason = buildReason(handler, tag, source);
   for (const criterionId of criteriaForHandler(handler)) {
     candidates.push({
       criterionId,
@@ -164,6 +159,25 @@ function emit(
       reason,
     });
   }
+}
+
+/**
+ * Compressed reason text. The per-criterion guidance ("verify the user
+ * can ...") is intentionally brief here because the shared framing
+ * across dozens of candidates drowned the per-row unique content
+ * (identifier, element, confidence) when each row carried the full
+ * verification prose. The finder's `docs.reviewPrompt` holds the full
+ * verification guidance, and `review_candidates` surfaces it per row.
+ */
+function buildReason(handler: string, tag: string, source: string): string {
+  const label = detectContextChange(source);
+  if (label) {
+    return `${handler} on <${tag}> invokes ${label} (high confidence); verify this context change is expected`;
+  }
+  if (looksLikeFunctionReference(source)) {
+    return `${handler} on <${tag}> passes "${truncate(source)}" (low confidence, body not inline); open the referenced fn and check for router/location/submit`;
+  }
+  return `${handler} on <${tag}> has no static nav/submit signal (low confidence, inline body); verify no conditional context change`;
 }
 
 const MAX_REF_SNIPPET_LEN = 60;

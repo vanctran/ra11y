@@ -46,7 +46,7 @@ describe("review/on-input-change", () => {
     const first = out[0];
     expect(first?.reason).toContain("low confidence");
     expect(first?.reason).toContain("handleChange");
-    expect(first?.reason).toContain("handler body not inline");
+    expect(first?.reason).toContain("body not inline");
   });
 
   it("low-confidence (inline body, no nav pattern): flags a visible-but-clean onChange", () => {
@@ -54,7 +54,7 @@ describe("review/on-input-change", () => {
     const out = runFinder(finder, source);
     expect(out.length).toBeGreaterThan(0);
     expect(out[0]?.reason).toContain("low confidence");
-    expect(out[0]?.reason).toContain("inline body visible");
+    expect(out[0]?.reason).toContain("inline body");
   });
 
   it("low-confidence (dotted reference): flags onChange={this.handleChange}", () => {
@@ -99,5 +99,26 @@ describe("review/on-input-change", () => {
     const out = runFinder(finder, source, { filePath: "input.html" });
     expect(out.length).toBeGreaterThan(0);
     expect(out[0]?.reason).toContain("low confidence");
+  });
+
+  it("reason text stays compact across all three tiers (regression guard on verbosity)", () => {
+    // Rationale: a forms-heavy codebase surfaces one candidate per
+    // onChange/onFocus/onBlur handler. When every reason was 200+ chars
+    // of shared framing, the 15-row output drowned the varying content
+    // (identifier, element, confidence) in boilerplate. This cap pins
+    // the compression — raise it deliberately if the reason needs more
+    // signal, don't let it creep.
+    const cap = 160;
+    const sources = [
+      `const x = <input onChange={() => router.push("/x")} />;`, // high
+      `const x = <input onChange={handleChange} />;`, // ref low
+      `const x = <input onChange={() => setValue(e.target.value)} />;`, // inline low
+    ];
+    for (const source of sources) {
+      const out = runFinder(finder, source);
+      for (const candidate of out) {
+        expect(candidate.reason.length).toBeLessThanOrEqual(cap);
+      }
+    }
   });
 });
