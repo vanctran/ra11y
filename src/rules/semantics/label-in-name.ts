@@ -180,13 +180,21 @@ function rankFixPaths(
   visibleText: string,
   ariaLabel: string,
 ): { primary: string; alternatives: readonly string[] } {
-  const pathWiden = `widen aria-label to contain the visible text, e.g. aria-label="${visibleText} — additional context"`;
+  const pathWiden = `widen aria-label to contain the visible text as a contiguous substring, e.g. aria-label="${visibleText} — additional context"`;
+  const pathRephrase = `rephrase aria-label so the visible text "${visibleText}" appears verbatim (contiguous), not with other words inserted between its tokens — e.g. aria-label="${visibleText}: <rest of context>"`;
   const pathIconHidden = `if the visible text contains a decorative icon or symbol (arrows, glyphs, emoji), wrap the icon in a span and mark it \`aria-hidden="true"\` so it is not part of the visible label`;
   const pathRemove =
     "remove aria-label entirely and let the visible text serve as the accessible name directly";
 
   if (containsIconLikeChar(visibleText)) {
     return { primary: pathIconHidden, alternatives: [pathWiden, pathRemove] };
+  }
+  if (isInterleavedExpansion(ariaLabel, visibleText)) {
+    // All visible-text word tokens are present in aria-label, in order,
+    // but with extra words inserted between them. This is almost always
+    // an authored-expanded label, not a mismatched one — the fix is to
+    // make the substring contiguous, not to pick a different resolution.
+    return { primary: pathRephrase, alternatives: [pathWiden, pathRemove] };
   }
   if (ariaLabelIsExtendedVisibleText(ariaLabel, visibleText)) {
     // aria-label is a superset-adjacent phrase — removing it loses
@@ -219,6 +227,32 @@ function ariaLabelIsExtendedVisibleText(ariaLabel: string, visibleText: string):
   return firstWord.length > 2 && a.includes(firstWord);
 }
 
+/**
+ * True when every word token of the visible text appears in aria-label
+ * in the same order, but with at least one extra token inserted
+ * between them — i.e. the author expanded the visible text rather
+ * than replacing it. Example: visible="Start the Assessment",
+ * aria-label="Start the 8-question Perception Gap Assessment".
+ *
+ * This is a common authoring pattern: the designer wrote a longer,
+ * more descriptive accessible name that still *sounds* like the button
+ * text. WCAG 2.5.3 requires a contiguous substring, so the fix is to
+ * rephrase, not to pick a different resolution.
+ */
+function isInterleavedExpansion(ariaLabel: string, visibleText: string): boolean {
+  const visibleWords = visibleText.toLowerCase().split(/\s+/).filter(Boolean);
+  const ariaWords = ariaLabel.toLowerCase().split(/\s+/).filter(Boolean);
+  if (visibleWords.length < 2) return false;
+  if (ariaWords.length <= visibleWords.length) return false;
+  let cursor = 0;
+  for (const word of visibleWords) {
+    const found = ariaWords.indexOf(word, cursor);
+    if (found === -1) return false;
+    cursor = found + 1;
+  }
+  return true;
+}
+
 function emitViolation(
   tagName: string,
   visibleText: string,
@@ -227,8 +261,12 @@ function emitViolation(
   emit: Emit,
 ): void {
   const ranked = rankFixPaths(visibleText, ariaLabel);
+  const interleaved = isInterleavedExpansion(ariaLabel, visibleText);
+  const prelude = interleaved
+    ? `Looks like an expanded label — every word of "${visibleText}" appears in aria-label in order, but with extra words inserted between them. WCAG 2.5.3 requires a contiguous substring, so the fix is to rephrase, not to replace. `
+    : "";
   const suggestion =
-    `Primary fix: ${ranked.primary}. ` +
+    `${prelude}Primary fix: ${ranked.primary}. ` +
     `Alternatives (less likely): (a) ${ranked.alternatives[0]}; (b) ${ranked.alternatives[1]}.`;
   emit({
     severity: "error",

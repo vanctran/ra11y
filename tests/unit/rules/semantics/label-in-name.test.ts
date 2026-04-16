@@ -189,5 +189,19 @@ describe("rule semantics/label-in-name", () => {
       const matches = v[0]?.suggestion?.match(/\([ab]\) /g);
       expect(matches).toHaveLength(2);
     });
+
+    it("acknowledges interleaved expansion when all visible-text words appear in aria-label in order with extras between", () => {
+      // Real-world case: aria-label is an authored expansion of the visible
+      // text — "Start the 8-question Perception Gap Assessment" contains
+      // every word of "Start the Assessment" in order, with extras inserted.
+      const v = runRule(
+        rule,
+        `<button aria-label="Start the 8-question Perception Gap Assessment">Start the Assessment</button>`,
+        { filePath: "index.html" },
+      );
+      expect(v).toHaveLength(1);
+      expect(v[0]?.suggestion).toContain("expanded label");
+      expect(v[0]?.suggestion).toMatch(/Primary fix: rephrase aria-label/);
+    });
   });
 });
