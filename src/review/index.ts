@@ -8,6 +8,7 @@ import { finder as captcha } from "./finders/captcha.ts";
 import { finder as errorIdentification } from "./finders/error-identification.ts";
 import { finder as errorPrevention } from "./finders/error-prevention.ts";
 import { finder as errorSuggestion } from "./finders/error-suggestion.ts";
+import { finder as headingsAndLabels } from "./finders/headings-and-labels.ts";
 import { finder as identifyPurpose } from "./finders/identify-purpose.ts";
 import { finder as imagesOfText } from "./finders/images-of-text.ts";
 import { finder as meaningfulSequence } from "./finders/meaningful-sequence.ts";
@@ -29,6 +30,7 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   errorIdentification,
   errorPrevention,
   errorSuggestion,
+  headingsAndLabels,
   identifyPurpose,
   imagesOfText,
   meaningfulSequence,
