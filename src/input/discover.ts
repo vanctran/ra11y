@@ -21,6 +21,16 @@ import { DEFAULT_IGNORED_DIRS, walkFiles } from "../utils/fs.ts";
 import { compileGlobs, type GlobMatcher } from "../utils/glob.ts";
 import { hasParseableExtension } from "../utils/path.ts";
 
+/**
+ * A minimal directory-ignore set used by `discoverExplicitPaths`.
+ * The agent opt-ed in by listing these paths explicitly (typically
+ * `dist/` or `build/`), so the usual `dist`/`build`/`out`/etc. skips
+ * don't apply. `node_modules` and `.git` stay excluded — walking them
+ * from a build directory is never the intent and produces nothing but
+ * noise.
+ */
+const EXPLICIT_PATH_IGNORED_DIRS: ReadonlySet<string> = new Set(["node_modules", ".git"]);
+
 export interface DiscoverOptions {
   /** User-supplied gitignore-style patterns. */
   readonly excludes?: readonly string[];
@@ -47,6 +57,48 @@ const DEFAULT_EXCLUDED_PATTERNS: readonly string[] = [
   "**/dev-tools/**",
   "**/devtools/**",
 ];
+
+/**
+ * Opt-in discovery that treats each path as an explicit "please scan
+ * this" — bypasses both `.gitignore` and the default-ignored-dirs
+ * (`dist`, `build`, `out`, `.next`, …). Used by scan_project's
+ * `additionalPaths` param so an agent can point the scanner at
+ * post-compile CSS/HTML output a Tailwind or bundler produced. Still
+ * honors user excludes from config and the parseable-extension filter
+ * — we only widen the dir-level skip.
+ */
+export async function discoverExplicitPaths(
+  paths: readonly string[],
+  options: { readonly excludes?: readonly string[] } = {},
+): Promise<string[]> {
+  const userExcludes = options.excludes ?? [];
+  const userMatcher = compileGlobs(userExcludes);
+  const out = new Set<string>();
+  for (const raw of paths) {
+    const absRoot = resolve(raw);
+    let info: Awaited<ReturnType<typeof stat>>;
+    try {
+      info = await stat(absRoot);
+    } catch {
+      continue;
+    }
+    if (info.isFile()) {
+      if (hasParseableExtension(absRoot) && !userMatcher.matches(toRel(absRoot, absRoot))) {
+        out.add(absRoot);
+      }
+      continue;
+    }
+    if (!info.isDirectory()) continue;
+    const found = await walkFiles(
+      absRoot,
+      (filePath) =>
+        hasParseableExtension(filePath) && !userMatcher.matches(toRel(filePath, absRoot)),
+      EXPLICIT_PATH_IGNORED_DIRS,
+    );
+    for (const f of found) out.add(f);
+  }
+  return [...out].sort();
+}
 
 /** Resolves every input path into a flat list of parseable files. */
 export async function discoverFiles(

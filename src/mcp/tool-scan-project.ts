@@ -12,9 +12,11 @@ import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import {
   type McpTool,
   ms,
+  parseExplicitPaths,
   parseFiles,
   resolveStandards,
   runScanAndFormat,
+  strArrayParam,
   strParam,
   textResult,
 } from "./tools-helpers.ts";
@@ -67,6 +69,12 @@ export const scanProjectTool: McpTool = {
           description:
             "When true, run the `detect_native_wrappers` heuristic inline and register PascalCase-with-onClick components as nativeWrappers for this scan. Use on the first run of a codebase so the opaqueCustomComponents count is accurate without an onboarding round-trip. The detected list is surfaced in `meta.autoDetectedWrappers` — copy the names you confirm to your ra11y.config.ts for durable registration. Scope is scan-only; session and project config are unaffected.",
         },
+        additionalPaths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Paths to scan in addition to the auto-discovered tree, with `.gitignore` and default build-dir skips (`dist`, `build`, `out`, `.next`, …) bypassed. Use to include post-compile CSS/HTML that Tailwind or the bundler produces — e.g. `["dist/assets"]` — so color-contrast and focus-visible rules have real styles to evaluate. User `exclude` patterns still apply. Relative paths resolve from `cwd`.',
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -84,7 +92,11 @@ export const scanProjectTool: McpTool = {
     const standards = resolveStandards(strParam(params, "standard"), session);
     const roots = resolveScanRoots(params, root);
     const t0 = performance.now();
-    const files = await parseFiles(roots, session, root);
+    const baseFiles = await parseFiles(roots, session, root);
+    const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
+    const additionalFiles =
+      additionalPaths.length > 0 ? await parseExplicitPaths(additionalPaths, session, root) : [];
+    const files = mergeFilesByPath(baseFiles, additionalFiles);
     const parseMs = ms(t0);
     if (files.length === 0) {
       logger.debug(`scan_project: 0 parseable files (${parseMs}ms discover)`);
@@ -146,6 +158,15 @@ export const scanProjectTool: McpTool = {
                 detectedNames.length === 0
                   ? "autoDetectWrappers ran but found no PascalCase components with onClick to register."
                   : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. Copy the names you confirm to \`nativeWrappers\` in ra11y.config.ts for durable registration; remove any that actually render a <div>/<span> internally — those are real bugs.`,
+            }
+          : {}),
+        ...(additionalPaths.length > 0
+          ? {
+              additionalPathsScanned: {
+                paths: additionalPaths,
+                filesAdded: files.length - baseFiles.length,
+                note: "These paths bypassed `.gitignore` and the default build-dir skips. User `exclude` patterns still applied.",
+              },
             }
           : {}),
         nextStep,
@@ -249,6 +270,23 @@ function resolveScanRoots(params: Record<string, unknown>, root: string): readon
     return files.length > 0 ? files : [root];
   }
   return [root];
+}
+
+/**
+ * De-dupes a second batch of parsed files against the first by
+ * filePath. `additionalPaths` is meant for targets that wouldn't
+ * otherwise be scanned, but a caller can overlap them with the main
+ * tree — in that case the original parsed file wins.
+ */
+function mergeFilesByPath<T extends { readonly filePath: string }>(
+  primary: readonly T[],
+  secondary: readonly T[],
+): readonly T[] {
+  if (secondary.length === 0) return primary;
+  const seen = new Set(primary.map((f) => f.filePath));
+  const extras = secondary.filter((f) => !seen.has(f.filePath));
+  if (extras.length === 0) return primary;
+  return [...primary, ...extras];
 }
 
 function describeMode(params: Record<string, unknown>): string {

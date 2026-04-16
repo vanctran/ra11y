@@ -11,7 +11,7 @@ import { isAbsolute, resolve } from "node:path";
 import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
-import { discoverFiles } from "../input/discover.ts";
+import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
@@ -110,6 +110,28 @@ export async function parseFiles(
   const base = cwd ?? process.cwd();
   const absPaths = paths.map((p) => (isAbsolute(p) ? p : resolve(base, p)));
   const discovered = await discoverFiles(absPaths, { excludes: session.config.exclude });
+  const parsed: ParsedFile[] = [];
+  for (const filePath of discovered) {
+    const result = await session.parseFile(filePath, cwd);
+    if (result) parsed.push(result);
+  }
+  return parsed;
+}
+
+/**
+ * Opt-in parse pass that bypasses `.gitignore` and the default ignored
+ * build dirs (`dist`, `build`, `out`, …). Used for `scan_project`'s
+ * `additionalPaths` so post-compile artifacts (Tailwind/SCSS output,
+ * statically-exported HTML) can be scanned on request.
+ */
+export async function parseExplicitPaths(
+  paths: readonly string[],
+  session: McpSession,
+  cwd?: string,
+): Promise<readonly ParsedFile[]> {
+  const base = cwd ?? process.cwd();
+  const absPaths = paths.map((p) => (isAbsolute(p) ? p : resolve(base, p)));
+  const discovered = await discoverExplicitPaths(absPaths, { excludes: session.config.exclude });
   const parsed: ParsedFile[] = [];
   for (const filePath of discovered) {
     const result = await session.parseFile(filePath, cwd);

@@ -251,6 +251,63 @@ describe("MCP tool: scan_project", () => {
       expect(data.meta.autoDetectedWrappersNote).toContain("found no");
     });
   });
+
+  describe("additionalPaths", () => {
+    it("scans a gitignored dist directory when listed explicitly", async () => {
+      const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-extra-"));
+      await writeFile(joinPath(dir, ".gitignore"), "dist/\n");
+      await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <div />;");
+      await mkdir(joinPath(dir, "dist", "assets"), { recursive: true });
+      await writeFile(
+        joinPath(dir, "dist", "assets", "main.css"),
+        ".foo { color: #eee; background: #fff; }",
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, additionalPaths: ["dist/assets"] }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          additionalPathsScanned?: { filesAdded: number; paths: string[]; note: string };
+        };
+      };
+      expect(data.meta.additionalPathsScanned).toBeDefined();
+      expect(data.meta.additionalPathsScanned?.filesAdded).toBe(1);
+      expect(data.meta.additionalPathsScanned?.paths).toEqual(["dist/assets"]);
+    });
+
+    it("omits the additionalPathsScanned meta block when the param is absent", async () => {
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const fixtureDir = BAD_ALT.replace(/\/[^/]+$/, "");
+      const result = await tool.handler({ cwd: fixtureDir }, session);
+      const data = JSON.parse(result.content[0].text) as { meta: Record<string, unknown> };
+      expect(data.meta["additionalPathsScanned"]).toBeUndefined();
+    });
+
+    it("reports 0 filesAdded when every additional file is already in the base tree", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-extra-dup-"));
+      await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <div />;");
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, additionalPaths: ["."] }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          additionalPathsScanned?: { filesAdded: number };
+        };
+      };
+      expect(data.meta.additionalPathsScanned?.filesAdded).toBe(0);
+    });
+  });
 });
 
 describe("MCP tool: scan_file", () => {
