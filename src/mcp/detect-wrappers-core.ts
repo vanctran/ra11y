@@ -5,22 +5,23 @@
  *     first-run scan has meaningful coverage without an onboarding
  *     round-trip)
  *
- * The heuristic — "PascalCase JSX tag that carries an `onClick` prop"
- * — mirrors the one in the keyboard/handler-missing rule: custom
- * components that receive onClick are overwhelmingly wrappers around a
- * native interactive element (button / a / input / label / etc.), not
- * raw <div onClick> bugs.
+ * Two structural signals, each overwhelmingly indicative that the
+ * component wraps a native interactive element:
+ *   - button/link wrapper: PascalCase tag with an `onClick` prop
+ *   - input wrapper: PascalCase tag with `onChange` AND one of
+ *     `value`/`defaultValue`/`checked` (the controlled/uncontrolled
+ *     React form-input signal)
  *
- * False positives on this heuristic are bounded — a PascalCase onClick
- * that wraps a <div> is a real bug whether the scanner flags it or
- * not. Including it in nativeWrappers for one scan only hides it from
- * the "opaqueCustomComponents" count; it does not suppress any
+ * False positives on these heuristics are bounded — a PascalCase
+ * onClick that wraps a <div> is a real bug whether the scanner flags
+ * it or not. Including it in nativeWrappers for one scan only hides it
+ * from the "opaqueCustomComponents" count; it does not suppress any
  * violation.
  */
 
 import { hasJsxAttribute, walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
-import type { TsxModule } from "../types/ast.ts";
+import type { JsxElement, TsxModule } from "../types/ast.ts";
 
 /** Max example call sites per component in the structured result. */
 const SAMPLE_LIMIT = 3;
@@ -32,9 +33,10 @@ export interface WrapperCandidate {
 }
 
 /**
- * Walk every parsed JSX/TSX file, group PascalCase elements with an
- * onClick prop by component name. Sorted by occurrences desc, then
- * name asc so the order is deterministic across runs.
+ * Walk every parsed JSX/TSX file, group PascalCase elements that look
+ * like native-interactive wrappers (button-shaped or input-shaped) by
+ * component name. Sorted by occurrences desc, then name asc so the
+ * order is deterministic across runs.
  */
 export function collectWrapperCandidates(
   files: readonly ParsedFile[],
@@ -45,7 +47,7 @@ export function collectWrapperCandidates(
     const tsx = file.ast.root as TsxModule;
     for (const el of walkJsxElements(tsx)) {
       if (!isPascalCase(el.tagName)) continue;
-      if (!hasJsxAttribute(el, "onClick")) continue;
+      if (!looksLikeWrapper(el)) continue;
       const entry = groups.get(el.tagName) ?? { count: 0, locations: [] };
       entry.count += 1;
       if (entry.locations.length < SAMPLE_LIMIT) {
@@ -61,6 +63,21 @@ export function collectWrapperCandidates(
       occurrences: count,
       sampleLocations: locations,
     }));
+}
+
+/**
+ * True if the element carries prop shapes that indicate it wraps a
+ * native interactive element. Button-shaped and input-shaped both
+ * qualify; a single element need only match one.
+ */
+function looksLikeWrapper(el: JsxElement): boolean {
+  if (hasJsxAttribute(el, "onClick")) return true;
+  if (!hasJsxAttribute(el, "onChange")) return false;
+  return (
+    hasJsxAttribute(el, "value") ||
+    hasJsxAttribute(el, "defaultValue") ||
+    hasJsxAttribute(el, "checked")
+  );
 }
 
 function isPascalCase(name: string): boolean {

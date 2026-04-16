@@ -364,6 +364,45 @@ describe("MCP tool: scan_project", () => {
       expect(data.meta.autoDetectedWrappers).toEqual([]);
       expect(data.meta.autoDetectedWrappersNote).toContain("found no");
     });
+
+    it("detects input-shaped wrappers (value + onChange) alongside button-shaped ones", async () => {
+      // The React controlled-input signal: PascalCase + value + onChange.
+      // Before this, only onClick components were registered and Input
+      // wrappers stayed in opaqueCustomComponents forever.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-input-wrapper-"));
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <Input value={v} onChange={setV} />",
+          "      <Checkbox checked={c} onChange={setC} />",
+          "      <Textarea defaultValue={t} onChange={setT} />",
+          "      <SubmitButton onClick={go} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: { autoDetectedWrappers?: string[] };
+      };
+      expect(data.meta.autoDetectedWrappers).toEqual([
+        "Checkbox",
+        "Input",
+        "SubmitButton",
+        "Textarea",
+      ]);
+    });
   });
 
   describe("additionalPaths", () => {
