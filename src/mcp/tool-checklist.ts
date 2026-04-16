@@ -149,12 +149,21 @@ export const checklistTool: McpTool = {
             criteriaAutomatable: c.automatable,
             criteriaAutomatablePassing: c.passing,
           }));
+    // Field order is load-bearing — the agent reads top-to-bottom and
+    // uses the leading fields as the headline. Actionable-first puts
+    // the thing the agent can work on right now above the volumetric
+    // counters. `manualReviewRequired` stays as the cross-tool total
+    // (must match scan / scan_project / coverage), but trails the
+    // actionable split so it no longer dominates the summary.
     const summary = {
-      manualReviewRequired: actionable.length + untargeted.length,
+      headline:
+        `${actionable.length} actionable · ${untargeted.length} untargeted · ` +
+        `${likelyIrrelevant.length} likely irrelevant`,
       actionable: actionable.length,
+      byPriority,
       untargeted: untargeted.length,
       likelyIrrelevant: likelyIrrelevant.length,
-      byPriority,
+      manualReviewRequired: actionable.length + untargeted.length,
       automatedCoverage,
     };
 
