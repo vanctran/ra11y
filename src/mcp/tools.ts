@@ -340,6 +340,11 @@ function buildSuggestFixPayload(args: {
     };
   }
   const confidence = match.severity === "error" ? "high" : "medium";
+  // Omit empty `snippet` rather than emitting `snippet: ""` — a
+  // sentinel-empty field forces the agent to re-read and disambiguate
+  // whether the value is unavailable or genuinely empty. Present-only-
+  // when-populated is the honest shape.
+  const snippetField = match.snippet ? { snippet: match.snippet } : {};
   if (match.fixPaths) {
     const mechanical = match.fixPaths.primary.edit;
     return {
@@ -347,7 +352,7 @@ function buildSuggestFixPayload(args: {
       primary: match.fixPaths.primary,
       alternatives: match.fixPaths.alternatives,
       explanation: match.suggestion ?? match.message,
-      snippet: match.snippet ?? "",
+      ...snippetField,
       sourceContext,
       confidence,
     };
@@ -358,7 +363,7 @@ function buildSuggestFixPayload(args: {
   return {
     kind: "guidance",
     explanation,
-    snippet: match.snippet ?? "",
+    ...snippetField,
     sourceContext,
     confidence: match.suggestion ? confidence : "low",
   };
