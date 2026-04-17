@@ -5,6 +5,7 @@
 
 import type { CandidateFinder } from "../types/review.ts";
 import { finder as captcha } from "./finders/captcha.ts";
+import { finder as consistentNavigation } from "./finders/consistent-navigation.ts";
 import { finder as errorIdentification } from "./finders/error-identification.ts";
 import { finder as errorPrevention } from "./finders/error-prevention.ts";
 import { finder as errorSuggestion } from "./finders/error-suggestion.ts";
@@ -27,6 +28,7 @@ import { finder as useOfColor } from "./finders/use-of-color.ts";
 
 export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   captcha,
+  consistentNavigation,
   errorIdentification,
   errorPrevention,
   errorSuggestion,
