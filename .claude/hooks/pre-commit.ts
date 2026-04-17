@@ -1,8 +1,21 @@
 #!/usr/bin/env bun
-// PreToolUse hook for `git commit *`. Runs the full verification suite
-// before the commit is allowed through. If any step fails, we block with
-// a clear explanation so Claude can fix the underlying issue rather than
-// bypass it. Never skip hooks. Never --no-verify.
+// PreToolUse hook for `git commit *`. Runs a scoped verification pass
+// before the commit is allowed through:
+//   - biome check on staged source files only
+//   - tsc --noEmit on the whole project when any .ts/.tsx is staged
+//   - check-zero-deps when package.json or bun.lock is staged
+//   - check-commit (conventional message format) always
+//
+// Deliberately NOT run here:
+//   - `bun test --bail`: the post-edit hook runs targeted tests on every
+//     Edit/Write, and CI runs the full suite on push. Re-running the whole
+//     suite on every commit duplicates both.
+//   - biome check on the whole repo: pre-commit should protect the
+//     changes being committed, not block on unrelated drift.
+//
+// If the command turns out not to be a git commit (the `if` filter in
+// settings.json should scope this hook, but be defensive), we exit 0.
+// Never --no-verify.
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -20,38 +33,48 @@ interface Check {
 
 const input = await readHookInput<PreToolUseInput>();
 const projectDir = process.env.CLAUDE_PROJECT_DIR ?? input.cwd;
+const rawCommand = typeof input.tool_input.command === "string" ? input.tool_input.command : "";
+
+// Defensive: only run checks when the command is actually a git commit.
+// The settings.json `if` filter should already scope this, but if a
+// future matcher change sends non-commit Bash through here, we shouldn't
+// silently gate every command on the commit pipeline.
+if (!/\bgit\s+commit\b/.test(rawCommand)) {
+  ok();
+  process.exit(0);
+}
+
 const hasPackageJson = existsSync(join(projectDir, "package.json"));
 const hasNodeModules = existsSync(join(projectDir, "node_modules"));
 const hasSrc = existsSync(join(projectDir, "src"));
 
-// Extract the -m "..." commit message from the git command so we can
-// validate the NEW message rather than the stale .git/COMMIT_EDITMSG.
-// Supports -m, --message, -m "...", -m"...", and HEREDOC via $(cat <<EOF ... EOF).
-const rawCommand = typeof input.tool_input.command === "string" ? input.tool_input.command : "";
+const stagedFiles = getStagedFiles(projectDir);
+const stagedTsFiles = stagedFiles.filter((f) => /\.(ts|tsx|cts|mts)$/.test(f));
+const stagedLintTargets = stagedFiles.filter((f) =>
+  /\.(ts|tsx|cts|mts|js|jsx|json|jsonc)$/.test(f),
+);
+const stagedPackageManifest = stagedFiles.some(
+  (f) => f === "package.json" || f === "bun.lock" || f === "bun.lockb",
+);
+
 const commitMessage = extractCommitMessage(rawCommand);
 
-// We gate checks on whether their preconditions exist. Early phases don't
-// have src/ yet — we don't want to block commits for "no tests found."
 const checks: Check[] = [
   {
-    label: "biome check",
-    command: "bunx --bun biome check .",
-    required: () => hasPackageJson && hasNodeModules,
+    label: `biome check (${stagedLintTargets.length} staged file${stagedLintTargets.length === 1 ? "" : "s"})`,
+    command: `bunx --bun biome check ${stagedLintTargets.map(shellEscape).join(" ")}`,
+    required: () => hasPackageJson && hasNodeModules && stagedLintTargets.length > 0,
   },
   {
     label: "tsc --noEmit",
     command: "bunx tsc --noEmit",
-    required: () => hasPackageJson && hasNodeModules && hasSrc,
-  },
-  {
-    label: "bun test",
-    command: "bun test --bail",
-    required: () => hasPackageJson && hasNodeModules && hasSrc,
+    required: () => hasPackageJson && hasNodeModules && hasSrc && stagedTsFiles.length > 0,
   },
   {
     label: "scripts/check-zero-deps.ts",
     command: "bun scripts/check-zero-deps.ts",
-    required: () => existsSync(join(projectDir, "scripts", "check-zero-deps.ts")),
+    required: () =>
+      stagedPackageManifest && existsSync(join(projectDir, "scripts", "check-zero-deps.ts")),
   },
   {
     label: "scripts/check-commit.ts",
@@ -91,6 +114,23 @@ if (failures.length > 0) {
 audit({ event: "PreToolUse:git-commit", action: "allow" });
 ok();
 
+function getStagedFiles(cwd: string): string[] {
+  const result = spawnSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return [];
+  return result.stdout
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function shellEscape(path: string): string {
+  if (/^[A-Za-z0-9._/-]+$/.test(path)) return path;
+  return `'${path.replace(/'/g, "'\\''")}'`;
+}
+
 /**
  * Best-effort extraction of the commit message from a `git commit`
  * command. Handles:
@@ -102,17 +142,14 @@ ok();
  * is embedded inline (e.g., `git commit` with an editor).
  */
 function extractCommitMessage(cmd: string): string | null {
-  // Match a heredoc: $(cat <<'EOF'\n...\nEOF) or $(cat <<EOF\n...\nEOF)
   const heredocMatch = /\$\(\s*cat\s+<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*\)/.exec(cmd);
   if (heredocMatch?.[2]) {
     return heredocMatch[2].trim();
   }
 
-  // Match -m "..." or --message "..." with double-quoted body.
   const dq = /(?:^|\s)(?:-m|--message)\s+"([^"\\]*(?:\\.[^"\\]*)*)"/m.exec(cmd);
   if (dq?.[1]) return unescapeShell(dq[1]);
 
-  // Single-quoted body.
   const sq = /(?:^|\s)(?:-m|--message)\s+'([^']*)'/m.exec(cmd);
   if (sq?.[1]) return sq[1];
 
