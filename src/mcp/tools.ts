@@ -438,6 +438,11 @@ const configureTool: McpTool = {
           description:
             'PascalCase components you\'ve verified wrap a native interactive element (<button>, <a>, etc.). Info-level keyboard/handler-missing notes on these components will be suppressed. Example: ["Button", "ActionButton", "IconButton"]. Additive across calls.',
         },
+        allowWrite: {
+          type: "boolean",
+          description:
+            "Opt-in gate for tools that mutate user source (`apply_fix`). Defaults to false: no ra11y MCP tool will write to disk until the host flips this to true. Flip it back to false to re-gate after a batch of fixes. Read-only tools ignore this flag.",
+        },
       },
     },
     annotations: { idempotentHint: true },
@@ -448,7 +453,12 @@ const configureTool: McpTool = {
       r.satisfies.some((s) => s.startsWith(`${config.standard}:`)),
     ).length;
     return textResult({
-      active: { standard: config.standard, level: config.level, ruleCount },
+      active: {
+        standard: config.standard,
+        level: config.level,
+        ruleCount,
+        allowWrite: config.allowWrite,
+      },
     });
   },
 };

@@ -32,6 +32,13 @@ export interface SessionConfig {
    * elements. `keyboard/handler-missing` skips info notes on these.
    */
   nativeWrappers: readonly string[];
+  /**
+   * When true, tools that mutate user source (`apply_fix`) are permitted to
+   * write to disk. Defaults to false: the host must opt-in via `configure`
+   * (or the `--allow-write` CLI flag equivalent) before any on-disk edit
+   * happens. Read-only tool calls ignore this flag entirely.
+   */
+  allowWrite: boolean;
 }
 
 export class McpSession {
@@ -45,6 +52,7 @@ export class McpSession {
       exclude: [],
       rules: {},
       nativeWrappers: [],
+      allowWrite: false,
     };
   }
 
@@ -77,6 +85,7 @@ export class McpSession {
     exclude?: readonly string[];
     rules?: Readonly<Record<string, RuleSetting>>;
     nativeWrappers?: readonly string[];
+    allowWrite?: boolean;
   }): SessionConfig {
     if (opts.standard !== undefined) this.config.standard = opts.standard;
     if (opts.level !== undefined) this.config.level = opts.level;
@@ -91,6 +100,7 @@ export class McpSession {
         ...new Set([...this.config.nativeWrappers, ...opts.nativeWrappers]),
       ];
     }
+    if (opts.allowWrite !== undefined) this.config.allowWrite = opts.allowWrite;
     return { ...this.config, rules: { ...this.config.rules } };
   }
 

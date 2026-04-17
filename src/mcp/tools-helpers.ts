@@ -172,6 +172,7 @@ export interface ConfigureOpts {
   exclude?: readonly string[];
   rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
   nativeWrappers?: readonly string[];
+  allowWrite?: boolean;
 }
 
 export function buildConfigureOpts(params: Record<string, unknown>): ConfigureOpts {
@@ -181,11 +182,13 @@ export function buildConfigureOpts(params: Record<string, unknown>): ConfigureOp
   const exclude = strArrayParam(params, "exclude");
   const rules = readRuleSettings(params);
   const nativeWrappers = strArrayParam(params, "nativeWrappers");
+  const allowWrite = params["allowWrite"];
   if (standard !== undefined) opts.standard = standard;
   if (level !== undefined) opts.level = level;
   if (exclude !== undefined) opts.exclude = exclude;
   if (rules !== undefined) opts.rules = rules;
   if (nativeWrappers !== undefined) opts.nativeWrappers = nativeWrappers;
+  if (typeof allowWrite === "boolean") opts.allowWrite = allowWrite;
   return opts;
 }
 
