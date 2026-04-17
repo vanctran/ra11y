@@ -17,11 +17,15 @@
  *   - subject length ≤ 72 chars
  *   - subject starts with lowercase letter
  *   - no trailing period on subject
+ *   - reviewable size: staged diff (excluding generated kb, fixtures,
+ *     lockfiles) ≤ 400 net lines; `chore(kb):` prefix is exempt. Set
+ *     RA11Y_COMMIT_ALLOW_OVERSIZE=1 to acknowledge a legitimately
+ *     large commit (large refactors, new standards).
  *
  * Exits 0 on success, 1 on violation.
  */
 
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -41,6 +45,16 @@ const ALLOWED_TYPES = new Set([
 ]);
 const SCOPE_REQUIRED = new Set(["feat", "fix", "refactor"]);
 const MAX_SUBJECT_LENGTH = 72;
+const MAX_REVIEWABLE_LINES = 400;
+const DIFFSTAT_EXCLUDES: readonly RegExp[] = [
+  /^docs\/kb\//,
+  /^tests\/fixtures\//,
+  /^bun\.lock$/,
+  /^bun\.lockb$/,
+  /^package-lock\.json$/,
+  /^pnpm-lock\.yaml$/,
+  /^\.claude\/history\.jsonl$/,
+];
 
 const message = readCommitMessage();
 const firstLine = message.split("\n")[0] ?? "";
@@ -86,8 +100,52 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
+const typePrefix = match?.[1] ?? "";
+const scope = match?.[2] ?? "";
+const sizeViolation = checkReviewableSize(typePrefix, scope);
+if (sizeViolation) {
+  console.error(sizeViolation);
+  process.exit(1);
+}
+
 console.log("✓ commit message: passes conventional format");
 process.exit(0);
+
+function checkReviewableSize(type: string, scope: string): string | null {
+  // chore(kb) is the canonical "regenerated" commit — exempt by design.
+  if (type === "chore" && scope === "kb") return null;
+  // Explicit opt-out for legitimately large commits.
+  if (process.env.RA11Y_COMMIT_ALLOW_OVERSIZE === "1") return null;
+  const netLines = countStagedDiffLines();
+  if (netLines === null) return null; // not a git context (e.g. running in CI on a ref)
+  if (netLines <= MAX_REVIEWABLE_LINES) return null;
+  return [
+    `✗ commit exceeds reviewable-size cap: ${netLines} net lines (cap ${MAX_REVIEWABLE_LINES})`,
+    "",
+    "  excluded from the count: docs/kb/, tests/fixtures/, lockfiles, audit log.",
+    "  split the commit by concern (skeleton / logic / tests / fixtures / kb) or",
+    "  set RA11Y_COMMIT_ALLOW_OVERSIZE=1 to acknowledge a legitimately large change.",
+  ].join("\n");
+}
+
+function countStagedDiffLines(): number | null {
+  const result = spawnSync("git", ["diff", "--cached", "--numstat"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return null;
+  let total = 0;
+  for (const line of result.stdout.split("\n")) {
+    const match = /^(\d+|-)\s+(\d+|-)\s+(.+)$/.exec(line);
+    if (!match) continue;
+    const added = match[1] === "-" ? 0 : Number.parseInt(match[1] ?? "0", 10);
+    const removed = match[2] === "-" ? 0 : Number.parseInt(match[2] ?? "0", 10);
+    const path = match[3] ?? "";
+    if (DIFFSTAT_EXCLUDES.some((re) => re.test(path))) continue;
+    total += added + removed;
+  }
+  return total;
+}
 
 function readCommitMessage(): string {
   // Priority 1: explicit file path passed as argv[2]. The real git
