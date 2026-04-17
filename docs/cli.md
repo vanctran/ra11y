@@ -48,6 +48,34 @@ Format details:
 - `junit` — JUnit XML consumed by CI test runners and IDE test panels.
 - `markdown` — PR-comment-ready Markdown with emoji severity, summary counts, and collapsible details sections when >10 violations.
 
+## SARIF output
+
+SARIF (Static Analysis Results Interchange Format) is a JSON schema that GitHub Code Scanning, Azure DevOps, and other CI platforms consume natively. Use `--format sarif` when you want violations to appear as persistent annotations in the GitHub Security tab or a similar code-scanning UI rather than transient build-log lines.
+
+```sh
+ra11y src/ --format sarif > ra11y.sarif
+```
+
+The output is a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/) log with a single run. Every violation maps to one `result` object:
+
+| SARIF field | Source |
+|-------------|--------|
+| `ruleId` | `violation.ruleId` (e.g. `contrast/minimum`) |
+| `level` | `error` / `warning` / `note` — mapped from ra11y severity (`error` → `error`, `warning` → `warning`, `info` → `note`) |
+| `message.text` | The violation's human-readable message, including the context-aware fix suggestion |
+| `locations[0].physicalLocation.artifactLocation.uri` | Relative file path |
+| `locations[0].physicalLocation.region` | `startLine`, `startColumn`; `endLine`/`endColumn` when the rule supplies them |
+| `partialFingerprints.primary` | A stable `findingId` hash of rule ID + surrounding source context (±3 lines). GitHub uses this to deduplicate the same violation across pushes even when unrelated edits shift the line number. |
+
+The `tool.driver.rules` array contains one entry per rule ID that fired in the scan (rules with zero findings are omitted). Each rule entry carries:
+
+- `shortDescription.text` — rule ID rendered as words (e.g. `contrast minimum`)
+- `fullDescription.text` — the message from the first matching violation
+- `properties.tags` — `["accessibility", "<criterion-id>", …]` for every criterion the rule satisfies
+- `properties.criteriaTitles` — human titles for the criterion IDs in `tags`, aligned by index, when available
+
+See `docs/ci.md` for a complete GitHub Actions workflow that uploads the SARIF file to the GitHub Security tab.
+
 ## Standards
 
 | Flag | Argument | Description |
