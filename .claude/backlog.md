@@ -141,14 +141,14 @@ Owner: main session + general-purpose. Source: 10 independent agent runs against
 - [ ] **P1-M** Split `manualReviewRequired` into `actionableManualItems` + `untargetedCriteria` (both top-level on `plan`); summary string leads with the actionable count. Honest labeling — both are deterministic from evidence (grounded vs bare-criterion). Anchored by new CLAUDE.md §1 "Composite headline counts are dishonest."
 - [ ] **P1-H** Split `fixSuggestionAvailable` into `mechanicalEditsAvailable` + `guidanceFixesAvailable`. Same composite-count bug as P1-M; lets agents batch-apply mechanical edits and route guidance to a copy-rewrite pipeline at plan-time without an extra discovery call.
 - [ ] **P1-K** Emit `nextStepStructured: { tool: string, args: object }` alongside the prose `nextStep`. Don't replace the prose (still useful for weaker models); ship both. Deterministic orchestration without English parsing.
-- [ ] **P1-L** Concrete `editCandidate` for `label-in-name` `kind: "guidance"` fixes — when diagnosis is "visible tokens present in aria-label but non-contiguous," synthesize `aria-label="<visible text verbatim>: <remaining aria-label words in order>"` and surface as a *candidate* edit (kind unchanged; agent decides). Adds signal without promising a mechanical edit.
+- [x] **P1-L** Concrete `editCandidate` for `label-in-name` non-contiguous fixes (53ab36b). Synthesizes `aria-label="<visible text>: <remaining aria-label words>"` only when diagnosis is `isInterleavedExpansion`; case-insensitive dedupe of overlapping tokens. Field is `editCandidate` (NOT `edit`) so kind stays `guidance` — agent decides whether to apply.
 
 ### v0.2.0 — accepted (P2)
 
 - [x] **P2-V** `criteriaTitles: string[]` aligned index-for-index with `criteria` (70a9cd7). Standard-filter looks up titles from the criterion registry; scanner stamps both at violation construction; formatters and MCP `formatFinding` forward.
 - [ ] **P2-N** Always emit `limitations: string[]` (runtime-only checks not performed: live regions, focus traps, ARIA state, post-render contrast), not only on clean scans. Currently advertised by server instructions but missing on mixed-result responses.
 - [ ] **P2-P** `opaqueCustomComponents` fully enumerable when count ≤ 50 (names only inline; locations still gated by `verboseMeta`). Above 50 keep current top-5 + count + `verboseMeta` pattern.
-- [ ] **P2-R** Align `file` vs `filePath` parameter naming across `suggest_fix` and `apply_fix`. Pick `file` (shorter), accept `filePath` as alias for one release with a deprecation note.
+- [x] **P2-R** `file` is canonical across suggest_fix + apply_fix; `filePath` accepted as deprecated alias (c2ea3b5). Using the alias fires `warnings: ["deprecated_param_filepath"]`; passing both raises a structured error.
 
 ### v0.2.0 — accepted (from 20-run combined brief, 2026-04-17)
 
@@ -165,7 +165,7 @@ Net-new items from round 2 of the consumer eval (round 2 explicitly probed edge 
 - [x] **P1-IGN** Subpath scans now honor root `.gitignore` (389ba58). Walks up to git root, collects ancestor `.gitignore` files in order, translates patterns to scan-root-relative form, then enumerates from `cwd`. Per-scan memoization. Edge cases handled: `**/`-leading patterns, anchored-at-scan-root, anchored-outside-scan-root (dropped), FS-root termination. `!`-negation re-includes still unsupported (pre-existing glob.ts limitation, called out in docs).
 - [x] **P1-CONF** Typed `confidence` on every manual-review candidate (3d258a3). `"high" | "medium" | "low"`, same enum as automated findings. Each finder picks its default; `priority: "high"` on checklist items stays (different axis).
 - [ ] **P2-BASE** `baselineStatus: { exists, path, lastModified } | null` on every `scan_project` response. Today an agent has to call `baseline check` separately to know if a baseline is in play — and may re-propose fixes for grandfathered findings. Honest shape: agent sees baseline state in the same call.
-- [ ] **P2-BUILD** Emit `meta.scannedBuildArtifacts: [paths]` (warning, not suppression) when CSS files contain escaped-bracket utility selectors (`\[400px\]`, `\:focus-visible:`) or exceed a size threshold suggesting compiled output. The warning is *information*, not a filter — findings still surface; the agent now knows to investigate whether the file is generated before editing. Honest labeling: the escape-bracket selector is a deterministic build-output signal.
+- [x] **P2-BUILD** `meta.scannedBuildArtifacts: [paths]` + `warnings: ["scanned_build_artifacts_present"]` when scanned set includes compiled-CSS / bundler-output (c2ea3b5). Findings on those files STILL surface — this is labeling, not filtering. Detection is deterministic (escape-bracket utility selectors, size threshold, /dist/ /build/ /static/assets/ path markers).
 
 ### Considered and rejected (per CLAUDE.md §1)
 
