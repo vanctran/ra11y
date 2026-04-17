@@ -35,6 +35,7 @@ yarn-error.log*
 .claude/history.jsonl
 .claude/test-status.json
 .claude/env
+.claude/scheduled_tasks.lock
 
 # OS junk
 Thumbs.db
