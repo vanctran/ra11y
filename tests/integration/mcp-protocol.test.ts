@@ -178,6 +178,21 @@ describe("MCP JSON-RPC envelope: protocol semantics", () => {
     expect(responses.length).toBe(1);
     expect(responses[0].id).toBe(1);
   });
+
+  it("silently drops an unsolicited JSON-RPC response (no method) and keeps serving subsequent requests", async () => {
+    // Bidirectional loop guard: the server now initiates outbound
+    // `sampling/createMessage` requests and expects the reply to land
+    // on stdin. A stray or late reply must not be misrouted as a new
+    // request (which would pop an INVALID_REQUEST back at the host
+    // and could loop).
+    const responses = await mcpSession([
+      // Unsolicited response — no pending outbound id matches.
+      { jsonrpc: "2.0", id: 99999, result: { role: "assistant" } },
+      initMsg(1),
+    ]);
+    expect(responses.length).toBe(1);
+    expect(responses[0].id).toBe(1);
+  });
 });
 
 describe("MCP tools/list: schema shape", () => {

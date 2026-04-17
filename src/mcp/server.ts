@@ -29,6 +29,7 @@ import {
   type LogNotification,
   makeLogEmitter,
 } from "./logging.ts";
+import { createOutbound } from "./outbound.ts";
 import { BUILTIN_PROMPTS } from "./prompts/index.ts";
 import {
   loadKbResources,
@@ -121,6 +122,12 @@ export async function startMcpServer(): Promise<void> {
     () => process.cwd(),
   );
 
+  const outbound = createOutbound(
+    (line) => process.stdout.write(line),
+    (id) => logger.debug(`MCP received response for unknown id: ${String(id)}`),
+  );
+  session.sendRequest = outbound.sendRequest;
+
   const rl = createInterface({ input: process.stdin, terminal: false });
 
   for await (const line of rl) {
@@ -138,6 +145,11 @@ export async function startMcpServer(): Promise<void> {
       });
       continue;
     }
+
+    // Inbound *response* — correlates with a server-initiated request.
+    // Must come before the request guard because responses have an
+    // `id` without a `method`, which `isJsonRpcRequest` rightly rejects.
+    if (outbound.tryRouteResponse(parsed)) continue;
 
     if (!isJsonRpcRequest(parsed)) {
       writeResponse({
@@ -428,6 +440,12 @@ function initializeResponse(
   // scan-scope hint before any tool call.
   const declaredRoots = extractRootsFromParams(rawParams);
   if (declaredRoots !== null) session.setRoots(declaredRoots);
+
+  // Record which client capabilities the host declared. The presence
+  // of `sampling` gates whether our sampling-backed tools call
+  // `sampling/createMessage` or degrade to returning the prompt for
+  // the agent to run inline.
+  session.setHostCapabilities(rawParams["capabilities"]);
 
   return {
     jsonrpc: "2.0",

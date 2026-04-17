@@ -14,8 +14,9 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 
 Tracks below are independent. `/continue` picks the next open item from each of up to 3 active tracks per turn and dispatches them in parallel (details in `.claude/skills/continue/SKILL.md`). Within a track, items run in order — some tracks have sequencing; cross-track work is always parallelizable.
 
-Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures).
-Staged tracks: **S** (MCP sampling) · **E** (ecosystem/evals). Items here stay untouched until ship state moves.
+Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals).
+
+Staged tracks: (none). Tracks S and E were promoted on 2026-04-17 after the user directed "go all the way without releasing until finalized" — M/R/F are complete, so the remaining pre-release work spans S and E. ADR 0005 §Follow-up work still applies to the speculative tool choices inside S; foundation items (sampling.ts, capability, prompt library, KB docs) are safe to build.
 
 ---
 
@@ -89,14 +90,14 @@ Owner: `fixture-curator` + `test-author`. **Sequenced: ADR → harness prototype
 
 ---
 
-## Track S — MCP sampling (STAGED; defer until v0.3.0+)
+## Track S — MCP sampling
 
-Owner: `parser-author` + main session. **Do not start** until v0.2.0 ships and user feedback selects 1–2 high-value tools. Shipping all four speculatively wastes the 0.2 budget on unvalidated surface. See `docs/adr/0005-in-house-mcp-server.md` §Follow-up work.
+Owner: `parser-author` + main session. Promoted from staged 2026-04-17. Foundation items (sampling.ts, capability plumbing, prompt library, KB docs) land freely; the three speculative LLM-backed tools (`resolve-component`, `verdict-candidate`, `draft-vpat-narrative`) still need a concrete use-case selection per ADR 0005 §Follow-up work — surface them as review candidates before wiring.
 
-### v0.3.0+ (candidates)
+### v0.2.0 (foundation)
 
-- [ ] `src/mcp/sampling.ts` — client helper calling `sampling/createMessage` on the host with timeout + max-tokens budget
-- [ ] Server capability declaration: advertise `sampling` in initialize; graceful fallback to "return the prompt for the agent to run" on hosts that decline
+- [x] `src/mcp/sampling.ts` — client helper calling `sampling/createMessage` on the host with timeout + max-tokens budget
+- [x] Server capability declaration: read host `sampling` capability from `initialize.params.capabilities`; graceful fallback to "return the prompt for the agent to run" via `SamplingNotSupportedError` on hosts that decline
 - [ ] `src/mcp/tool-resolve-component.ts` — verifies PascalCase wrappers via host-sampled source read
 - [ ] `src/mcp/tool-verdict-candidate.ts` — pass/fail with reasoning for a review candidate + its `reviewPrompt`
 - [ ] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion

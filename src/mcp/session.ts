@@ -54,11 +54,45 @@ export interface SessionRoot {
   readonly name?: string;
 }
 
+/**
+ * Host-declared capabilities as seen in `initialize.params.capabilities`.
+ * These are CLIENT capabilities (the reverse direction from the server's
+ * own advertised capabilities) — their presence tells us which
+ * server-initiated methods the host is willing to answer. We key off
+ * `sampling` to decide whether `sampling/createMessage` is usable or
+ * we must degrade to returning the prompt for the agent to run
+ * directly.
+ */
+export interface HostCapabilities {
+  readonly sampling: boolean;
+  readonly roots: boolean;
+  readonly elicitation: boolean;
+}
+
+/**
+ * Server-to-host JSON-RPC request sender. Wired by `startMcpServer`
+ * after it sets up the bidirectional read loop. Tools that need
+ * sampling (or any future host-initiated call) retrieve this via
+ * `session.sendRequest` and await the correlated response.
+ *
+ * `null` when no transport is attached — e.g. during unit tests that
+ * exercise tool handlers without a running server. Callers must
+ * handle that case explicitly rather than rely on a throwing stub.
+ */
+export type SendRequest = (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+
 export class McpSession {
   readonly config: SessionConfig;
   readonly logging: LoggingState;
   private readonly cache: Map<string, CacheEntry> = new Map();
   private rootsList: readonly SessionRoot[] = [];
+  private hostCaps: HostCapabilities = { sampling: false, roots: false, elicitation: false };
+  /**
+   * Server-to-host sender. Null until `startMcpServer` wires it to the
+   * bidirectional stdio loop. Tools that need sampling check for null
+   * first and fall back to returning the prompt.
+   */
+  sendRequest: SendRequest | null = null;
 
   constructor() {
     this.config = {
@@ -70,6 +104,26 @@ export class McpSession {
       allowWrite: false,
     };
     this.logging = new LoggingState();
+  }
+
+  /**
+   * Record the capability object the host declared in
+   * `initialize.params.capabilities`. Only presence matters per spec —
+   * values are reserved for future extensions.
+   */
+  setHostCapabilities(raw: unknown): void {
+    if (!raw || typeof raw !== "object") return;
+    const obj = raw as Record<string, unknown>;
+    this.hostCaps = {
+      sampling: "sampling" in obj,
+      roots: "roots" in obj,
+      elicitation: "elicitation" in obj,
+    };
+  }
+
+  /** Read-only view of host-declared capabilities from `initialize`. */
+  get hostCapabilities(): HostCapabilities {
+    return this.hostCaps;
   }
 
   /**
