@@ -63,6 +63,7 @@ describe("MCP server JSON-RPC", () => {
       prompts: { listChanged: false },
       resources: { listChanged: false },
       logging: {},
+      completions: {},
     });
     const info = result.serverInfo as Record<string, unknown>;
     expect(info.name).toBe("ra11y");

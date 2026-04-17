@@ -17,6 +17,12 @@
 import { createInterface } from "node:readline";
 import { logger } from "../utils/logger.ts";
 import {
+  type CompletionArgument,
+  type CompletionRef,
+  complete,
+  emptyCompletion,
+} from "./completions.ts";
+import {
   LOG_LEVELS,
   type LogEmitter,
   type LogLevel,
@@ -325,11 +331,65 @@ function route(
   if (request.method === "logging/setLevel") {
     return handleLoggingSetLevel(id, request.params ?? {}, session);
   }
+  if (request.method === "completion/complete") {
+    return handleCompletion(id, request.params ?? {});
+  }
   return {
     jsonrpc: "2.0",
     id,
     error: { code: METHOD_NOT_FOUND, message: `Method not found: ${request.method}` },
   };
+}
+
+/**
+ * `completion/complete` — dispatch to the completions module.
+ * Unknown refs degrade to the empty-completion shape (spec contract)
+ * rather than erroring; only malformed request shapes produce a
+ * JSON-RPC error.
+ */
+async function handleCompletion(
+  id: string | number | null,
+  rawParams: Record<string, unknown>,
+): Promise<JsonRpcResponse> {
+  const ref = rawParams["ref"];
+  const argument = rawParams["argument"];
+  if (!ref || typeof ref !== "object") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: INVALID_PARAMS, message: "Missing or invalid `ref` on completion/complete." },
+    };
+  }
+  if (!argument || typeof argument !== "object") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code: INVALID_PARAMS,
+        message: "Missing or invalid `argument` on completion/complete.",
+      },
+    };
+  }
+  const argShape = argument as { name?: unknown; value?: unknown };
+  if (typeof argShape.name !== "string") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: INVALID_PARAMS, message: "`argument.name` must be a string." },
+    };
+  }
+  const refShape = ref as CompletionRef;
+  const typed: CompletionArgument = {
+    name: argShape.name,
+    value: typeof argShape.value === "string" ? argShape.value : "",
+  };
+  if (typeof refShape.type !== "string") {
+    // Non-string ref.type: empty-completion shape is the spec's
+    // unknown-ref contract, so honor that instead of erroring.
+    return { jsonrpc: "2.0", id, result: emptyCompletion() };
+  }
+  const result = await complete(refShape, typed, process.cwd());
+  return { jsonrpc: "2.0", id, result };
 }
 
 /**
@@ -390,6 +450,11 @@ function initializeResponse(
         // that never tune stay silent; call `logging/setLevel` with
         // `info` to see scan start/finish telemetry.
         logging: {},
+        // `completions: {}` opts into `completion/complete` — we
+        // suggest criterion IDs for the ra11y/vpat-narrative prompt
+        // and KB resource URIs for `ra11y-kb://` refs. Unknown
+        // refs return the empty-completion shape per spec.
+        completions: {},
       },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: SERVER_INSTRUCTIONS,
