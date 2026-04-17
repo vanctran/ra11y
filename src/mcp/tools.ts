@@ -151,6 +151,10 @@ const scanTool: McpTool = {
       params["verboseMeta"] === true,
     );
 
+    const nextStep = buildNextStep(formatted);
+    const nextStepStructuredField =
+      nextStep.structured === undefined ? {} : { nextStepStructured: nextStep.structured };
+
     return textResult({
       ...formatted,
       ...warningsFieldFromScanMeta({
@@ -168,6 +172,8 @@ const scanTool: McpTool = {
               configNote: `No ra11y.config found at ${cwd} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
             }
           : {}),
+        nextStep: nextStep.prose,
+        ...nextStepStructuredField,
       },
     });
   },

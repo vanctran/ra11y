@@ -422,6 +422,49 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta.nextStepStructured?.tool).toMatch(/^(suggest_fix|explain_rule|scan_file)$/);
   });
 
+  it("scan (directory mode) emits nextStep + nextStepStructured at parity with scan_project (Q2R2-DIR-NEXT)", async () => {
+    // Round-2 eval gap: `scan` in directory mode omitted the
+    // nextStep/nextStepStructured pair that both `scan_project` and
+    // `scan_file` already emit. Straight parity bug, not a design call
+    // — agents branching on `meta.nextStepStructured.tool` had to
+    // special-case the `scan` surface. After the fix, the three tools
+    // carry the same next-call envelope.
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [BAD_ALT_DIR] })]);
+    const body = bodyOf(responses[1]) as {
+      meta: {
+        nextStep: string;
+        nextStepStructured?: { tool: string; args: Record<string, unknown> };
+      };
+    };
+    expect(typeof body.meta.nextStep).toBe("string");
+    expect(body.meta.nextStepStructured).toBeDefined();
+    const structured = body.meta.nextStepStructured;
+    if (!structured) throw new Error("nextStepStructured missing");
+    expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
+    expect(body.meta.nextStep).toContain(structured.tool);
+    expect(typeof structured.args.ruleId).toBe("string");
+    if (structured.tool === "suggest_fix") {
+      expect(typeof structured.args.file).toBe("string");
+      expect(typeof structured.args.line).toBe("number");
+      expect(structured.args).not.toHaveProperty("filePath");
+    }
+  });
+
+  it("clean scan (directory mode) points at checklist via the structured pair (Q2R2-DIR-NEXT)", async () => {
+    const goodDir = join(PROJECT_ROOT, "tests", "fixtures", "good", "alt-text-missing");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [goodDir] })]);
+    const body = bodyOf(responses[1]) as {
+      plan: { violations: number };
+      meta: {
+        nextStep: string;
+        nextStepStructured?: { tool: string; args: Record<string, unknown> };
+      };
+    };
+    expect(body.plan.violations).toBe(0);
+    expect(body.meta.nextStepStructured?.tool).toBe("checklist");
+    expect(body.meta.nextStep).toContain("checklist");
+  });
+
   it("clean scan_project response emits matching pair pointing at checklist (P1-K)", async () => {
     // On a clean scan (no violations, no notes), the canonical next
     // call is `checklist` — structured form and prose both name it.
