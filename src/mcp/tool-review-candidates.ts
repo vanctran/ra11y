@@ -8,12 +8,18 @@
  * `checklist` groups by criterion; `review_candidates` groups by
  * candidate so an agent can iterate one-by-one.
  *
- * Included per candidate:
- *   - criterionId + normative title
- *   - location (file, line, col)
- *   - reason (why this location surfaced)
- *   - snippet (source excerpt, pre-trimmed)
- *   - reviewPrompt (from the finder; the exact question to answer)
+ * Response shape:
+ *   - `prompts: { [criterionId]: { text, finderId } }` — keyed by
+ *     criterion, present only when at least one candidate has an
+ *     associated finder prompt. The prompt text is identical for every
+ *     candidate of the same criterion, so hoisting it to the top level
+ *     dedupes the ~450-char prose that would otherwise repeat on each
+ *     row (~6 KB of duplication on a 15-candidate criterion).
+ *   - `candidates[]` — each entry carries `criterionId`, `location`,
+ *     `reason`, optional `snippet`. The caller looks up
+ *     `prompts[candidate.criterionId]` when it needs the review prompt;
+ *     omission is the honest signal that no finder prompt is available
+ *     for that criterion, not a `reviewPrompt: null` sentinel.
  */
 
 import { runScan } from "../engine/scanner.ts";
@@ -38,7 +44,7 @@ export const reviewCandidatesTool: McpTool = {
   def: {
     name: "review_candidates",
     description:
-      "List tier-1 manual-review candidates with source context and the exact pass/fail question. Use this to drive an LLM-assisted manual review loop: iterate candidates, read the snippet, answer the prompt, report verdict. Pair with `scan` for full coverage.",
+      "List tier-1 manual-review candidates with source context. Use this to drive an LLM-assisted manual review loop: iterate candidates, read the snippet, answer the prompt, report verdict. The pass/fail review prompt is deduped to `prompts[criterionId].text` at the top level — each candidate carries `criterionId`, look up the prompt there. Pair with `scan` for full coverage.",
     inputSchema: {
       type: "object",
       properties: {
@@ -109,16 +115,36 @@ export const reviewCandidatesTool: McpTool = {
     const standardsById = new Map(BUILTIN_STANDARDS.map((s) => [s.id, s]));
     const sources = sourceIndex(files);
 
+    // Build the keyed prompt map on the fly from the criterion IDs
+    // actually present in the candidate list. We only emit an entry when
+    // a finder exists for that criterion — omission is the honest
+    // signal (see CLAUDE.md §1 "Ambiguous field shapes are dishonest")
+    // rather than `{ text: "", finderId: null }`.
+    const prompts: Record<string, { readonly text: string; readonly finderId: string }> = {};
+    for (const c of candidates) {
+      if (prompts[c.criterionId] !== undefined) continue;
+      const finder = findersByCriterion.get(c.criterionId);
+      if (finder === undefined) continue;
+      prompts[c.criterionId] = {
+        text: finder.docs.reviewPrompt,
+        finderId: finder.id,
+      };
+    }
+    const hasPrompts = Object.keys(prompts).length > 0;
+
     return textResult({
       level,
       standards,
       candidateCount: candidates.length,
+      // Omit `prompts` entirely when empty (zero candidates or zero
+      // finder-backed candidates) rather than emitting `prompts: {}`.
+      // Per CLAUDE.md §1, conditional-spread at the assembly site.
+      ...(hasPrompts ? { prompts } : {}),
       candidates: candidates.map((c) => {
         const standardId = c.criterionId.split(":")[0] ?? "";
         const criterionKey = c.criterionId;
         const standard = standardsById.get(standardId);
         const criterion = standard?.criteria.find((ck) => ck.id === criterionKey);
-        const finder = findersByCriterion.get(criterionKey);
         const snippet = candidateSnippet(c, sources);
         return {
           criterionId: c.criterionId,
@@ -127,8 +153,6 @@ export const reviewCandidatesTool: McpTool = {
           location: c.location,
           reason: c.reason,
           ...(snippet === undefined ? {} : { snippet }),
-          reviewPrompt: finder?.docs.reviewPrompt ?? null,
-          finderId: finder?.id ?? null,
         };
       }),
     });
