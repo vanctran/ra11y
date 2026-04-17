@@ -121,9 +121,16 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       initMsg(1),
       toolCall(2, "explain_standard", { standardId: "not-a-standard" }),
     ]);
-    const result = responses[1].result as { isError?: boolean; content: { text: string }[] };
+    const result = responses[1].result as {
+      isError?: boolean;
+      content: { text: string }[];
+      structuredContent?: { code?: string; details?: { requested?: string } };
+    };
     expect(result.isError).toBe(true);
-    const body = JSON.parse(result.content[0].text) as { error: string };
+    expect(result.structuredContent?.code).toBe("standard-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("not-a-standard");
+    const body = JSON.parse(result.content[0].text) as { error: string; code: string };
+    expect(body.code).toBe("standard-not-found");
     expect(body.error).toContain("Unknown standard");
   });
 
@@ -146,7 +153,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(["high", "medium", "low"]).toContain(fix.confidence);
   });
 
-  it("suggest_fix with an unknown rule returns a tool-level error envelope", async () => {
+  it("suggest_fix with an unknown rule returns a tool-level error envelope with code rule-not-found", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "suggest_fix", {
@@ -155,8 +162,14 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
         line: 1,
       }),
     ]);
-    const result = responses[1].result as { isError?: boolean; content: { text: string }[] };
+    const result = responses[1].result as {
+      isError?: boolean;
+      content: { text: string }[];
+      structuredContent?: { code?: string; details?: { requested?: string } };
+    };
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("rule-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("nonsense/rule");
   });
 
   it("coverage returns automated pass-rate counts for the session standard", async () => {
@@ -364,32 +377,113 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
 });
 
 describe("MCP tools/call: missing-required-param error envelopes", () => {
-  it("scan without paths returns a tool-level error", async () => {
+  it("scan without paths returns a structured missing-required-param envelope", async () => {
     const responses = await mcpSession([initMsg(1), toolCall(2, "scan", {})]);
-    const result = responses[1].result as { isError?: boolean; content: { text: string }[] };
+    const result = responses[1].result as {
+      isError?: boolean;
+      content: { text: string }[];
+      structuredContent?: { code?: string; details?: { param?: string } };
+    };
     expect(result.isError).toBe(true);
-    const body = JSON.parse(result.content[0].text) as { error: string };
+    expect(result.structuredContent?.code).toBe("missing-required-param");
+    expect(result.structuredContent?.details?.param).toBe("paths");
+    const body = JSON.parse(result.content[0].text) as { error: string; code: string };
+    expect(body.code).toBe("missing-required-param");
     expect(body.error).toContain("paths");
   });
 
-  it("scan_file without path returns a tool-level error", async () => {
+  it("scan_file without path returns a structured missing-required-param envelope", async () => {
     const responses = await mcpSession([initMsg(1), toolCall(2, "scan_file", {})]);
-    const result = responses[1].result as { isError?: boolean };
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { param?: string } };
+    };
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("missing-required-param");
+    expect(result.structuredContent?.details?.param).toBe("path");
   });
 
-  it("explain_rule without ruleId returns a tool-level error", async () => {
+  it("explain_rule without ruleId returns a structured missing-required-param envelope", async () => {
     const responses = await mcpSession([initMsg(1), toolCall(2, "explain_rule", {})]);
-    const result = responses[1].result as { isError?: boolean };
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { param?: string } };
+    };
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("missing-required-param");
+    expect(result.structuredContent?.details?.param).toBe("ruleId");
   });
 
-  it("suggest_fix missing file/line returns a tool-level error", async () => {
+  it("suggest_fix missing file/line returns a structured missing-required-param envelope naming the gaps", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "suggest_fix", { ruleId: "media/alt-text-missing" }),
     ]);
-    const result = responses[1].result as { isError?: boolean };
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { missing?: readonly string[] } };
+    };
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("missing-required-param");
+    const missing = result.structuredContent?.details?.missing ?? [];
+    expect(missing).toContain("file");
+    expect(missing).toContain("line");
+  });
+
+  it("list_rules with an unknown standard returns a standard-not-found envelope", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "list_rules", { standard: "not-a-standard" }),
+    ]);
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { requested?: string; loaded?: string[] } };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("standard-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("not-a-standard");
+    expect(Array.isArray(result.structuredContent?.details?.loaded)).toBe(true);
+  });
+
+  it("coverage with an unknown standard returns a standard-not-found envelope", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "coverage", { standard: "not-a-standard" }),
+    ]);
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { requested?: string } };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("standard-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("not-a-standard");
+  });
+
+  it("checklist with an unknown standard returns a standard-not-found envelope", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { standard: "not-a-standard" }),
+    ]);
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { requested?: string } };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("standard-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("not-a-standard");
+  });
+
+  it("review_candidates with an unknown criterionId returns a criterion-not-found envelope", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "review_candidates", { criterionId: "wcag22:9.9.9" }),
+    ]);
+    const result = responses[1].result as {
+      isError?: boolean;
+      structuredContent?: { code?: string; details?: { requested?: string } };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.code).toBe("criterion-not-found");
+    expect(result.structuredContent?.details?.requested).toBe("wcag22:9.9.9");
   });
 });

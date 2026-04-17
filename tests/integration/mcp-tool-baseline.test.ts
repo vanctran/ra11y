@@ -232,7 +232,7 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
     }
   });
 
-  it("check without an existing baseline file returns a tool-level error envelope", async () => {
+  it("check without an existing baseline file returns a structured error envelope", async () => {
     const dir = await scratchDirWithBadFixture();
     try {
       const responses = await mcpSession([
@@ -240,7 +240,14 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
         toolCall(2, "baseline", { mode: "check", cwd: dir }),
       ]);
       expect(isError(responses[1])).toBe(true);
-      const body = bodyOf(responses[1]) as { error: string };
+      // Agents branch on the machine-consumable `code`; the English
+      // `error` text is kept for human display and legacy consumers.
+      const result = responses[1].result as {
+        structuredContent?: { code?: string; message?: string };
+      };
+      expect(result.structuredContent?.code).toBe("baseline-not-found");
+      const body = bodyOf(responses[1]) as { error: string; code: string };
+      expect(body.code).toBe("baseline-not-found");
       expect(body.error).toMatch(/baseline file not found/i);
       expect(body.error).toContain('mode: "create"');
     } finally {
@@ -248,7 +255,7 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
     }
   });
 
-  it("check on a malformed baseline file surfaces the parse failure", async () => {
+  it("check on a malformed baseline file surfaces the parse failure with code baseline-load-failed", async () => {
     const dir = await scratchDirWithBadFixture();
     try {
       await writeFile(join(dir, ".ra11y-baseline.json"), "{ not valid json");
@@ -257,6 +264,12 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
         toolCall(2, "baseline", { mode: "check", cwd: dir }),
       ]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as {
+        structuredContent?: { code?: string; details?: Record<string, unknown> };
+      };
+      expect(result.structuredContent?.code).toBe("baseline-load-failed");
+      // details.cause carries the engine error for diagnosis.
+      expect(typeof result.structuredContent?.details?.["cause"]).toBe("string");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/failed to load baseline/i);
     } finally {
@@ -264,7 +277,7 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
     }
   });
 
-  it("check on a version-mismatched baseline surfaces the version error", async () => {
+  it("check on a version-mismatched baseline surfaces the version error with code baseline-load-failed", async () => {
     const dir = await scratchDirWithBadFixture();
     try {
       // Version 999 is incompatible; the engine's loadBaseline throws a
@@ -284,6 +297,8 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
         toolCall(2, "baseline", { mode: "check", cwd: dir }),
       ]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("baseline-load-failed");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/version 999 is incompatible/i);
     } finally {
@@ -332,7 +347,7 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
     }
   });
 
-  it("mode parameter is required and rejects unknown values", async () => {
+  it("mode parameter is required and rejects unknown values with code mode-invalid", async () => {
     const dir = await scratchDirWithBadFixture();
     try {
       const responses = await mcpSession([
@@ -342,6 +357,14 @@ describe("MCP baseline tool: create/check/update round-trips", () => {
       ]);
       expect(isError(responses[1])).toBe(true);
       expect(isError(responses[2])).toBe(true);
+      const missing = responses[1].result as { structuredContent?: { code?: string } };
+      const bad = responses[2].result as {
+        structuredContent?: { code?: string; details?: { received?: unknown; allowed?: unknown } };
+      };
+      expect(missing.structuredContent?.code).toBe("mode-invalid");
+      expect(bad.structuredContent?.code).toBe("mode-invalid");
+      expect(bad.structuredContent?.details?.received).toBe("nonsense");
+      expect(Array.isArray(bad.structuredContent?.details?.allowed)).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

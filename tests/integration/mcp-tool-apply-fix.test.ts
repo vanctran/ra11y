@@ -117,6 +117,8 @@ describe("MCP apply_fix tool: write-gated fix-verify loop", () => {
         }),
       ]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("allow-write-disabled");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/allowwrite/i);
       expect(body.error).toContain("configure");
@@ -205,6 +207,8 @@ describe("MCP apply_fix tool: write-gated fix-verify loop", () => {
         }),
       ]);
       expect(isError(responses[2])).toBe(true);
+      const result = responses[2].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("path-escapes-cwd");
       const body = bodyOf(responses[2]) as { error: string };
       expect(body.error).toMatch(/escapes cwd/i);
       // And the original fixture file is untouched.
@@ -229,6 +233,8 @@ describe("MCP apply_fix tool: write-gated fix-verify loop", () => {
         }),
       ]);
       expect(isError(responses[2])).toBe(true);
+      const result = responses[2].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("edit-no-match");
       const body = bodyOf(responses[2]) as { error: string };
       expect(body.error).toMatch(/not found/i);
       // File untouched.
@@ -260,6 +266,14 @@ describe("MCP apply_fix tool: write-gated fix-verify loop", () => {
         }),
       ]);
       expect(isError(responses[2])).toBe(true);
+      const result = responses[2].result as {
+        structuredContent?: {
+          code?: string;
+          details?: { firstNewError?: { line?: number; column?: number } };
+        };
+      };
+      expect(result.structuredContent?.code).toBe("edit-introduces-parse-errors");
+      expect(typeof result.structuredContent?.details?.firstNewError?.line).toBe("number");
       const body = bodyOf(responses[2]) as { error: string };
       expect(body.error).toMatch(/parse errors/i);
       const after = await readFile(file, "utf8");
@@ -287,6 +301,11 @@ describe("MCP apply_fix tool: write-gated fix-verify loop", () => {
         }),
       ]);
       expect(isError(responses[2])).toBe(true);
+      const result = responses[2].result as {
+        structuredContent?: { code?: string; details?: { matchCount?: number } };
+      };
+      expect(result.structuredContent?.code).toBe("edit-multiple-matches");
+      expect(result.structuredContent?.details?.matchCount).toBe(2);
       const body = bodyOf(responses[2]) as { error: string };
       expect(body.error).toMatch(/matches 2 locations/i);
       const after = await readFile(file, "utf8");

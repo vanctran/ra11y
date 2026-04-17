@@ -147,6 +147,11 @@ describe("MCP scan_diff tool: new-findings-only deltas", () => {
     try {
       const responses = await mcpSession([initMsg(1), toolCall(2, "scan_diff", { cwd: dir })]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as {
+        structuredContent?: { code?: string; details?: { baselinePath?: string } };
+      };
+      expect(result.structuredContent?.code).toBe("baseline-not-found");
+      expect(typeof result.structuredContent?.details?.baselinePath).toBe("string");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/baseline file not found/i);
       expect(body.error).toContain('mode: "create"');
@@ -161,6 +166,8 @@ describe("MCP scan_diff tool: new-findings-only deltas", () => {
       await writeFile(join(dir, ".ra11y-baseline.json"), "{ not valid json");
       const responses = await mcpSession([initMsg(1), toolCall(2, "scan_diff", { cwd: dir })]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("baseline-load-failed");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/failed to load baseline/i);
     } finally {
@@ -183,6 +190,8 @@ describe("MCP scan_diff tool: new-findings-only deltas", () => {
       );
       const responses = await mcpSession([initMsg(1), toolCall(2, "scan_diff", { cwd: dir })]);
       expect(isError(responses[1])).toBe(true);
+      const result = responses[1].result as { structuredContent?: { code?: string } };
+      expect(result.structuredContent?.code).toBe("baseline-load-failed");
       const body = bodyOf(responses[1]) as { error: string };
       expect(body.error).toMatch(/version 999 is incompatible/i);
     } finally {
