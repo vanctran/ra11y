@@ -279,6 +279,12 @@ const scanFileTool: McpTool = {
     // envelope is honest about counts and scan-confidence telemetry.
     const flatFindings = formatted.files[0]?.findings ?? [];
     const nextStep = buildNextStep(formatted, { singleFilePath: parsed.filePath });
+    // P1-K: structured twin of the prose nextStep. Conditional-spread
+    // per CLAUDE.md §1 "Ambiguous field shapes are dishonest": omit
+    // `nextStepStructured` when the prose falls back to generic
+    // advice, rather than ship a sentinel value.
+    const nextStepStructuredField =
+      nextStep.structured === undefined ? {} : { nextStepStructured: nextStep.structured };
     // Cross-standard dedup mirrors the violation-level collapse the
     // rule runner already performs (one Violation with
     // `criteria: string[]` across every enabled standard). Finders emit
@@ -316,7 +322,8 @@ const scanFileTool: McpTool = {
               configNote: `No ra11y.config found walking up from ${configSearchBase} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
             }
           : {}),
-        nextStep,
+        nextStep: nextStep.prose,
+        ...nextStepStructuredField,
       },
     });
   },

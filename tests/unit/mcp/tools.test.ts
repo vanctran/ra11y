@@ -182,7 +182,11 @@ describe("MCP tool: scan_project", () => {
       const fixtureDir = BAD_ALT.replace(/\/[^/]+$/, "");
       const result = await tool.handler({ cwd: fixtureDir }, session);
       const data = JSON.parse(result.content[0].text) as {
-        plan: { violations?: number; fixSuggestionAvailable?: number };
+        plan: {
+          violations?: number;
+          mechanicalEditsAvailable?: number;
+          guidanceFixesAvailable?: number;
+        };
         meta: { nextStep: string };
       };
       // The fixture at tests/fixtures/bad/alt-text-missing/ has violations.

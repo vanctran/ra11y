@@ -339,6 +339,76 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.plan.limitations).toBeUndefined();
   });
 
+  it("scan_project carries both nextStep (prose) and nextStepStructured with matching tool name (P1-K)", async () => {
+    // Agents branching on the machine form should not have to parse
+    // English — `nextStepStructured.tool` names the same call the
+    // prose recommends, and `args` uses canonical parameter names
+    // (`file`, `ruleId`, `line`) per P2-R.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      meta: {
+        nextStep: string;
+        nextStepStructured?: { tool: string; args: Record<string, unknown> };
+      };
+    };
+    expect(typeof body.meta.nextStep).toBe("string");
+    expect(body.meta.nextStepStructured).toBeDefined();
+    const structured = body.meta.nextStepStructured;
+    if (!structured) throw new Error("nextStepStructured missing");
+    // Fixture has alt-text violations — first hop is either
+    // suggest_fix (when the rule emits a fix suggestion) or
+    // explain_rule (when it doesn't). Both are concrete, canonical
+    // recommendations the prose also names.
+    expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
+    expect(body.meta.nextStep).toContain(structured.tool);
+    expect(typeof structured.args.ruleId).toBe("string");
+    if (structured.tool === "suggest_fix") {
+      expect(typeof structured.args.file).toBe("string");
+      expect(typeof structured.args.line).toBe("number");
+      // Canonical param name: `file`, not `filePath`.
+      expect(structured.args).not.toHaveProperty("filePath");
+    }
+  });
+
+  it("scan_file also emits nextStepStructured alongside prose (P1-K)", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_file", { path: BAD_ALT_FILE }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      meta: {
+        nextStep: string;
+        nextStepStructured?: { tool: string; args: Record<string, unknown> };
+      };
+    };
+    expect(typeof body.meta.nextStep).toBe("string");
+    expect(body.meta.nextStepStructured).toBeDefined();
+    expect(body.meta.nextStepStructured?.tool).toMatch(/^(suggest_fix|explain_rule|scan_file)$/);
+  });
+
+  it("clean scan_project response emits matching pair pointing at checklist (P1-K)", async () => {
+    // On a clean scan (no violations, no notes), the canonical next
+    // call is `checklist` — structured form and prose both name it.
+    // The "omit both" case (fallback branch where no concrete first
+    // finding can be named) is covered by the unit test; end-to-end
+    // scans don't reach it via the public surface.
+    const goodDir = join(PROJECT_ROOT, "tests", "fixtures", "good", "alt-text-missing");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan_project", { cwd: goodDir })]);
+    const body = bodyOf(responses[1]) as {
+      plan: { violations: number };
+      meta: {
+        nextStep: string;
+        nextStepStructured?: { tool: string; args: Record<string, unknown> };
+      };
+    };
+    expect(body.plan.violations).toBe(0);
+    expect(body.meta.nextStepStructured?.tool).toBe("checklist");
+    expect(body.meta.nextStep).toContain("checklist");
+  });
+
   it("analysisCoverage reports opaque custom components and template directives", async () => {
     // Honest telemetry about what static analysis didn't reach. Not a
     // heuristic — structural gaps the agent needs to calibrate
@@ -662,5 +732,127 @@ describe("MCP tools/call: missing-required-param error envelopes", () => {
     expect(result.isError).toBe(true);
     expect(result.structuredContent?.code).toBe("criterion-not-found");
     expect(result.structuredContent?.details?.requested).toBe("wcag22:9.9.9");
+  });
+});
+
+// ─── P1-M + P1-H: split composite plan counters ─────────────────────────────
+//
+// Regression suite for the "composite headline counts are dishonest" fix.
+// The old `plan.manualReviewRequired` summed grounded candidates with bare-
+// criterion prompts into a single inflated number; the old
+// `plan.fixSuggestionAvailable` summed mechanical edits with prose-only
+// guidance. Both are now split into honest top-level counters. Agents
+// budget against `actionableManualItems` (not the manual total) and
+// `mechanicalEditsAvailable` (not the fix total) at plan time.
+describe("scan_project plan: composite counters split into honest top-level fields (P1-M + P1-H)", () => {
+  it("emits the four split counters at the top level of plan", async () => {
+    // `bad/alt-text-missing` has violations and a full WCAG 2.2 load —
+    // exercises both splits: guidance fixes on the violation side, and
+    // a non-zero untargeted-criteria count on the manual side.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      plan: Record<string, unknown> & {
+        actionableManualItems?: number;
+        untargetedCriteria?: number;
+        mechanicalEditsAvailable?: number;
+        guidanceFixesAvailable?: number;
+      };
+    };
+    // Manual split: both counters are top-level integers, present even
+    // when one is zero. Zero on actionable is the honest reading of
+    // "the finders didn't ground anything" — omitting the field would
+    // re-introduce the ambiguity P1-M fixed.
+    expect(typeof body.plan.actionableManualItems).toBe("number");
+    expect(typeof body.plan.untargetedCriteria).toBe("number");
+    expect(body.plan.actionableManualItems).toBeGreaterThanOrEqual(0);
+    expect(body.plan.untargetedCriteria).toBeGreaterThanOrEqual(0);
+    // The fixture has a full WCAG load, so untargeted is populated.
+    expect(body.plan.untargetedCriteria ?? 0).toBeGreaterThan(0);
+    // Fix split: at least one of the two is populated on a violating
+    // fixture. Both fields are omitted when zero (CLAUDE.md §1
+    // "Ambiguous field shapes") so we assert the union.
+    const hasAnyFixCount =
+      (body.plan.mechanicalEditsAvailable ?? 0) > 0 || (body.plan.guidanceFixesAvailable ?? 0) > 0;
+    expect(hasAnyFixCount).toBe(true);
+  });
+
+  it("removes the old composite fields (manualReviewRequired, fixSuggestionAvailable)", async () => {
+    // Regression guard: the pre-split shape fed agents two inflated
+    // numbers. Keeping them as aliases would re-create the dishonest
+    // headline — v0.x rapid iteration policy removes them outright.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as { plan: Record<string, unknown> };
+    expect(body.plan).not.toHaveProperty("manualReviewRequired");
+    expect(body.plan).not.toHaveProperty("fixSuggestionAvailable");
+  });
+
+  it("plan.summary leads the manual-review fragment with the actionable count", async () => {
+    // The headline agents read first must match the count they budget
+    // against. The summary leads with "N actionable manual review
+    // items" before the "+ M untargeted criteria" tail, not the old
+    // `21 WCAG criteria still need human review` composite.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      plan: {
+        summary: string;
+        actionableManualItems: number;
+        untargetedCriteria: number;
+      };
+    };
+    const { summary, actionableManualItems, untargetedCriteria } = body.plan;
+    // Old composite phrasing is gone.
+    expect(summary).not.toMatch(/WCAG criteri(on|a) still need human review/);
+    // New phrasing: when any manual-review total exists, the fragment
+    // uses the split labels. When both counts are > 0, actionable
+    // leads and untargeted follows via " + ".
+    if (actionableManualItems + untargetedCriteria > 0) {
+      if (actionableManualItems > 0 && untargetedCriteria > 0) {
+        expect(summary).toMatch(
+          new RegExp(
+            `${actionableManualItems} actionable manual review item.*\\+ ${untargetedCriteria} untargeted criteri`,
+          ),
+        );
+      } else if (actionableManualItems > 0) {
+        expect(summary).toMatch(
+          new RegExp(`${actionableManualItems} actionable manual review item`),
+        );
+      } else {
+        expect(summary).toMatch(new RegExp(`${untargetedCriteria} untargeted criteri`));
+      }
+    }
+  });
+
+  it("plan.summary violations phrasing uses mechanical/guidance splits, not the old composite", async () => {
+    // The fix-side split reads too: instead of "(N with fix suggestions)"
+    // the prose names mechanical edits and guidance fixes separately so
+    // an agent can tell which lane the count lives in before routing.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      plan: {
+        summary: string;
+        violations?: number;
+        mechanicalEditsAvailable?: number;
+        guidanceFixesAvailable?: number;
+      };
+    };
+    if ((body.plan.violations ?? 0) === 0) return;
+    const hasAnyFix =
+      (body.plan.mechanicalEditsAvailable ?? 0) > 0 || (body.plan.guidanceFixesAvailable ?? 0) > 0;
+    if (hasAnyFix) {
+      expect(body.plan.summary).toMatch(/mechanical edit|guidance fix/);
+      expect(body.plan.summary).not.toMatch(/with fix suggestions\)/);
+    }
   });
 });

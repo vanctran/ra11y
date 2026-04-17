@@ -19,6 +19,7 @@ import type { Standard } from "../types/standard.ts";
 import type { Violation } from "../types/violation.ts";
 import { buildAnalysisCoverage } from "./analysis-coverage.ts";
 import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
+import { buildPlanSummary } from "./plan-summary.ts";
 import type { McpSession } from "./session.ts";
 import {
   type NativeWrapperSources,
@@ -425,45 +426,68 @@ export async function runScanAndFormat(
 
   const violations = filtered.filter((v) => v.severity !== "info");
   const notes = filtered.filter((v) => v.severity === "info");
-  const fixSuggestions = violations.filter(
-    (v) => typeof v.suggestion === "string" && v.suggestion.length > 0,
+  // Split the former composite `fixSuggestionAvailable` counter into
+  // mechanical-edit + guidance buckets. Both are deterministic from the
+  // Violation shape (`fixPaths?.primary.edit` present → mechanical; a
+  // `suggestion` string without a mechanical edit → guidance), so the
+  // labels are honest per CLAUDE.md §1 "Composite headline counts are
+  // dishonest." Agents budgeting batch-apply vs route-to-rewrite pick
+  // the right lane at plan time without a second round-trip.
+  const mechanicalEdits = violations.filter((v) => v.fixPaths?.primary.edit !== undefined).length;
+  const guidanceFixes = violations.filter(
+    (v) =>
+      v.fixPaths?.primary.edit === undefined &&
+      typeof v.suggestion === "string" &&
+      v.suggestion.length > 0,
   ).length;
+  const violationsWithoutAnyFix = violations.length - mechanicalEdits - guidanceFixes;
 
   const manualIds = collectManualCriteria(enabled, session.config.level, files);
   const manualCount = manualIds.size;
   // Actionable = manual criteria that a finder grounded in a concrete
-  // file:line. Without this, scan.plan.manualReviewRequired (all
-  // applicable manual criteria) and checklist.actionable (the subset
-  // with hits) disagreed by an order of magnitude and forced agents to
-  // make a second tool call just to size the real workload.
+  // file:line. Before the split, `plan.manualReviewRequired` summed
+  // grounded candidates and bare-criterion prompts into a single
+  // inflated headline (e.g. 21), forcing agents to budget against the
+  // bigger number when only the actionable subset (e.g. 5) was real
+  // work. Per CLAUDE.md §1 "Composite headline counts are dishonest,"
+  // we ship two top-level counters so the budget lands honestly:
+  //   - actionableManualItems: candidates with file:line
+  //   - untargetedCriteria:    bare-criterion prompts (no grounding)
   const actionableManualIds = new Set<string>();
   for (const c of report.candidates ?? []) {
     if (manualIds.has(c.criterionId)) actionableManualIds.add(c.criterionId);
   }
   const actionableManual = actionableManualIds.size;
+  const untargetedCriteria = manualCount - actionableManual;
   const suppressions = suppressionAudit(files);
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
       violations: violations.length,
       notes: notes.length,
-      ...(fixSuggestions > 0 ? { fixSuggestionAvailable: fixSuggestions } : {}),
-      // Rule-level violations with no machine-generated fix suggestion —
-      // distinct from plan.manualReviewRequired, which counts WCAG
-      // criteria that static analysis can't evaluate at all. Omitted when
-      // zero so a clean scan doesn't pair it visually with
-      // manualReviewRequired and read as the same number.
-      ...(violations.length - fixSuggestions > 0
-        ? { violationsWithoutSuggestion: violations.length - fixSuggestions }
+      // Split mechanical edits from prose-only guidance so an agent can
+      // size batch-apply work separately from copy-rewrite routing. Both
+      // keys are omitted when zero (CLAUDE.md §1 "Ambiguous field shapes
+      // are dishonest" — don't emit `: 0` as data-vs-absent).
+      ...(mechanicalEdits > 0 ? { mechanicalEditsAvailable: mechanicalEdits } : {}),
+      ...(guidanceFixes > 0 ? { guidanceFixesAvailable: guidanceFixes } : {}),
+      // Rule-level violations with no suggestion at all — distinct from
+      // the manual-review counters below, which count WCAG criteria
+      // static analysis can't evaluate. Omitted when zero so a clean
+      // scan doesn't pair it visually with the manual counters.
+      ...(violationsWithoutAnyFix > 0
+        ? { violationsWithoutSuggestion: violationsWithoutAnyFix }
         : {}),
-      // Manual-review count is visible inline so a clean scan doesn't read
-      // as "compliant" — the full picture is "automated clean AND N manual
-      // criteria still need human review."
-      manualReviewRequired: manualCount,
-      // Matches checklist.actionable. The gap between the two (manual -
-      // actionable = untargeted WCAG prompts) is the real "size this"
-      // signal for agents deciding whether to open the checklist tool.
+      // Actionable manual-review items come first so the summary and the
+      // plan object agree on what agents should budget against: grounded
+      // candidates with file:line, NOT the inflated composite that used
+      // to lead.
       actionableManualItems: actionableManual,
+      // Bare-criterion prompts — applicable manual criteria the finders
+      // could not ground in code. Agents can dismiss most of these in
+      // one read; keeping them as their own top-level count (not a
+      // sub-field of a composite) is the honest shape.
+      untargetedCriteria,
       // Structured out-of-scope checks so an agent scanning the response
       // for load-bearing signal can't miss what static analysis didn't
       // cover. Only relevant when the scan is otherwise clean — a noisy
@@ -476,7 +500,14 @@ export async function runScanAndFormat(
             ],
           }
         : {}),
-      summary: buildPlanSummary(violations.length, notes.length, fixSuggestions, manualCount),
+      summary: buildPlanSummary({
+        violations: violations.length,
+        notes: notes.length,
+        mechanicalEdits,
+        guidanceFixes,
+        actionableManual,
+        untargetedCriteria,
+      }),
     },
     files: fileEntries,
     meta: {
@@ -726,27 +757,4 @@ export function groupViolationsByFile(violations: readonly Violation[]): Map<str
   return map;
 }
 
-export function buildPlanSummary(
-  violations: number,
-  notes: number,
-  fixSuggestions: number,
-  manualReviewRequired = 0,
-): string {
-  const parts = buildFindingParts(violations, notes, fixSuggestions);
-  if (manualReviewRequired > 0) {
-    const noun = manualReviewRequired === 1 ? "criterion" : "criteria";
-    parts.push(`${manualReviewRequired} WCAG ${noun} still need human review — call \`checklist\``);
-  }
-  return `${parts.join(". ")}.`;
-}
-
-function buildFindingParts(violations: number, notes: number, fixSuggestions: number): string[] {
-  if (violations === 0 && notes === 0) return ["No automated findings"];
-  const parts: string[] = [];
-  if (violations > 0) {
-    const fixPart = fixSuggestions > 0 ? ` (${fixSuggestions} with fix suggestions)` : "";
-    parts.push(`${violations} violation${violations === 1 ? "" : "s"}${fixPart}`);
-  }
-  if (notes > 0) parts.push(`${notes} note${notes === 1 ? "" : "s"} to review`);
-  return parts;
-}
+export { buildPlanSummary, type PlanSummaryArgs } from "./plan-summary.ts";

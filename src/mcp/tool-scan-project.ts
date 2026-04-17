@@ -156,6 +156,7 @@ export const scanProjectTool: McpTool = {
           ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
           : "",
     });
+    const nextStepStructuredField = structuredField(nextStep);
     // Deterministic compiled-CSS / bundler-output label. Findings on
     // these files STILL appear in `formatted.files` — this is additive
     // information so an agent knows to investigate whether a given
@@ -197,7 +198,8 @@ export const scanProjectTool: McpTool = {
               },
             }
           : {}),
-        nextStep,
+        nextStep: nextStep.prose,
+        ...nextStepStructuredField,
       },
     });
   },
@@ -581,6 +583,19 @@ function checkCwdExists(explicitCwd: string | undefined): ReturnType<typeof erro
  * the handler so the conditional spread doesn't add to its cognitive
  * complexity score.
  */
+/**
+ * Conditional-spread the structured form of `nextStep` — omitted when
+ * the prose degrades to generic advice (no concrete first finding), per
+ * CLAUDE.md §1 "Ambiguous field shapes are dishonest." Extracted so the
+ * handler's cognitive complexity stays inside the lint budget.
+ */
+function structuredField(nextStep: { readonly structured?: unknown }): {
+  readonly nextStepStructured?: unknown;
+} {
+  if (nextStep.structured === undefined) return {};
+  return { nextStepStructured: nextStep.structured };
+}
+
 function buildArtifactsFields(files: readonly ParsedFile[]): {
   readonly present: boolean;
   readonly metaField: { readonly scannedBuildArtifacts?: readonly string[] };

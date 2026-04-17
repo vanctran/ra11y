@@ -1,5 +1,5 @@
 /**
- * Next-step prose builder for scan responses.
+ * Next-step builder for scan responses.
  *
  * Both `scan_project` and `scan_file` surface a `nextStep` string that
  * names the canonical next tool call for the agent — `suggest_fix` on a
@@ -8,6 +8,19 @@
  * the logic here keeps the two tools in exact lockstep (the whole
  * point of Track Q's parity fixes); a heuristic that diverges between
  * tools re-creates the shape-drift bug Track Q was opened to fix.
+ *
+ * The builder returns BOTH a prose `string` and a machine-readable
+ * `structured` form `{ tool, args }` (P1-K). Agents that prefer
+ * parse-free branching key off `structured`; weaker LLMs and human
+ * log readers keep the prose. The two always describe the same call —
+ * producing both from one pass guarantees they agree.
+ *
+ * When the prose degrades to a generic multi-option recommendation
+ * (fallback branch, no concrete first finding to name), `structured`
+ * is omitted per CLAUDE.md §1 "Ambiguous field shapes are dishonest"
+ * — the caller conditional-spreads so the response shape carries
+ * neither field rather than `nextStepStructured: null` or a fabricated
+ * tool name.
  *
  * The builder consumes `ScanFormatted` (the shared shape produced by
  * `runScanAndFormat`) plus a small set of caller-scoped toggles:
@@ -39,6 +52,35 @@ export interface NextStepOptions {
   readonly singleFilePath?: string;
 }
 
+/**
+ * Machine-parseable next-call hint. `tool` is the canonical MCP tool
+ * name (exactly what appears on `tools/list`); `args` uses the
+ * canonical parameter names those tools accept — `file` not
+ * `filePath` (per P2-R), `ruleId`, `line`. Never emit `args: {}` as a
+ * sentinel for "missing args"; a tool that legitimately takes no
+ * args (like `checklist` at its default paths) gets an empty object
+ * honestly. Absence of a structured hint is signaled by omitting the
+ * whole field at the response-assembly site, not by an empty value
+ * here.
+ */
+export interface NextStepStructured {
+  readonly tool: string;
+  readonly args: Record<string, unknown>;
+}
+
+/**
+ * Output of {@link buildNextStep}. `prose` is always present — it's
+ * the English hint the response has carried since v0.1.0. `structured`
+ * is the machine form naming the same call; omitted when the prose
+ * falls back to generic multi-option advice (no concrete first
+ * finding), so consumers conditional-spread it rather than ship an
+ * ambiguous sentinel.
+ */
+export interface NextStepResult {
+  readonly prose: string;
+  readonly structured?: NextStepStructured;
+}
+
 interface NextStepInputs {
   readonly violations: number;
   readonly fixable: number;
@@ -56,14 +98,33 @@ interface FirstFinding {
 }
 
 /**
- * Builds the prose `nextStep` hint for a scan response. Branches on
- * whether violations, notes, or neither are present, then picks a
- * concrete first call site from `formatted.files` when applicable.
+ * Builds the `nextStep` hint (prose + structured) for a scan
+ * response. Branches on whether violations, notes, or neither are
+ * present, then picks a concrete first call site from
+ * `formatted.files` when applicable.
+ *
+ * Returns an object with:
+ *   - `prose` — always present; the English recommendation agents
+ *     and humans have been reading since v0.1.0.
+ *   - `structured` — `{ tool, args }` form naming the same call.
+ *     Omitted when the prose degrades to generic advice (no concrete
+ *     first finding), so consumers conditional-spread it into the
+ *     response rather than ship an ambiguous empty value.
  */
-export function buildNextStep(formatted: ScanFormatted, options: NextStepOptions = {}): string {
+export function buildNextStep(
+  formatted: ScanFormatted,
+  options: NextStepOptions = {},
+): NextStepResult {
+  // After the P1-M + P1-H split, the plan no longer carries a
+  // composite `fixSuggestionAvailable`. Sum the two honest top-level
+  // counters (mechanical edits + prose-only guidance) so the prose
+  // `(N with fix suggestions)` tail keeps reading correctly without
+  // re-introducing the composite on the response.
   const inputs: NextStepInputs = {
     violations: numFromPlan(formatted.plan, "violations"),
-    fixable: numFromPlan(formatted.plan, "fixSuggestionAvailable"),
+    fixable:
+      numFromPlan(formatted.plan, "mechanicalEditsAvailable") +
+      numFromPlan(formatted.plan, "guidanceFixesAvailable"),
     actionableManual: numFromPlan(formatted.plan, "actionableManualItems"),
     notes: numFromPlan(formatted.plan, "notes"),
     first: firstCallableFinding(formatted.files),
@@ -74,29 +135,55 @@ export function buildNextStep(formatted: ScanFormatted, options: NextStepOptions
   if (inputs.violations > 0 && inputs.first !== null)
     return violationNextStep(inputs, inputs.first);
   if (inputs.notes > 0 && inputs.first !== null) return notesNextStep(inputs, inputs.first);
-  return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${inputs.iterativeTip}`;
+  // Fallback: the scan reports violations/notes but we couldn't pull
+  // a concrete (file, line, ruleId) triple to name. The prose still
+  // gives multi-option advice; the structured form is omitted because
+  // picking any one of `explain_rule` / `suggest_fix` / `scan_file`
+  // here would be a guess. Honest shape (CLAUDE.md §1): the caller
+  // conditional-spreads and neither field ships.
+  return {
+    prose: `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${inputs.iterativeTip}`,
+  };
 }
 
-function cleanScanNextStep(inputs: NextStepInputs): string {
+function cleanScanNextStep(inputs: NextStepInputs): NextStepResult {
   if (inputs.actionableManual > 0) {
     const pl = inputs.actionableManual === 1 ? "on has" : "a have";
-    return `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next.${inputs.iterativeTip}`;
+    return {
+      prose: `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next.${inputs.iterativeTip}`,
+      structured: { tool: "checklist", args: {} },
+    };
   }
-  return `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone.`;
+  return {
+    prose: `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone.`,
+    structured: { tool: "checklist", args: {} },
+  };
 }
 
-function violationNextStep(inputs: NextStepInputs, first: FirstFinding): string {
+function violationNextStep(inputs: NextStepInputs, first: FirstFinding): NextStepResult {
   const vPlural = inputs.violations === 1 ? "" : "s";
   if (inputs.fixable > 0) {
     const fPlural = inputs.fixable === 1 ? "" : "s";
-    return `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`;
+    return {
+      prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`,
+      structured: {
+        tool: "suggest_fix",
+        args: { ruleId: first.ruleId, file: first.path, line: first.line },
+      },
+    };
   }
-  return `${inputs.violations} violation${vPlural} with no machine-generated fix. Call \`explain_rule\` on \`${first.ruleId}\` and apply manually; verify with \`scan_file ${first.path}\` after editing.${inputs.iterativeTip}`;
+  return {
+    prose: `${inputs.violations} violation${vPlural} with no machine-generated fix. Call \`explain_rule\` on \`${first.ruleId}\` and apply manually; verify with \`scan_file ${first.path}\` after editing.${inputs.iterativeTip}`,
+    structured: { tool: "explain_rule", args: { ruleId: first.ruleId } },
+  };
 }
 
-function notesNextStep(inputs: NextStepInputs, first: FirstFinding): string {
+function notesNextStep(inputs: NextStepInputs, first: FirstFinding): NextStepResult {
   const nPlural = inputs.notes === 1 ? "" : "s";
-  return `No errors/warnings, ${inputs.notes} info-level note${nPlural} (scanner flagged things it can't fully verify). Open \`scan_file ${first.path}\` or read the source to resolve.${manualTail(inputs)}${inputs.iterativeTip}`;
+  return {
+    prose: `No errors/warnings, ${inputs.notes} info-level note${nPlural} (scanner flagged things it can't fully verify). Open \`scan_file ${first.path}\` or read the source to resolve.${manualTail(inputs)}${inputs.iterativeTip}`,
+    structured: { tool: "scan_file", args: { file: first.path } },
+  };
 }
 
 function manualTail(inputs: NextStepInputs): string {

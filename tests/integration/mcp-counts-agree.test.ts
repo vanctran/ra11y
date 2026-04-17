@@ -78,8 +78,8 @@ async function makeMediaPresentFixture(): Promise<string> {
 
 interface ScanBody {
   readonly plan: {
-    readonly manualReviewRequired: number;
     readonly actionableManualItems: number;
+    readonly untargetedCriteria: number;
   };
 }
 interface CoverageBody {
@@ -109,7 +109,12 @@ async function gatherCounts(cwd: string): Promise<{
   const coverageBody = body<CoverageBody>(responses[2]);
   const checklistBody = body<ChecklistBody>(responses[3]);
   return {
-    scan: scanBody.plan.manualReviewRequired,
+    // Re-derive the cross-tool total from the split top-level fields
+    // (P1-M): `manualReviewRequired` no longer ships on scan_project's
+    // plan — it would re-create the composite-headline dishonesty this
+    // split exists to kill. The invariant is still "all surfaces agree
+    // on the total", just computed from the honest parts.
+    scan: scanBody.plan.actionableManualItems + scanBody.plan.untargetedCriteria,
     coverage: coverageBody.criteriaManualReviewRequired,
     checklist: checklistBody.summary.manualReviewRequired,
     scanActionable: scanBody.plan.actionableManualItems,
