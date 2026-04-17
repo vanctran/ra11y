@@ -184,6 +184,18 @@ At registry init, the engine walks every loaded standard's `equivalentTo` field 
 10. Run `/fix-drift` to regenerate `docs/kb/rules/<slug>.md` — that emits its own commit.
 11. Run `bun run verify` to confirm everything is green before handing off.
 
+### 7a. Bug-fix workflow — real-world fixture first
+
+When the work is **fixing a real-world bug** (field report, feedback scan, observed regression) rather than adding a new rule from spec, invert the default: land the sanitized repro **before** the fix, not alongside it.
+
+1. Write a sanitized minimal repro of the bug at `tests/fixtures/real-world/<case>/` — `source/` tree + `assertions.ts` declaring the invariant that the fix will restore, following ADR 0006 and the `fixture-curator` subagent conventions.
+2. Commit the failing fixture first: `test(real-world): add <case> fixture capturing <bug-summary>`. The harness test should be **red** on this commit — that is the whole point: the fixture proves the bug is real and reproducible before any code change.
+3. Make the fix in `src/` with whatever change is needed.
+4. Commit the fix: `fix(<scope>): <what you changed>` — the harness test now goes green on this commit.
+5. If unit tests in `tests/unit/**` rehearsed the broken behavior, migrate that coverage — the fixture supersedes the unit test for this scenario (see §17 "Writing behavior-rehearsal unit tests"). Delete or narrow the unit test rather than duplicating the assertion.
+
+The fixture-first cadence works because real-world fixtures survive refactors that reshape internal APIs — a unit test written against the current AST walk breaks when the walk changes; a fixture that scans a source tree and asserts `meta.suppressions.length === 3` keeps guarding the invariant no matter what the walk looks like inside.
+
 ## 8. How to add a new standard
 
 **Shortcut:** `/add-standard <id>`.
@@ -348,7 +360,7 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 - Adding a numeric-threshold gate ("only flag when duration ≤ 5s", "size ≥ 100px", "≥ N call sites"). → numeric thresholds are suppression in disguise (see § 1, "Numeric-threshold heuristics are suppression"). Pick any cutoff and you silent-miss the finding on the other side. Encode the numeric evidence in the `reason` text as additive context and let the agent read surrounding code to judge.
 - Emitting sentinel-empty values for optional fields (`newText: ""`, `snippet: ""`, `{ items: [] }` on an error path). → ambiguous field shapes are dishonest (see § 1, "Ambiguous field shapes are dishonest"). Conditional-spread the field at the response-assembly site so it is present only when meaningful, and let `undefined`/omission be the "no value" signal. An agent cannot tell empty-as-data from empty-as-absent, and the asymmetric cost of guessing wrong is silent.
 - Hardcoding inventory counts in docs ("12-tool MCP server", "49 rules", "four standards", "six formatters"). → these numbers change every release and the docs silently go stale; readers then lose trust when the count doesn't match reality. Write docs so they stay correct as the inventory grows: name the items that matter (`scan_project`, `checklist`, `suggest_fix`, …) without counting them, or point at the canonical source (`tools/list`, `src/rules/index.ts`, `src/standards/index.ts`). Specific counts are acceptable only in changelog entries, release notes, or generated reports where the date/version anchors the number.
-- Writing behavior-rehearsal unit tests for a real-world bug. → "the ranker orders alphabetically on ties", "the cap returns 5 entries when given 10" — these re-assert the code you just wrote and need to change every time you refactor; they catch typos, not regressions in behavior the user cares about. A test earns its keep when it encodes either (a) an invariant that survives refactors ("every pragma declaration has a line number," "no finder emits a suppression by filename pattern") or (b) a real-world failure mode with a sanitized repro. For (b), prefer landing the snippet under `tests/fixtures/real-world/<case>/` (see backlog Phase 23) over a unit test that reproduces the bug inline — fixtures survive internal rewrites that reshape the unit-test surface.
+- Writing behavior-rehearsal unit tests for a real-world bug. → "the ranker orders alphabetically on ties", "the cap returns 5 entries when given 10" — these re-assert the code you just wrote and need to change every time you refactor; they catch typos, not regressions in behavior the user cares about. A test earns its keep when it encodes either (a) an invariant that survives refactors ("every pragma declaration has a line number," "no finder emits a suppression by filename pattern") or (b) a real-world failure mode with a sanitized repro. For (b), **land the snippet under `tests/fixtures/real-world/<case>/` before writing the fix** (see §7a "Bug-fix workflow — real-world fixture first" and ADR 0006). Fixtures survive internal rewrites that reshape the unit-test surface; a behavior-rehearsal unit test for the same bug does not. On any bug fix, the rule is: if you find yourself writing a unit test that reproduces a production failure, stop and move the repro into a real-world fixture instead.
 
 ## 18. When in doubt
 
