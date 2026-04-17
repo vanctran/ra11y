@@ -84,6 +84,19 @@ export type FixtureExpectation =
       readonly kind: "meta-field";
       readonly path: readonly string[];
       readonly predicate: MetaFieldPredicate;
+    }
+  /**
+   * Assert that a meta field whose value is an array has a length
+   * satisfying the given bounds. Use this when the invariant is about
+   * the ranking-cap behaviour (e.g. opaqueCustomComponentsTop must have
+   * length ≤ 5 under default verboseMeta). Unlike `meta-field` with
+   * `{ equals: [...] }`, this survives changes to ranking order or
+   * entry shape — it only guards the cap.
+   */
+  | {
+      readonly kind: "meta-field-length";
+      readonly path: readonly string[];
+      readonly predicate: MetaFieldLengthPredicate;
     };
 
 /** Predicates available for the {@link MetaFieldExpectation}. */
@@ -92,6 +105,20 @@ export type MetaFieldPredicate =
   | "absent"
   | { readonly equals: unknown }
   | { readonly contains: string };
+
+/**
+ * Predicates available for the {@link meta-field-length} expectation.
+ * At least one of `min`, `max`, or `equals` must be provided. When
+ * multiple are provided they are ANDed.
+ */
+export interface MetaFieldLengthPredicate {
+  /** Array length must be at least this value. */
+  readonly min?: number;
+  /** Array length must be at most this value. */
+  readonly max?: number;
+  /** Array length must equal this value exactly. */
+  readonly equals?: number;
+}
 
 /** Scanner invocation knobs a fixture can request. */
 export interface FixtureToolInput {
@@ -401,6 +428,8 @@ function evaluateOne(ctx: FixtureScanContext, exp: FixtureExpectation): Expectat
       return evalMetaHintIncludes(fixtureId, exp, ctx);
     case "meta-field":
       return evalMetaField(fixtureId, exp, ctx);
+    case "meta-field-length":
+      return evalMetaFieldLength(fixtureId, exp, ctx);
     default: {
       // Exhaustive switch — `never` tells us a new variant was added.
       const _exhaustive: never = exp;
@@ -718,6 +747,67 @@ function evalMetaField(
       ? `real-world/${fixtureId}: meta.${pathStr} contains ${JSON.stringify(predicate.contains)}`
       : `real-world/${fixtureId}: meta.${pathStr} did not contain ${JSON.stringify(predicate.contains)}. Value: ${JSON.stringify(value)}`,
   };
+}
+
+/**
+ * Asserts that a meta field whose value is an array has a length
+ * matching the given bounds. Survives changes to ranking order and
+ * entry shape — it only guards the cap or minimum-count invariant.
+ *
+ * Failure distinguishes three modes:
+ *   - field absent
+ *   - field present but not an array
+ *   - array length outside the stated bounds
+ */
+function evalMetaFieldLength(
+  fixtureId: string,
+  exp: FixtureExpectation & { kind: "meta-field-length" },
+  ctx: FixtureScanContext,
+): ExpectationResult {
+  const { found, value } = lookupPath(ctx.formatted.meta, exp.path);
+  const pathStr = exp.path.join(".");
+  if (!found) {
+    return {
+      expectation: exp,
+      pass: false,
+      message: `real-world/${fixtureId}: expected meta.${pathStr} to be an array (meta-field-length), but the field was absent`,
+    };
+  }
+  if (!Array.isArray(value)) {
+    return {
+      expectation: exp,
+      pass: false,
+      message: `real-world/${fixtureId}: expected meta.${pathStr} to be an array (meta-field-length), got ${JSON.stringify(value)}`,
+    };
+  }
+  const len = value.length;
+  const { min, max, equals } = exp.predicate;
+  const ok =
+    (min === undefined || len >= min) &&
+    (max === undefined || len <= max) &&
+    (equals === undefined || len === equals);
+  if (ok) {
+    const bounds = formatLengthBounds(exp.predicate);
+    return {
+      expectation: exp,
+      pass: true,
+      message: `real-world/${fixtureId}: meta.${pathStr} length ${len} satisfies ${bounds}`,
+    };
+  }
+  const bounds = formatLengthBounds(exp.predicate);
+  return {
+    expectation: exp,
+    pass: false,
+    message: `real-world/${fixtureId}: meta.${pathStr} length ${len} does not satisfy ${bounds}`,
+  };
+}
+
+function formatLengthBounds(pred: MetaFieldLengthPredicate): string {
+  const parts: string[] = [];
+  if (pred.min !== undefined) parts.push(`min=${pred.min}`);
+  if (pred.max !== undefined) parts.push(`max=${pred.max}`);
+  if (pred.equals !== undefined) parts.push(`equals=${pred.equals}`);
+  return parts.length > 0 ? parts.join(", ") : "(no bounds specified)";
 }
 
 /**
