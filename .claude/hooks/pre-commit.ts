@@ -49,10 +49,17 @@ const hasNodeModules = existsSync(join(projectDir, "node_modules"));
 const hasSrc = existsSync(join(projectDir, "src"));
 
 const stagedFiles = getStagedFiles(projectDir);
+// Only the paths biome.json includes — src/, tests/, scripts/, and
+// .claude/hooks/. Anything else (e.g. integrations/, which is a
+// sibling project with its own toolchain) is intentionally outside
+// biome's scope and would make `biome check` fail with "no files
+// processed" if passed explicitly.
+const BIOME_SCOPED = /^(src|tests|scripts|\.claude\/hooks)\//;
 const stagedTsFiles = stagedFiles.filter((f) => /\.(ts|tsx|cts|mts)$/.test(f));
-const stagedLintTargets = stagedFiles.filter((f) =>
-  /\.(ts|tsx|cts|mts|js|jsx|json|jsonc)$/.test(f),
+const stagedLintTargets = stagedFiles.filter(
+  (f) => /\.(ts|tsx|cts|mts|js|jsx|json|jsonc)$/.test(f) && BIOME_SCOPED.test(f),
 );
+const stagedTsFilesInProject = stagedTsFiles.filter((f) => BIOME_SCOPED.test(f));
 const stagedPackageManifest = stagedFiles.some(
   (f) => f === "package.json" || f === "bun.lock" || f === "bun.lockb",
 );
@@ -68,7 +75,7 @@ const checks: Check[] = [
   {
     label: "tsc --noEmit",
     command: "bunx tsc --noEmit",
-    required: () => hasPackageJson && hasNodeModules && hasSrc && stagedTsFiles.length > 0,
+    required: () => hasPackageJson && hasNodeModules && hasSrc && stagedTsFilesInProject.length > 0,
   },
   {
     label: "scripts/check-zero-deps.ts",

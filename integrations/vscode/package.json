@@ -1,0 +1,95 @@
+{
+  "name": "ra11y-vscode",
+  "displayName": "ra11y",
+  "description": "IDE-native accessibility findings powered by the ra11y MCP server",
+  "version": "0.0.1",
+  "publisher": "ra11y",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "section-508",
+    "en-301-549",
+    "ra11y"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact",
+    "onLanguage:html",
+    "onLanguage:css",
+    "onLanguage:vue",
+    "onLanguage:svelte"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ra11y.scanWorkspace",
+        "title": "ra11y: Scan Workspace",
+        "category": "ra11y"
+      },
+      {
+        "command": "ra11y.restartServer",
+        "title": "ra11y: Restart MCP Server",
+        "category": "ra11y"
+      }
+    ],
+    "configuration": {
+      "title": "ra11y",
+      "properties": {
+        "ra11y.standard": {
+          "type": "string",
+          "default": "wcag22",
+          "description": "Accessibility standard ID(s) to evaluate. Comma-separated to enable multiple (e.g. 'wcag22,section508'). Forwarded to scan_project."
+        },
+        "ra11y.level": {
+          "type": "string",
+          "enum": ["A", "AA", "AAA"],
+          "default": "AA",
+          "description": "WCAG conformance level."
+        },
+        "ra11y.additionalPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra paths to scan beyond the auto-discovered tree (e.g. 'dist/assets' to include post-compile CSS). Passed through to scan_project.additionalPaths."
+        },
+        "ra11y.command": {
+          "type": "string",
+          "default": "ra11y",
+          "description": "Executable used to spawn the MCP server. Defaults to 'ra11y' (resolved on PATH). Set to an absolute path to pin to a specific installation."
+        },
+        "ra11y.minSeverity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"],
+          "default": "info",
+          "description": "Minimum severity to surface in the Problems panel. 'info' matches the recommended scan_project default."
+        },
+        "ra11y.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-run a scan when a supported file is saved."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "typecheck": "tsc --noEmit -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^6.0.0"
+  }
+}
