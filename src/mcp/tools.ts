@@ -23,6 +23,7 @@ import { explainStandardTool } from "./tool-explain-standard.ts";
 import { reviewCandidatesTool } from "./tool-review-candidates.ts";
 import { scanDiffTool } from "./tool-scan-diff.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
+import { buildSuggestFixPayload } from "./tool-suggest-fix-internals.ts";
 import {
   applyRuleSettings,
   buildAnalysisCoverage,
@@ -354,65 +355,11 @@ const suggestFixTool: McpTool = {
     const sourceContext =
       strParam(params, "sourceContext") ?? buildSourceContext(parsed.source, line);
 
-    return textResult(buildSuggestFixPayload({ ruleId, line, match, sourceContext }));
+    return textResult(
+      buildSuggestFixPayload({ ruleId, line, match, sourceContext, source: parsed.source }),
+    );
   },
 };
-
-/**
- * Shapes the suggest_fix response from a resolved violation match.
- * Three outcomes:
- *   - `kind: "none"` — no violation at that line (or unmatched rule).
- *   - `kind: "edit"` — the rule emitted fixPaths with a mechanical
- *     primary.edit; the agent can apply it via Edit directly.
- *   - `kind: "guidance"` — fixPaths without mechanical edits, or
- *     prose-only suggestion. The labels + snippet + sourceContext are
- *     enough for the agent to compose the edit.
- * Extracted from the handler to keep it under the cognitive-complexity
- * budget; returns a plain object for textResult to serialize.
- */
-function buildSuggestFixPayload(args: {
-  ruleId: string;
-  line: number;
-  match: import("../types/violation.ts").Violation | undefined;
-  sourceContext: string;
-}): Record<string, unknown> {
-  const { ruleId, line, match, sourceContext } = args;
-  if (!match) {
-    return {
-      kind: "none",
-      explanation: `No violation for ${ruleId} at line ${line}.`,
-      confidence: "low",
-    };
-  }
-  const confidence = match.severity === "error" ? "high" : "medium";
-  // Omit empty `snippet` rather than emitting `snippet: ""` — a
-  // sentinel-empty field forces the agent to re-read and disambiguate
-  // whether the value is unavailable or genuinely empty. Present-only-
-  // when-populated is the honest shape.
-  const snippetField = match.snippet ? { snippet: match.snippet } : {};
-  if (match.fixPaths) {
-    const mechanical = match.fixPaths.primary.edit;
-    return {
-      kind: mechanical ? "edit" : "guidance",
-      primary: match.fixPaths.primary,
-      alternatives: match.fixPaths.alternatives,
-      explanation: match.suggestion ?? match.message,
-      ...snippetField,
-      sourceContext,
-      confidence,
-    };
-  }
-  const explanation = match.suggestion
-    ? match.suggestion
-    : `Violation found but no fix guidance available for ${ruleId}. ${match.message}`;
-  return {
-    kind: "guidance",
-    explanation,
-    ...snippetField,
-    sourceContext,
-    confidence: match.suggestion ? confidence : "low",
-  };
-}
 
 // ─── Tool: list_rules ───────────────────────────────────────────────────────
 
