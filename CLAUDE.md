@@ -1,12 +1,12 @@
 # CLAUDE.md — ra11y contributor guide
 
-This file is the source of truth for anyone (human or Claude Code) working on ra11y. It tells you what the project is, what invariants it must uphold, how to verify changes, how to add rules and standards, and where to look next. Read it all before making changes.
+Source of truth for anyone (human or Claude Code) working on ra11y. What the project is, what invariants it must uphold, how to verify changes, where to look next. Read it all before making changes.
+
+Detailed subsystems live in `@docs/` and `@docs/kb/` — this file is the index, not the textbook.
 
 ## 1. Project identity
 
 **ra11y** is an **AI-first multi-standard accessibility scanner** for web projects. It parses JSX/TSX, HTML, and CSS with in-house zero-dependency parsers and runs a hybrid static-analysis + AST check against pluggable accessibility standards — WCAG 2.2/2.1, Section 508, EN 301 549 out of the box, with a plugin API for adding more.
-
-"AI-first" is the design center, not a bolt-on. The primary consumer is an AI coding agent calling the MCP tools; the CLI, formatters, and reports exist but inherit their shape from that assumption. Several common tooling defaults invert under this framing — see the "Consumer model: AI-first" subsection below and treat the rules there as load-bearing when building new surfaces or triaging field reports.
 
 Name: homophone of "rally" (a call to action for accessibility) with the `a11y` numeronym baked in. Binary: `ra11y`. npm package: `@ra11y/core` (the unscoped `ra11y` name is owned by a long-dormant package; scoped is our way in). License: MIT.
 
@@ -19,45 +19,11 @@ Design priorities — the things the project optimizes for, in roughly decreasin
 - **Precommit-speed.** Sub-second on typical commits. Precommit-friendly. Performance budget enforced in CI.
 - **Polish on the human-facing surfaces.** Beautiful terminal output, context-aware fix suggestions, multiple output formats, plugin API, deep rule metadata. Not the design center, but earned after the AI-first surface is honest.
 
-### Consumer model: AI-first
+**The AI-first consumer model is doctrine.** The primary consumer is an agent calling MCP tools, not a human reading a dashboard — several tooling defaults (suppression, priority downgrading, terse meta, labeled buckets, numeric thresholds, empty-sentinel fields, zero-output success, composite headline counts) invert under that framing. The full rules, with rationale and worked examples, live in `@docs/kb/architecture/ai-first-consumer.md`. They also load automatically when editing `src/mcp/**`, `src/reports/**`, `src/output/**`, or `src/review/**` via `.claude/rules/mcp-response-shapes.md`. Treat those rules as load-bearing when triaging field reports or designing new surfaces.
 
-ra11y's primary consumer is an AI agent calling the MCP tools — not a human reading a dashboard. CLI and formatters exist, but the design center is the agent. Several common tooling defaults invert under this assumption; treat the following as load-bearing when triaging field reports or designing new surfaces:
+## 2. Current stack
 
-- **Surface, don't suppress.** Agents read every candidate in milliseconds; reviewer fatigue isn't the constraint a human-facing tool optimizes around. False positives a human would tune out are cheap for an agent to dismiss with one file read. Suppression discards signal the agent would use to triage. Default to surfacing with enough context for the agent to investigate.
-- **Don't downgrade priority to hide things.** "Mark as low priority" is a UX lever for human attention budgets. Agents don't have one — they just sort. Surface honestly and let the agent rank by criterion + reason + context.
-- **Verbose meta is signal, not clutter.** `configSource`, `configSearchedFrom`, `activeNativeWrappers`, `rulesEvaluated`, per-extension file counts — these are scan-confidence telemetry the agent actively uses to decide whether the scan had teeth and what to call next. Don't trim them to look terse.
-- **Review *candidates*, not assertions.** For manual criteria, return locations + a short `reason` that frames the question. Don't try to be smart about "what the user really meant" — agents are better at that than heuristics.
-- **One tool call should answer "what next?"** Each response carries `nextStep` hints, criterion IDs, and counts that match the other tools' counts. Cross-surface drift (`scan` says 21, `checklist` says 4) forces wasted round trips; invariants like the manual-review-count test exist to prevent this.
-- **Default-exclude globs are suppression too.** Growing `DEFAULT_EXCLUDED_PATTERNS` in `src/input/discover.ts` to "reduce noise" from scans is the same mistake as downgrading severities or silencing finders — it just happens one level earlier in the pipeline. An agent can dismiss a finding whose path contains `test/fixtures/` or `stories/` in one read; it can't un-suppress a file that never got parsed. Only add an exclusion when findings in that path tree are *definitionally wrong for any consumer* (generated code, `.min.*`, vendor dumps). "Most people don't want to see this" is a human-attention argument, not a correctness one; it is not sufficient. If an existing entry in the list can't clear that bar, it's a bug, not a precedent.
-- **No heuristic suppression, even for spec carve-outs.** WCAG's exemptions (logotypes, process-page exception, essential presentation) are conceptual rules — *detecting* whether a given element falls under one is a heuristic on weaker evidence than the agent has. An `<img>` with `alt="Acme logo"` might be a brand mark, or it might be a product shot the author mislabeled. A repo with three HTML files might be an SPA shell, or it might be the start of a content site. Our attribute-level snippet is not enough to make that call; the agent reading the whole file is. Encoding a heuristic as suppression replaces honest "please verify" with false confidence and risks silent false negatives on real violations. The deterministic escape hatch is the source-level disable pragma (`<!-- ra11y-disable wcag22:1.4.5 -->` / `{/* ra11y-disable wcag22:2.4.5 */}`) — once an agent investigates and dismisses, the pragma makes that dismissal durable. No guessing required. If a specific review candidate keeps drawing field-report complaints, the fix is better `reason` text (so the agent dismisses faster), not a finder-level carve-out.
-- **Labeled buckets are suppression too.** "Splitting findings into a primary list and a deprioritized/verbose/likely-X bucket" is the move that looks like labeling but behaves like suppression — once consumers learn the bucket is skippable by default, the silent-miss failure mode is identical to hiding the finding outright. A bucket is only honest when its label is *provable from the code* (e.g. `likelyIrrelevant` for "no `<video>` elements in the scanned files" — a deterministic fact). Filename patterns, identifier patterns, and spec-exemption guesses do **not** earn a bucket. They earn reason-text enrichment, which the agent reads per-candidate and acts on individually. The test before adding a new bucket: would the label be correct 100% of the time from the evidence the scanner has? If it's a heuristic, the answer is no.
-- **Failure modes are asymmetric; the rules above lean against the cheaper failure.** Over-surfacing → the agent dismisses in one read, at a few seconds' cost, and the judgment stays visible. Under-surfacing → a real violation never reaches the agent; the user doesn't know it happened; the miss is silent and non-reversible. When a reasonable-sounding field report asks for "less noise" in a way that would hide findings, remember the costs are lopsided — and that "this looks tractable, we can split the difference" is where the silent-miss regressions live. Durable rule: when in doubt, surface and annotate; never bucket-then-filter.
-- **Numeric-threshold heuristics are suppression.** "Auto-dismiss when the setTimeout duration is ≤ 5 seconds," "only flag when the image is ≥ 100px wide," "require at least N call sites before reporting" — thresholds dressed up as precision checks are the same heuristic-suppression move as filename-pattern matching. The threshold picks a point on a continuous axis and hides everything on one side of it; the silent-miss failure mode is identical. A real session timeout of 4.5 seconds is indistinguishable from a debounce of 4.5 seconds from static analysis alone, and the agent reading the surrounding code is the only correct arbiter. Encode the duration/size/count in the `reason` text as additive context ("setTimeout with 2000ms literal"); let the agent decide.
-- **Don't duplicate capability the agent already has.** Before adding in-tool analysis — cross-file identifier resolution, path walking, fuzzy name matching — ask whether the consuming agent can do the same thing with Read + Grep. If yes, the tool doing it risks being redundant at best and confidently wrong at worst: in-tool heuristics produce output the agent can't tell to mistrust ("`handleChange` defined at line 42, body is clean" is a liability the first time line 42 is a shadowed binding). The tool's job is to *point* — file, line, pattern; the agent's job is to *investigate*. This inverts the default for human-facing tools, where doing more in-process is usually better. Reflex check every time feedback asks for "smarter" analysis in a finder.
-- **Interrogate the problem before accepting the solution's shape.** When feedback says "add a show_X tool" or "we need a Y flag," the first check is whether the capability already exists in a tool or call that wasn't discovered. Field reports carry the *problem* the reporter hit, not evidence of a structural gap. Accepting the solution's shape short-circuits that check and creates tool-bloat — more shapes on `tools/list`, more drift surface, more overlap — paid even when the underlying problem was documentation. If the capability exists but is hard to find, sharpen the tool description; if it doesn't, then design.
-- **Ambiguous field shapes are dishonest.** A field that is sometimes populated and sometimes `""` (or `null` used as "unknown") forces the agent to re-read and disambiguate whether the value is unavailable or genuinely empty — and because agents usually treat the empty value as real data, the downstream mistake is silent. Omit the field entirely when it has no meaningful value; use conditional spreads at the response-assembly site (`...(x ? { field: x } : {})`). `newText: ""` under `kind: "edit"` is the canonical mistake; `snippet: ""` alongside a populated `sourceContext` is the same bug in another place. The test: if a downstream consumer has to ask "did I get an empty answer or no answer?", the shape has failed. This applies only to optional fields — schema-required fields stay populated; the shape signals "present-when-meaningful."
-- **Zero-output success is ambiguous failure.** A response shaped like "success + 0 findings / 0 files scanned / empty list" is indistinguishable from "the input never reached the tool." The canonical case: `scan_project({ cwd: "/tmp/wrong-path" })` returns `{ filesScanned: 0, totalFindings: 0 }` with success — the agent concludes "clean codebase" when the reality is "tool never ran," and the miss is non-reversible once the agent acts on it. When the input or configuration is plausibly malformed — nonexistent `cwd`, zero parseable files, no config resolved, CSS absent but Tailwind classes detected, template files parsed as literal — emit a response-level `warnings: string[]` (structured codes preferred: `scanned_zero_files`, `root_source_defaulted`, `no_config_found`, `tailwind_detected_css_undercounted`, `template_files_parsed_as_literal`). The test: can a caller distinguish success-with-nothing-to-do from success-with-nothing-ran by reading the response alone? If not, the shape is dishonest. This is the response-level analogue of the per-field rule above.
-- **Composite headline counts are dishonest.** A top-level counter like `manualReviewRequired: 21` or `fixSuggestionAvailable: 2` reads as "this much work to do," but often sums categorically different sub-buckets — grounded candidates with a file:line vs. bare-criterion prompts, mechanical edits vs. prose-only guidance. Agents budget against the headline, and the composite number inflates or misclassifies the work. If a top-level counter names one concept, it must count one kind of thing; when two kinds exist, split into two top-level counters (`actionableManualItems` + `untargetedCriteria`, `mechanicalEditsAvailable` + `guidanceFixesAvailable`) rather than summing them into one. Labels on sub-fields aren't enough if the headline still sums them — the summary string consumers read first shouldn't need footnotes to be correct.
-
-When a field report suggests "reduce noise," ask first: noise for whom? If the answer is "a human reviewer," the answer is usually no — the agent is the consumer and it wants the signal. If the suggestion is "encode this spec exemption as a heuristic so the agent doesn't have to verify," the answer is also no — heuristic detection and spec carve-outs operate at different confidence levels, and the deterministic source-level disable is the correct mechanism. If the suggestion is "put the obvious-noise candidates in their own bucket so I can skip them," the answer is also no — see the asymmetry rule above. Enrich the `reason` text with the dismissal signal; keep the candidate in the primary list.
-
-## 2. Current stack (as of 2026-04-11)
-
-| Tool           | Version   | Source                                                                   |
-|----------------|-----------|--------------------------------------------------------------------------|
-| TypeScript     | 6.0.x     | https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/     |
-| Bun            | 1.3.11    | https://github.com/oven-sh/bun/releases                                  |
-| Node LTS       | 24.x (active), 22.x (maintenance) | https://nodejs.org/en/about/previous-releases  |
-| Biome          | 2.4.11    | https://www.npmjs.com/package/@biomejs/biome                             |
-| WCAG           | 2.2 (W3C Rec, 2023-10-05; update 2024-12-12; ISO/IEC 40500:2025) | https://www.w3.org/TR/WCAG22/ |
-| WCAG           | 2.1 (W3C Rec, still referenced by many legal frameworks) | https://www.w3.org/TR/WCAG21/ |
-| Section 508    | 2017 refresh (references WCAG 2.0) | https://www.access-board.gov/ict/        |
-| EN 301 549     | v3.2.1 (references WCAG 2.1) | https://www.etsi.org/deliver/etsi_en/301500_301599/301549/ |
-| SARIF          | 2.1.0     | https://docs.oasis-open.org/sarif/sarif/v2.1.0/                          |
-
-**Never assume a version from memory.** Before upgrading, invoke `/research-latest <package>` and update this table with a new "as of" date.
-
-TypeScript 6.0 is the **last release on the current JS codebase**; TypeScript 7 will be the Go rewrite. Treat 6.0 as stable; hold off on 7 until its ecosystem settles. We target TS 6.0 as the peer and devDependency, but the scanner's public API must remain callable from any TS ≥5.4 consumer (per `peerDependencies`).
+Pinned tool versions and spec references live in `@docs/stack.md`. Before upgrading any row, invoke `/research-latest <package>` and update that file with a new "as of" date.
 
 ## 3. Architectural invariants (NEVER violate)
 
@@ -93,195 +59,89 @@ bun run build              # Transpile src/ → dist/
 
 ```
 ra11y/
-├── .claude/                 # Phase 0 autonomous infrastructure
+├── .claude/                 # Autonomous infrastructure
 │   ├── settings.json        # Hook wiring
 │   ├── backlog.md           # Persistent to-do list — /continue reads this
-│   ├── history.jsonl        # Append-only audit log (gitignored)
-│   ├── notes/               # Session-durable learnings
-│   ├── hooks/               # TypeScript hook scripts run by bun
-│   ├── agents/              # Subagent definitions (markdown + frontmatter)
-│   └── skills/              # Skills (folders with SKILL.md + supporting files)
-├── .github/                 # CI workflows, issue templates, PR template
+│   ├── agents/              # Subagent definitions
+│   ├── skills/              # Skills (folders with SKILL.md + supporting files)
+│   ├── rules/               # Path-scoped rules loaded on demand
+│   └── hooks/               # TypeScript hook scripts run by bun
 ├── src/
 │   ├── index.ts             # Public programmatic API entry (re-exports from src/api/)
 │   ├── cli.ts               # Binary entry (thin wrapper over src/cli/)
 │   ├── types/               # Single source of truth for shared types
 │   ├── engine/              # Scanner machinery (scanner, rule-runner, registries)
-│   ├── standards/           # Growable content: WCAG 2.2, 2.1, Section 508, EN 301 549
-│   ├── rules/               # Growable content: rules organized by domain
+│   ├── standards/           # WCAG 2.2, 2.1, Section 508, EN 301 549
+│   ├── rules/               # Rules organized by domain
 │   ├── input/               # Parsers (tsx, html, css, tailwind) + file discovery
 │   ├── output/              # Formatters (terminal, json, sarif, junit, html, markdown) + theme
 │   ├── reports/             # Structured reports (coverage, vpat, certification, checklist)
+│   ├── mcp/                 # MCP server + tool handlers
+│   ├── review/              # Review candidate ranking
 │   ├── config/              # Config loading + validation
-│   ├── api/                 # Public API surface (defineRule, defineStandard, defineConfig, defineFormatter)
-│   ├── cli/                 # CLI internals (args parser, commands, help)
+│   ├── api/                 # Public API (defineRule, defineStandard, defineConfig, defineFormatter)
+│   ├── cli/                 # CLI internals
 │   └── utils/               # Zero-dep primitives (ansi, args, glob, contrast, string-width, logger)
-├── tests/                   # Mirrors src/ exactly; plus integration, snapshot, cli, fuzz, golden, fixtures
-├── docs/                    # User docs + architecture + ADRs + indexed KB (docs/kb/ for agent retrieval)
+├── tests/                   # Mirrors src/; plus integration, snapshot, cli, fuzz, golden, fixtures
+├── docs/                    # User docs + architecture + ADRs + indexed KB (docs/kb/)
 ├── examples/                # Precommit, CI, plugin examples
-├── scripts/                 # All .ts, run with bun (guards, generators, bench)
-├── CLAUDE.md                # This file
-├── README.md                # Shop window
-├── CONTRIBUTING.md          # Contributor onboarding
-├── CHANGELOG.md             # Keep a Changelog format
-├── SECURITY.md              # Vulnerability reporting + plugin trust model
-├── ACCESSIBILITY.md         # ra11y's own accessibility statement
-├── CODE_OF_CONDUCT.md
-├── LICENSE                  # MIT
-├── biome.json
-├── tsconfig.json
-└── package.json
+└── scripts/                 # All .ts, run with bun (guards, generators, bench)
 ```
 
 ## 6. The three-layer model
 
 ```
-  ┌────────────────────────────────────────────────────────┐
-  │  Standards Layer                                        │
-  │  WCAG 2.2, 2.1, Section 508, EN 301 549, …              │
-  │  Each standard is a versioned module declaring criteria │
-  └────────────────────────────────────────────────────────┘
-                            ▲
-                            │ criteria reference
-                            │
-  ┌────────────────────────────────────────────────────────┐
-  │  Criteria Layer                                         │
-  │  wcag22:1.4.3, section508:1194.22.c, en301549:9.1.4.3   │
-  │  A criterion belongs to one standard, has a level,      │
-  │  is satisfied by one or more rules                      │
-  └────────────────────────────────────────────────────────┘
-                            ▲
-                            │ satisfies: Criterion[]
-                            │
-  ┌────────────────────────────────────────────────────────┐
-  │  Rules Layer                                            │
-  │  contrast/minimum, alt-text/missing, focus/visible, …   │
-  │  A rule can satisfy multiple criteria across standards  │
-  └────────────────────────────────────────────────────────┘
+  Standards (WCAG 2.2, 2.1, Section 508, EN 301 549)
+       ▲  declares
+  Criteria (wcag22:1.4.3, section508:1194.22.c, en301549:9.1.4.3)
+       ▲  satisfies: Criterion[]
+  Rules (contrast/minimum, alt-text/missing, focus/visible)
 ```
 
-Accessibility standards overlap massively. A contrast check satisfies WCAG 1.4.3 AA, Section 508 §1194.22(c), and EN 301 549 9.1.4.3. Separating *what to check* (rules) from *why it matters* (criteria) from *which framework cares* (standards) kills duplication. Running with `--standard wcag21` vs `--standard wcag22` activates the same rule and cites the 2.1 criterion ID in output.
+Accessibility standards overlap massively. A contrast check satisfies WCAG 1.4.3 AA, Section 508 §1194.22(c), and EN 301 549 9.1.4.3. Separating *what to check* (rules) from *why it matters* (criteria) from *which framework cares* (standards) kills duplication. At registry init, the engine walks every loaded standard's `equivalentTo` field and builds a reciprocal index, so thin standards (Section 508, EN 301 549) get full coverage for free via equivalence.
 
-At registry init, the engine walks every loaded standard's `equivalentTo` field and builds a reciprocal index: `rulesBySatisfied: Map<criterionId, Set<ruleId>>`. This lets thin standards (Section 508, EN 301 549) get full coverage for free via equivalence, without reimplementing rules.
+Full walkthrough: `@docs/kb/architecture/three-layer-model.md` and `@docs/kb/architecture/rule-engine.md`.
 
-## 7. How to add a new rule
+## 7. Workflow shortcuts
 
-**Shortcut:** invoke `/add-rule <criterion-id>` and the skill orchestrates the full workflow. The steps below are what the skill does under the hood and what you do manually when the skill isn't appropriate.
+Every common authoring workflow has a skill that orchestrates the full sequence. Invoke the skill first; fall back to manual steps only when the skill is inappropriate.
 
-1. Decide the rule ID: `<domain>/<specific-name>`. Domains are the folders under `src/rules/` (contrast, focus, keyboard, aria, semantics, forms, media, motion, pointer, navigation, layout, tooltip, orientation, parsing, document).
-2. Identify every criterion the rule satisfies across all loaded standards. Consult `src/standards/*/criteria.ts`. Add cross-standard equivalents via the registry's reciprocal index.
-3. Scaffold the rule in one shot:
-   ```
-   bun scripts/scaffold-rule.ts <domain>/<slug> \
-     --satisfies wcag22:X.Y.Z,wcag21:X.Y.Z \
-     [--severity error|warning|info] [--description "..."]
-   ```
-   This writes `src/rules/<domain>/<slug>.ts`, `tests/unit/rules/<domain>/<slug>.test.ts`, `tests/fixtures/{good,bad}/<domain>-<slug>/placeholder.tsx`, and an alphabetically-inserted entry in `src/rules/index.ts`. The generated rule typechecks out of the box (its check body has a `void ctx;` line — remove it when you implement).
-4. Fill in `check()` in the generated rule file. Use `src/engine/ast-helpers.ts`; do not hand-walk ASTs. Emit context-aware suggestion strings via `ctx.emit(...)`.
-5. Replace the TODO placeholders in the rule header (normativeQuote, rationale, goodExample, badExample, description if default). Every rule file header must cite WCAG SC numbers and spec URLs — the scaffolder inserts them; don't remove them.
-6. Replace the test placeholders in `tests/unit/rules/<domain>/<slug>.test.ts` with real bad/good snippets for each `it(...)`. ≥3 positive, ≥3 negative, ≥1 edge case. Each test should name *what real or spec-derived failure mode it guards against* in its description — not rehearse the code you just wrote. "flags `<button aria-label="X">` when visible text is not a substring" is load-bearing; "the function returns 3 when given 3 inputs" is not.
-7. Replace fixture placeholders in `tests/fixtures/good/<domain>-<slug>/` and `tests/fixtures/bad/<domain>-<slug>/` with minimal reproducers. If the failure mode came from a real codebase (field report, feedback scan), prefer landing a sanitized snippet in `tests/fixtures/real-world/<case>/` (see ADR 0006) — that case survives refactors that reshape the unit test.
-8. Run `bun test tests/unit/rules/<domain>/<slug>.test.ts` until green.
-9. Commit the rule: `feat(rules): add <domain>/<slug> for <primary-sc>`. For rules under 400 LOC net diff this is a single commit covering rule + tests + fixtures + registry. For larger rules, fall back to staged commits (skeleton / logic / tests / fixtures).
-10. Run `/fix-drift` to regenerate `docs/kb/rules/<slug>.md` — that emits its own commit.
-11. Run `bun run verify` to confirm everything is green before handing off.
+- `/add-rule <criterion-id>` — new rule from WCAG criterion (evaluator-optimizer: rule-implementer + a11y-reviewer)
+- `/add-standard <id>` — new standard module
+- `/add-formatter <name>` — new output formatter
+- `/fix-drift` — regenerate auto-generated docs after rule/standard changes
+- `/verify` — full preflight check sequence
+- `/review` — code-reviewer + a11y-reviewer on a ref
+- `/bench` — performance budget check
+- `/release <version>` — version bump + changelog + tag + publish
 
-### 7a. Bug-fix workflow — real-world fixture first
+Detailed procedures live in each skill's `SKILL.md` under `.claude/skills/`.
 
-When the work is **fixing a real-world bug** (field report, feedback scan, observed regression) rather than adding a new rule from spec, invert the default: land the sanitized repro **before** the fix, not alongside it.
+### Bug-fix workflow — real-world fixture first
 
-1. Write a sanitized minimal repro of the bug at `tests/fixtures/real-world/<case>/` — `source/` tree + `assertions.ts` declaring the invariant that the fix will restore, following ADR 0006 and the `fixture-curator` subagent conventions.
-2. Commit the failing fixture first: `test(real-world): add <case> fixture capturing <bug-summary>`. The harness test should be **red** on this commit — that is the whole point: the fixture proves the bug is real and reproducible before any code change.
-3. Make the fix in `src/` with whatever change is needed.
-4. Commit the fix: `fix(<scope>): <what you changed>` — the harness test now goes green on this commit.
-5. If unit tests in `tests/unit/**` rehearsed the broken behavior, migrate that coverage — the fixture supersedes the unit test for this scenario (see §17 "Writing behavior-rehearsal unit tests"). Delete or narrow the unit test rather than duplicating the assertion.
+When fixing a real-world bug rather than adding a new rule from spec, invert the default: land the sanitized repro **before** the fix, not alongside it.
 
-The fixture-first cadence works because real-world fixtures survive refactors that reshape internal APIs — a unit test written against the current AST walk breaks when the walk changes; a fixture that scans a source tree and asserts `meta.suppressions.length === 3` keeps guarding the invariant no matter what the walk looks like inside.
+1. Sanitize the failing case at `tests/fixtures/real-world/<case>/` (see ADR 0006 and the `fixture-curator` agent). `source/` tree + `assertions.ts` declaring the invariant the fix will restore.
+2. Commit the failing fixture first: `test(real-world): add <case> fixture capturing <bug>`. Harness test should be **red** on this commit.
+3. Fix in `src/`.
+4. Commit the fix: `fix(<scope>): <what>`. Harness test now goes green.
+5. Migrate any behavior-rehearsal unit tests — delete or narrow rather than duplicate (see § 14 common mistakes).
 
-## 8. How to add a new standard
+Fixtures survive refactors that reshape internal APIs; unit tests rehearsing the bug do not.
 
-**Shortcut:** `/add-standard <id>`.
+## 8. Autonomous development workflow
 
-1. Create `src/standards/<id>/standard.ts`, `criteria.ts`, `metadata.ts`.
-2. In `criteria.ts`, enumerate every criterion as a `Criterion` record. For standards that reference WCAG, populate `equivalentTo: ["wcag22:X.Y.Z"]` so existing rules cover the new standard without changes.
-3. Register in `src/standards/index.ts`.
-4. Create `tests/unit/standards/<id>.test.ts` with golden-file tests: criterion count, level distribution, URL validity, equivalence reciprocal check.
-5. Create `tests/integration/<id>-scan.test.ts` that runs the scanner with `--standard <id>` against fixtures and asserts expected violations.
-6. Run `/fix-drift` to regenerate `docs/kb/standards/<id>.md`.
-7. Run `bun run verify`.
+This repo is designed for autonomous Claude Code sessions. Specialist subagents, skills, and hooks are inventoried under `.claude/agents/`, `.claude/skills/`, `.claude/hooks/` — `ls` those directories for the current set.
 
-## 9. How to add a new formatter
+Two patterns drive the work:
 
-**Shortcut:** `/add-formatter <name>`.
+**Orchestrator-Workers.** Main session is always the orchestrator; subagents can't spawn subagents. `/continue` reads `.claude/backlog.md`, picks one item from each active track, and fans out up to 3 parallel Agent tool calls per turn. Hard rules: never two agents on the same track in one turn, never more than 3 concurrent, main-session inline work counts against the budget. Hard cap 10 turns per invocation.
 
-1. Create `src/output/formatters/<name>.ts` exporting `defineFormatter({ id, format(result, report) })`.
-2. Register in `src/output/formatters/index.ts`.
-3. Create `tests/snapshot/<name>.test.ts` with snapshots against fixed `ScanResult` + `ReportData`.
-4. Add the format ID to the CLI's `--format` validator in `src/cli/args.ts`.
-5. Document in `docs/cli.md` if the output needs explanation.
-
-## 10. Autonomous development workflow
-
-This repo is designed for autonomous Claude Code sessions. Prefer the workflow below over ad-hoc editing.
-
-### Orchestrator-Workers (main session as orchestrator)
-
-Subagents cannot spawn subagents, so the orchestrator is always the **main** Claude session. The `/continue` skill is the driver, now a **parallel-track fanout dispatcher**:
-
-1. Read `.claude/backlog.md`.
-2. Pick the next unchecked item from each active track (D/M/R/F), skipping tracks with sequencing not yet satisfied. Up to 3 items per turn.
-3. Dispatch all selected items in a single assistant message with parallel Agent tool calls — never serially.
-4. When the specialists return, verify the combined result (`bun run verify`).
-5. Check off the backlog items in one commit (`chore(backlog): check off <n> items`).
-6. Loop. Hard cap: 10 turns per `/continue` invocation (≈ 30 items).
-
-Hard rules: never two agents on the same track in one turn; never more than 3 concurrent agents; main-session inline work counts against the 3-agent budget.
-
-### Evaluator-Optimizer (rule development)
-
-The `/add-rule` skill uses a generator+critic loop: `rule-implementer` produces, `a11y-reviewer` critiques against the WCAG normative text, feedback re-enters the generator. Max 3 iterations before reporting BLOCKED.
-
-### Specialist subagents (see `.claude/agents/`)
-
-| Agent | Purpose | Model |
-|-------|---------|-------|
-| `rule-implementer` | End-to-end rule scaffolding from a criterion ID | opus |
-| `standard-builder` | New standard modules | opus |
-| `spec-researcher` | WebFetch + summarize a11y specs | sonnet |
-| `parser-author` | In-house parsers | opus |
-| `formatter-author` | Output formatters | sonnet |
-| `fixture-generator` | Good/bad test fixtures | haiku |
-| `test-author` | Edge cases, property tests, fuzz | opus |
-| `a11y-reviewer` | Critic for rule correctness vs WCAG | opus |
-| `code-reviewer` | Independent correctness review | opus |
-| `type-smith` | Owns `src/types/` and `src/engine/ast-helpers.ts` | opus |
-| `dependency-auditor` | Enforces zero-dep invariant | sonnet |
-| `doc-writer` | Long-form docs | sonnet |
-| `benchmark-tuner` | Profiles + optimizes hotspots | opus |
-| `fixture-curator` | Real-world snippet library | sonnet |
-| `migration-author` | Breaking-change migration guides | sonnet |
-| `release-captain` | Version bump + changelog + publish | sonnet |
-
-### Skills (see `.claude/skills/`)
-
-`/add-rule`, `/add-standard`, `/add-formatter`, `/verify`, `/review`, `/fix-drift`, `/bench`, `/standards-audit`, `/session-state`, `/research-latest`, `/continue`, `/release`.
-
-### Hooks (see `.claude/hooks/`)
-
-- `session-start.ts` — dashboard (branch, phase progress, rule count, test status)
-- `user-prompt-submit.ts` — inject current state header into every prompt
-- `pre-tool-use.ts` — block dangerous Bash/Edit patterns
-- `pre-commit.ts` — full verify gate on `git commit`
-- `post-edit.ts` — format + typecheck + targeted tests after any Edit/Write
-- `post-tool-failure.ts` — audit log
-- `subagent-stop.ts` — validate subagent output shape; reject rules missing WCAG citation
-- `stop.ts` — pre-yield verification sweep
-- `notification.ts` — system notification on long idle
-- `instructions-loaded.ts` — log which CLAUDE.md/rules fired
+**Evaluator-Optimizer.** `/add-rule` loops rule-implementer → a11y-reviewer (generator → critic against WCAG normative text). Max 3 iterations before reporting BLOCKED.
 
 Never circumvent hooks. If a hook blocks you, fix the underlying problem.
 
-## 11. Commit discipline (mandatory)
+## 9. Commit discipline (mandatory)
 
 Every commit — whether you author it or a subagent does — follows these rules. They exist because autonomous runs must be debuggable, reviewable, and interruptible.
 
@@ -298,11 +158,11 @@ Every commit — whether you author it or a subagent does — follows these rule
    - `docs(kb): add wcag 1.4.3 knowledge base entry`
    - `refactor(engine): extract standard-filter from rule-runner`
 
-A typical rule ships in **2 commits** (feat(rules) covering rule + tests + fixtures + registry, plus chore(kb) for the regenerated KB). The scaffolder (`bun scripts/scaffold-rule.ts`) eliminates the value of splitting skeleton/logic/tests/fixtures — they're produced together, verify at once, commit at once. Fall back to staged 4-5 commits only when a rule legitimately exceeds the 400-LOC cap. Standards, parsers, and large refactors stay on staged cadence.
+A typical rule ships in **2 commits** (feat(rules) covering rule + tests + fixtures + registry, plus chore(kb) for the regenerated KB). The scaffolder (`bun scripts/scaffold-rule.ts`) eliminates the value of splitting skeleton/logic/tests/fixtures — they're produced together, verify at once, commit at once. Fall back to staged 4-5 commits only when a rule legitimately exceeds the 400-LOC cap.
 
-## 12. Documentation is a deliverable
+## 10. Documentation is a deliverable
 
-Docs are enforced, not optional. When you change behavior, update docs in the same PR. Agents trying to retrieve knowledge do not read source — they read `docs/kb/`.
+Docs are enforced, not optional. When you change behavior, update docs in the same PR. Agents retrieving knowledge read `docs/kb/`, not source.
 
 - **Public API exports in `src/api/`** must have TSDoc with `@param`, `@returns`, `@example`. Enforced by `scripts/check-tsdoc.ts`.
 - **Mermaid diagrams** ≤7 nodes, single-direction, labeled edges, preceded by prose. Enforced by `scripts/check-mermaid.ts`.
@@ -310,9 +170,9 @@ Docs are enforced, not optional. When you change behavior, update docs in the sa
 - **ADRs** in `docs/adr/NNNN-title.md` are append-only; a reversed decision gets a new ADR marked `supersedes 00NN`.
 - **Every change type has required doc updates** — see `docs/contributing/change-doc-matrix.md`.
 
-## 13. Performance budget
+## 11. Performance budget
 
-Enforced in CI by `scripts/bench.ts`:
+Enforced in CI by `scripts/bench.ts`; history in `docs/performance.md`.
 
 | Scenario | Budget |
 |----------|--------|
@@ -321,9 +181,7 @@ Enforced in CI by `scripts/bench.ts`:
 | 100 files, 10k LOC | ≤ 500 ms |
 | 1000 files, 100k LOC | ≤ 3 s |
 
-A regression fails the build. Benchmark history is committed to `docs/performance.md`.
-
-## 14. Semver policy
+## 12. Semver policy
 
 - **Patch** (0.1.x): bug fixes, refactors, docs, tightening detection on an existing rule.
 - **Minor** (0.x.0): new rules, standards, formatters, CLI flags, plugin API additions, widening or loosening a rule's detection.
@@ -331,11 +189,7 @@ A regression fails the build. Benchmark history is committed to `docs/performanc
 
 v0.x is rapid iteration — treat the plugin API as semi-stable until v1.0.
 
-## 15. Rule coverage matrix (v0.1.0 target)
-
-The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every row marked "auto" or "partial" under WCAG 2.1 A+AA and WCAG 2.2 A+AA additions ships in v0.1.0. Every manual-only criterion gets a checklist entry in `src/reports/checklist.ts`.
-
-## 16. Release process
+## 13. Release process
 
 1. All v0.1.0 backlog items checked off.
 2. `bun run verify` + `bun run build` green.
@@ -344,7 +198,11 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 5. `release.yml` publishes to npm on tag push with `npm publish --provenance`.
 6. GitHub release with changelog excerpt.
 
-## 17. Common mistakes
+Rule coverage matrix for v0.1.0 lives in `@docs/kb/standards/wcag22.md` — every row marked "auto" or "partial" under WCAG 2.1 A+AA and 2.2 A+AA additions ships in v0.1.0. Manual-only criteria get a checklist entry in `src/reports/checklist.ts`.
+
+## 14. Common mistakes
+
+Mistakes specific to consumer-model / MCP response shape design live in `@docs/kb/architecture/ai-first-consumer.md` and the path-scoped rule at `.claude/rules/mcp-response-shapes.md`. This list covers the rest:
 
 - Adding a dependency "just for this one thing." → implement in `src/utils/`.
 - Generic fix suggestions. → inspect surrounding AST nodes and produce context-aware text.
@@ -354,32 +212,23 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 - Skipping `/verify`. → precommit hooks catch it, but develop the habit.
 - `// @ts-ignore`. → fix the type.
 - Committing without a WCAG citation in the rule header. → CI rejects.
-- Tuning heuristics for "human reviewer fatigue." → the consumer is an agent (see § 1, Consumer model). Surface honestly with enough context for the agent to triage, instead of suppressing or downgrading.
-- Trimming `meta` fields to look terse. → those fields are scan-confidence telemetry the agent uses to plan its next call.
-- Encoding a WCAG exemption (logotype, process-page, essential presentation) as a heuristic suppression in a finder. → spec exemptions are conceptual; their *detection* from static analysis is a heuristic on weaker evidence than the agent has. Point users and agents at the criterion-level disable pragma instead: `<!-- ra11y-disable wcag22:X.Y.Z -->`. Heuristic suppression risks silent false negatives on real violations.
-- Adding a "likely-X" / "low-priority" / "verbose-only" bucket to move noisy candidates out of the primary list. → labeled buckets are suppression in disguise; once consumers skip-by-default, the silent-miss failure mode is identical to hiding the finding outright (see § 1, "Labeled buckets are suppression too"). A bucket is only honest when its label is provable from the code (e.g. `likelyIrrelevant` for "no `<video>` elements in scanned files"). Filename, identifier, or spec-exemption heuristics earn reason-text enrichment, not a bucket.
-- Splitting the difference on a field report that asks for less noise. → failure modes are asymmetric (see § 1, "Failure modes are asymmetric"). Over-surfacing costs the agent seconds and is reversible; under-surfacing costs the user an accessibility regression and is silent. When in doubt, surface with better `reason` text; never bucket-then-filter.
-- Adding a numeric-threshold gate ("only flag when duration ≤ 5s", "size ≥ 100px", "≥ N call sites"). → numeric thresholds are suppression in disguise (see § 1, "Numeric-threshold heuristics are suppression"). Pick any cutoff and you silent-miss the finding on the other side. Encode the numeric evidence in the `reason` text as additive context and let the agent read surrounding code to judge.
-- Emitting sentinel-empty values for optional fields (`newText: ""`, `snippet: ""`, `{ items: [] }` on an error path). → ambiguous field shapes are dishonest (see § 1, "Ambiguous field shapes are dishonest"). Conditional-spread the field at the response-assembly site so it is present only when meaningful, and let `undefined`/omission be the "no value" signal. An agent cannot tell empty-as-data from empty-as-absent, and the asymmetric cost of guessing wrong is silent.
-- Returning success with zero files / zero findings and no warning. → zero-output success is ambiguous failure (see § 1, "Zero-output success is ambiguous failure"). A clean scan of `cwd: "/tmp/wrong-path"` is indistinguishable from a clean scan of a real codebase. Emit a top-level `warnings: string[]` with a structured code (`scanned_zero_files`, `root_source_defaulted`, `no_config_found`, `tailwind_detected_css_undercounted`, `template_files_parsed_as_literal`) whenever a plausibly-malformed input could explain the empty result. Never let a silent "0 of 0" pass for a clean scan.
-- Mashing categorically different sub-buckets into a single headline counter (`manualReviewRequired: 21` summing 5 grounded candidates with 16 bare-criterion prompts; `fixSuggestionAvailable: 2` summing mechanical edits with prose-only guidance). → composite headline counts are dishonest (see § 1, "Composite headline counts are dishonest"). The agent budgets against the headline; the inflated number misclassifies the work and labels on sub-fields don't fix it. Split into two top-level counters (`actionableManualItems` + `untargetedCriteria`, `mechanicalEditsAvailable` + `guidanceFixesAvailable`) and lead the summary string with the actionable count.
-- Hardcoding inventory counts in docs ("12-tool MCP server", "49 rules", "four standards", "six formatters"). → these numbers change every release and the docs silently go stale; readers then lose trust when the count doesn't match reality. Write docs so they stay correct as the inventory grows: name the items that matter (`scan_project`, `checklist`, `suggest_fix`, …) without counting them, or point at the canonical source (`tools/list`, `src/rules/index.ts`, `src/standards/index.ts`). Specific counts are acceptable only in changelog entries, release notes, or generated reports where the date/version anchors the number.
-- Writing behavior-rehearsal unit tests for a real-world bug. → "the ranker orders alphabetically on ties", "the cap returns 5 entries when given 10" — these re-assert the code you just wrote and need to change every time you refactor; they catch typos, not regressions in behavior the user cares about. A test earns its keep when it encodes either (a) an invariant that survives refactors ("every pragma declaration has a line number," "no finder emits a suppression by filename pattern") or (b) a real-world failure mode with a sanitized repro. For (b), **land the snippet under `tests/fixtures/real-world/<case>/` before writing the fix** (see §7a "Bug-fix workflow — real-world fixture first" and ADR 0006). Fixtures survive internal rewrites that reshape the unit-test surface; a behavior-rehearsal unit test for the same bug does not. On any bug fix, the rule is: if you find yourself writing a unit test that reproduces a production failure, stop and move the repro into a real-world fixture instead.
+- Hardcoding inventory counts in docs ("49 rules", "four standards"). → these rot between releases. Name the items that matter or point at the canonical source (`tools/list`, `src/rules/index.ts`). Specific counts belong only in changelog entries, release notes, or generated reports where the date/version anchors them.
+- Writing behavior-rehearsal unit tests for a real-world bug. → "the ranker orders alphabetically on ties", "the cap returns 5 entries when given 10" — these re-assert the code you just wrote and need to change every time you refactor; they catch typos, not regressions in behavior the user cares about. A test earns its keep when it encodes either (a) an invariant that survives refactors ("every pragma declaration has a line number") or (b) a real-world failure mode with a sanitized repro. For (b), **land the snippet under `tests/fixtures/real-world/<case>/` before writing the fix** (see § 7 bug-fix workflow). Fixtures survive internal rewrites; behavior-rehearsal unit tests for the same bug do not.
 
-## 18. When in doubt
+## 15. When in doubt
 
 - WCAG interpretation: quote the spec normatively in the rule file and link to `https://www.w3.org/TR/WCAG22/#<sc-anchor>`.
 - Design choice not covered here: prefer smallest code, clearest types, zero deps, spec-accurate, test-first.
 - Stuck after 3 fix attempts on a rule: report "BLOCKED: <reason>" and stop.
 - Anything auth / push / external / irreversible: confirm with the user before acting.
 
-## 19. Contact points
+## 16. Contact points
 
 - WCAG 2.2 spec: https://www.w3.org/TR/WCAG22/
 - WCAG 2.1 spec: https://www.w3.org/TR/WCAG21/
-- Architecture deep dive: `docs/kb/architecture/three-layer-model.md` and `docs/kb/architecture/rule-engine.md`
-- Rule authoring guide: `docs/kb/patterns/writing-a-rule.md`
-- Standard authoring guide: `docs/kb/patterns/writing-a-standard.md`
-- Gotchas: `docs/kb/gotchas/`
+- Architecture: `@docs/kb/architecture/` (three-layer-model, rule-engine, mcp-server, mcp-sampling, output-formatters, reports, registries, input-parsers, ai-first-consumer)
+- Rule authoring guide: `@docs/kb/patterns/writing-a-rule.md`
+- Standard authoring guide: `@docs/kb/patterns/writing-a-standard.md`
+- Gotchas: `@docs/kb/gotchas/`
 
 Ship something beautiful.
