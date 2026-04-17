@@ -16,9 +16,11 @@ Tracks below are independent. `/continue` picks the next open item from each of 
 
 Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals) · **Q2** (agent-consumer feedback round 3). Track Q (rounds 1-2) closed 2026-04-17.
 
-Staged tracks: (none). Tracks S and E were promoted on 2026-04-17 after the user directed "go all the way without releasing until finalized" — M/R/F are complete, so the remaining pre-release work spans S and E. ADR 0005 §Follow-up work still applies to the speculative tool choices inside S; foundation items (sampling.ts, capability, prompt library, KB docs) are safe to build.
+Staged tracks: **C** (conformance-claim gaps — v0.3.0 foundation + v1.0.0 capstone). Tracks S and E were promoted on 2026-04-17 after the user directed "go all the way without releasing until finalized" — M/R/F are complete, so the remaining pre-release work spans S and E. ADR 0005 §Follow-up work still applies to the speculative tool choices inside S; foundation items (sampling.ts, capability, prompt library, KB docs) are safe to build.
 
 Track Q was added on 2026-04-17 in response to a 10-agent independent eval brief — MCP shape honesty + silent-failure elimination, all derived from real consumer pain on an external React codebase.
+
+Track C was added on 2026-04-17 from a gap analysis on "what's missing to let an agent fully claim WCAG 2.1 AA." Four gaps: runtime-evidence ingest, attestation ledger, process-level scope, conformance statement. None widen detection (no new rules); they widen what an agent can defensibly *say* after using ra11y.
 
 ---
 
@@ -229,6 +231,57 @@ Owner: main session + general-purpose. Source: a 10-agent parallel eval against 
 - **Rule-catalog reorganization** — resolve `parsing/duplicate-id` + `parsing/html-has-lang` vs `document/lang-attribute`; clarify `semantics/label-in-name` vs `forms/labels-required` vs `forms/non-empty-label`. Renames need a deprecation path (alias old IDs for one major release). Costs a semver major.
 - **Server-side typecheck/parse verification** on `suggest_fix` suggestions. Expensive (spins up a parse per suggestion); might be worth it for high-stakes mechanical fixes but not across the board.
 - **SARIF output for GitHub annotations** — already emit SARIF; "::error" annotation mapping is a small transform. Tied to Q2-SARIF-DOCS; promote if demand surfaces.
+
+---
+
+## Track C — Conformance-claim gaps
+
+Owner: main session + `spec-researcher` + `doc-writer`. Staged; do not dispatch alongside active tracks. ra11y today produces *signals* (findings, review candidates, coverage hints). It does not produce a *claim*. Track C closes the four gaps that separate the two — attestation ledger, runtime-evidence ingest, process-level scope, conformance statement. **No new rules**; the track widens what an agent can defensibly say after using the tool.
+
+Sequencing (cross-gap, soft): attestations first (unlocks evidence semantics everywhere else), then axe ingest (wide-reach runtime coverage), then process scope, then conformance capstone. Within each gap items are ordered by the ADR-then-foundation-then-surface pattern.
+
+### v0.3.0 — attestation ledger (foundation)
+
+- [ ] **C-ATTEST-ADR** ADR `docs/adr/0009-conformance-attestation-ledger.md` — on-disk format, identity fields (criterion + scope + evidence type + commit), freshness policy (when does an attestation go stale), relationship to baseline + suppressions, whether attestations are per-page or per-process.
+- [ ] **C-ATTEST-STORE** `.ra11y-attestations.json` schema + `src/engine/attestations.ts` load/save primitives. Mirrors `baseline.ts` shape discipline: versioned envelope, stable key order, 2-space indent.
+- [ ] **C-ATTEST-TOOL** `attest_criterion` MCP tool — records `{ criterionId, verdict: "pass"|"fail"|"n/a", scope: { path | process }, evidence: string, reviewer: string }` to the ledger. Stamps commit hash. Rejects verdicts without evidence text (empty evidence would be the same shape-honesty failure as bare `ra11y-disable` pragmas — Q2-REASON precedent).
+- [ ] **C-ATTEST-LIST** `list_attestations` MCP tool — returns the active ledger, freshness-annotated (entries pointing at files changed since the stamped commit surface `stale: true`).
+- [ ] **C-ATTEST-PRUNE** `ra11y attestations prune` CLI subcommand — drops attestations pointing at deleted files. Mirrors Q2-PRUNE's pattern (commit ebbe753); reuses the pure-function + injectable-predicate shape.
+- [ ] **C-ATTEST-CHECKLIST** `checklist` response surfaces per-criterion `attestation?: { verdict, stale?, evidence }`. Agents skip verdicted non-stale criteria; surface stale + un-attested only. Keeps the "surface, don't suppress" doctrine — stale attestations resurface automatically on code change.
+- [ ] **C-SUPPRESSION-ATTEST** `ra11y-disable` pragmas with reason text become attestation entries at scan time (one per pragma). Pairs with Q2-REASON + Q2-LISTSUPP — the reason IS the evidence. Bare pragmas (flagged by Q2-REASON's `suppression/no-reason` finder) get `verdict: "pending"` until reason is filled in.
+
+### v0.3.0 — runtime evidence bridge
+
+- [ ] **C-RUNTIME-ADR** ADR `docs/adr/0010-runtime-evidence-ingest.md` — scope boundary: which runtime sources ra11y accepts (axe-core first; Pa11y, Lighthouse, manual keyboard tests later), normalized internal shape, reconciliation rules when a finding exists in both static + runtime.
+- [ ] **C-AXE-SCHEMA** Normalized runtime-result type in `src/types/runtime-result.ts`. Axe-core's JSON output maps to `{ ruleId, criterionId, nodes: [{ filePath?, selector, html }], verdict }`. Reuse `findingId` + `groupKey` hashing so identity works across static + runtime without a parallel keyspace.
+- [ ] **C-AXE-INGEST** `ingest_runtime_results` MCP tool — accepts a path to an axe-core JSON file (or inline JSON), normalizes, stamps commit, stores alongside attestations. Agents run axe in their Playwright/Vitest suite and hand the path to ra11y. No network; no axe-core runtime dep (we parse its output, we don't embed it — zero-deps invariant holds).
+- [ ] **C-RUNTIME-MAP** Axe-rule → WCAG criterion mapping table in `src/standards/axe-mappings.ts`. Pure data, same shape discipline as standard `equivalentTo`. Covers the runtime-only criteria called out in the gap analysis: 4.1.3 status messages, 1.4.10 reflow, 1.4.11 non-text contrast under computed styles, 2.1.2 keyboard trap, 2.4.3 focus order, 2.4.7 focus visible state-dependent cases, 2.2.1 session timing.
+- [ ] **C-COVERAGE-MERGE** `coverage` report integrates runtime results + attestations — per-criterion status becomes `{ static: "pass"|"fail"|"manual", runtime?: "pass"|"fail"|"absent", attested?: "pass"|"fail"|"stale" }`. The aggregate "pass" requires at least one positive source; `manual` criteria fall back to the attestation ledger. Agents see exactly which source signed off on each criterion.
+
+### v0.3.0 — process-level scope
+
+- [ ] **C-PROCESS-ADR** ADR `docs/adr/0011-process-level-scope.md` — `processes: [{ name, pages: [string] }]` config primitive; how page ordering is captured; which criteria run at process level vs page level; shape of `scan_process` input/output.
+- [ ] **C-PROCESS-CONFIG** `processes` field in `ra11y.config.ts` + schema validation. Each process is an ordered list of page paths (or URL patterns for runtime-ingest cases).
+- [ ] **C-PROCESS-SCAN** `scan_process` MCP tool — takes a process name, scans each page in order, runs process-level checks: wcag22:3.2.3 (consistent navigation across the ordered set), 3.2.4 (consistent identification), 2.4.5 (multiple ways at process level, not just page level).
+- [ ] **C-PROCESS-CONSISTENCY** Upgrade `src/review/finders/consistent-navigation.ts` to honor the process config when present. The existing heuristic route discovery becomes fallback, not primary signal — deterministic evidence beats inference per CLAUDE.md §1 doctrine.
+- [ ] **C-PROCESS-IDENT** New finder `src/review/finders/consistent-identification.ts` for wcag22:3.2.4. Compares button/link labels + aria-labels across process pages; divergent labels for the same semantic action surface as review candidates with the divergent pairs cited in the `reason`.
+
+### v1.0.0 — conformance capstone
+
+- [ ] **C-CONFORM-ADR** ADR `docs/adr/0012-conformance-statement-output.md` — what a formal claim emits; how agent evidence is cited; distinction from VPAT (procurement-facing) vs conformance statement (claim-facing).
+- [ ] **C-CONFORM-STATEMENT** New report `src/reports/conformance-statement.ts` — emits the formal claim per W3C's conformance-claim requirements: scope, conformance level (A/AA/AAA), date, WCAG version, technologies relied upon, user agents tested, evaluator identity, evidence bundle (findingIds + attestation IDs + runtime-result hashes). **Refuses to emit when coverage is incomplete** — honest failure over false claim.
+- [ ] **C-CONFORM-SIGN** Signed evidence bundle — SHA-256 over (attestation ledger + runtime results + commit hash) stamped into the conformance statement. Tamper-evident; re-emit on any change. Zero-dep (Node's `crypto` module is already allowed by the network-isolation rule).
+- [ ] **C-CONFORM-DOC** `docs/conformance.md` — end-to-end guide: how an agent takes a project from "scanned clean" through "fully attested" to "signed conformance statement." Cites every tool call in order with expected output shapes; the canonical reference for an agent being handed "make this AA-conformant" with no prior context.
+
+### Dependencies + interactions with Track S
+
+Track S speculative tools (`verdict-candidate`, `draft-vpat-narrative`, `resolve-component`) become concretely useful once **C-ATTEST-TOOL** lands — their output is evidence the agent writes to the ledger. Track C resolves Track S's "pick 1–2 speculative tools" decision (ADR 0005 §Follow-up): `verdict-candidate` is the natural first pick because its output IS an attestation entry. Promote Track S `[!]` items to `[ ]` once C-ATTEST-TOOL is merged.
+
+### Considered and rejected
+
+- **Embed axe-core as a runtime dep.** Rejected per **§3 invariant 1** (zero runtime deps). Parse axe's JSON output; don't pull axe-core into the install. Agents already run axe in their test harness; they hand us the JSON path.
+- **In-tool headless browser (Playwright / Puppeteer).** Rejected per zero-deps + MCP-first-consumer framing — the agent already runs the browser in its test harness. We ingest; we don't drive.
+- **Blanket "ra11y verifies conformance" marketing.** Rejected — the conformance statement will cite evidence sources; ra11y is the aggregator, the attestation is the agent's (or human's) word, and the signed bundle is what survives audit. Honesty > reach.
 
 ---
 
