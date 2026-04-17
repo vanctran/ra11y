@@ -21,7 +21,12 @@ export type ScanWarningCode =
   | "no_config_found"
   | "tailwind_detected_css_undercounted"
   | "template_files_parsed_as_literal"
-  | "scanned_build_artifacts_present";
+  | "scanned_build_artifacts_present"
+  // scan_diff hunksOnly mode: the comparison ref resolved but produced
+  // no hunks (e.g. clean working tree against HEAD). Zero findings in
+  // this shape would otherwise read as "clean codebase" — the warning
+  // tells the agent the comparison was a no-op, not a green scan.
+  | "no_hunks_in_comparison";
 
 export interface WarningInputs {
   /** Count of parseable files the scan actually evaluated. */

@@ -22,7 +22,14 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { BASELINE_FILENAME, type BaselineFile, loadBaseline } from "../engine/baseline.ts";
-import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
+import {
+  filesChangedSince,
+  getChangedHunks,
+  gitRoot,
+  type HunkRange,
+  isInsideHunk,
+  stagedFiles,
+} from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import {
   errorResult,
@@ -42,7 +49,7 @@ export const scanDiffTool: McpTool = {
   def: {
     name: "scan_diff",
     description:
-      'Scan the project and return ONLY the violations that are not already present in a baseline snapshot — the regression-focused cousin of `baseline` (mode: "check"). Use when you want a general "what changed since this snapshot?" primitive rather than the adopt-on-messy-codebase workflow.\n\nFull scan telemetry (`activeNativeWrappers`, `rulesEvaluated`, `analysisCoverage`, per-extension file counts) rides along so you can judge whether the scan had teeth before acting on the delta.\n\nThe baseline file defaults to `.ra11y-baseline.json` in `cwd`. Override with `baselinePath` (absolute, or cwd-relative). Missing / malformed / version-mismatched files come back as a structured error — generate one with `baseline` (mode: "create") first.\n\nNarrow the scan scope with `changedOnly: true` (staged files only) or `since: "main"` (files changed vs a ref, plus uncommitted WIP) — identical semantics to `scan_project`. `additionalPaths` bypasses `.gitignore` / default build-dir skips to include post-compile CSS/HTML.',
+      'Scan the project and return the subset of violations that represents "what changed" — by default, the delta against a baseline snapshot (the regression-focused cousin of `baseline` mode: "check"). Pass `hunksOnly: true` to switch to git-hunk-intersection mode: only findings whose line falls inside a `git diff --unified=0 <comparisonRef>` hunk surface, making this the right primitive for PR-review agents gating on "did this PR introduce a finding?"\n\nBaseline mode (default): the baseline file defaults to `.ra11y-baseline.json` in `cwd`. Override with `baselinePath` (absolute, or cwd-relative). Missing / malformed / version-mismatched files come back as a structured error — generate one with `baseline` (mode: "create") first.\n\nHunks mode (`hunksOnly: true`): baseline loading is skipped; the comparison is against `comparisonRef` (default `HEAD`). Not-a-git-repo and unknown-ref conditions surface as structured error envelopes; a ref that resolves but produces no hunks surfaces as `warnings: ["no_hunks_in_comparison"]` with zero findings (honest: the comparison was a no-op, not a clean scan).\n\nFull scan telemetry (`activeNativeWrappers`, `rulesEvaluated`, `analysisCoverage`, per-extension file counts) rides along so you can judge whether the scan had teeth before acting on the delta. Narrow the scan scope with `changedOnly: true` or `since: "main"`. `additionalPaths` bypasses `.gitignore` / default build-dir skips to include post-compile CSS/HTML.',
     inputSchema: {
       type: "object",
       properties: {
@@ -92,101 +99,283 @@ export const scanDiffTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into underlying lists (parseErrorFiles, opaqueCustomComponentNames, rulesByExtension).",
         },
+        hunksOnly: {
+          type: "boolean",
+          description:
+            'When true, skip the baseline entirely and filter findings to those whose `line` falls inside a `git diff --unified=0 <comparisonRef>` hunk. The right primitive for PR-review agents: "did this change introduce a finding?" rather than "is this finding in the snapshot?". Baseline-mode remains the default when false/omitted.',
+        },
+        comparisonRef: {
+          type: "string",
+          description:
+            "Git ref to diff against in hunks mode (default `HEAD`). Use `main`, `origin/main`, `HEAD~1`, a commit SHA, etc. Ignored unless `hunksOnly: true`.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
-  async handler(params, session) {
+  handler(params, session) {
     const explicitCwd = strParam(params, "cwd");
     const spawnCwd = process.cwd();
     const cwd = explicitCwd ?? gitRoot(spawnCwd) ?? spawnCwd;
-    const baselineRel = strParam(params, "baselinePath");
-    const baselinePath = resolveBaselinePath(baselineRel, cwd);
-
-    // Load-or-error first so a missing/malformed baseline fails fast
-    // without spending the scan budget. Error envelopes match the
-    // baseline tool's check-mode wording so agents can reuse the same
-    // recovery logic (see tool-baseline.ts).
-    if (!existsSync(baselinePath)) {
-      return errorResult({
-        code: "baseline-not-found",
-        message: `Baseline file not found at ${baselinePath}. Run the \`baseline\` tool with mode: "create" first.`,
-        details: { baselinePath },
-        remediation: 'Call `baseline` with mode: "create" to write the file, then retry.',
-      });
-    }
-    let baseline: BaselineFile;
-    try {
-      const loaded = await loadBaseline(baselinePath);
-      if (loaded === null) {
-        return errorResult({
-          code: "baseline-not-found",
-          message: `Baseline file not found at ${baselinePath}.`,
-          details: { baselinePath },
-        });
-      }
-      baseline = loaded;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return errorResult({
-        code: "baseline-load-failed",
-        message: `Failed to load baseline at ${baselinePath}: ${message}`,
-        details: { baselinePath, cause: message },
-        remediation:
-          'Regenerate the baseline with `baseline` mode: "create" if the file is malformed or version-mismatched.',
-      });
-    }
-
-    const projectConfig = await session.loadProjectConfig(cwd);
-    const standards = resolveStandards(strParam(params, "standard"), session);
-    const roots = resolveScanRoots(params, cwd);
-    const t0 = performance.now();
-    const baseFiles = await parseFiles(roots, session, cwd);
-    const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
-    const additionalFiles =
-      additionalPaths.length > 0 ? await parseExplicitPaths(additionalPaths, session, cwd) : [];
-    const files = mergeFilesByPath(baseFiles, additionalFiles);
-    if (files.length === 0) {
-      return textResult(
-        buildEmptyFilesResponse({ baseline, baselinePath, cwd, mode: describeMode(params) }),
-      );
-    }
-    const { formatted } = await runScanAndFormat(
-      files,
-      session,
-      standards,
-      strParam(params, "minSeverity"),
-      session.effectiveRules(projectConfig),
-      {
-        fromFile: projectConfig.nativeWrappers,
-        fromSession: session.config.nativeWrappers,
-      },
-      cwd,
-      params["verboseMeta"] === true,
-    );
-    logger.debug(`scan_diff: ${files.length} files in ${ms(t0)}ms`);
-
-    const baselineHashes = new Set(baseline.violations.map((v) => v.hash));
-    const { newFiles, newCount } = filterToNewFindings(formatted.files, baselineHashes);
-
-    return textResult({
-      mode: "diff",
-      baselinePath,
-      baselineCount: baseline.violations.length,
-      baselineGeneratedAt: baseline.generatedAt,
-      newCount,
-      newViolations: newFiles,
-      meta: {
-        ...formatted.meta,
-        scannedRoot: cwd,
-        scanMode: describeMode(params),
-        configSource: projectConfig.sourcePath,
-        baselineVersion: baseline.version,
-      },
-      nextStep: buildNextStep(newCount, newFiles),
-    });
+    const hunksOnly = params["hunksOnly"] === true;
+    if (hunksOnly) return handleHunksMode(params, session, cwd);
+    return handleBaselineMode(params, session, cwd);
   },
 };
+
+/**
+ * Baseline mode — the original `scan_diff` behavior, preserved as the
+ * default. Loads a baseline snapshot and returns findings whose
+ * `findingId` isn't in that snapshot.
+ */
+async function handleBaselineMode(
+  params: Record<string, unknown>,
+  session: import("./session.ts").McpSession,
+  cwd: string,
+) {
+  const baselineRel = strParam(params, "baselinePath");
+  const baselinePath = resolveBaselinePath(baselineRel, cwd);
+
+  // Load-or-error first so a missing/malformed baseline fails fast
+  // without spending the scan budget. Error envelopes match the
+  // baseline tool's check-mode wording so agents can reuse the same
+  // recovery logic (see tool-baseline.ts).
+  if (!existsSync(baselinePath)) {
+    return errorResult({
+      code: "baseline-not-found",
+      message: `Baseline file not found at ${baselinePath}. Run the \`baseline\` tool with mode: "create" first.`,
+      details: { baselinePath },
+      remediation: 'Call `baseline` with mode: "create" to write the file, then retry.',
+    });
+  }
+  let baseline: BaselineFile;
+  try {
+    const loaded = await loadBaseline(baselinePath);
+    if (loaded === null) {
+      return errorResult({
+        code: "baseline-not-found",
+        message: `Baseline file not found at ${baselinePath}.`,
+        details: { baselinePath },
+      });
+    }
+    baseline = loaded;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return errorResult({
+      code: "baseline-load-failed",
+      message: `Failed to load baseline at ${baselinePath}: ${message}`,
+      details: { baselinePath, cause: message },
+      remediation:
+        'Regenerate the baseline with `baseline` mode: "create" if the file is malformed or version-mismatched.',
+    });
+  }
+
+  const projectConfig = await session.loadProjectConfig(cwd);
+  const standards = resolveStandards(strParam(params, "standard"), session);
+  const roots = resolveScanRoots(params, cwd);
+  const t0 = performance.now();
+  const baseFiles = await parseFiles(roots, session, cwd);
+  const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
+  const additionalFiles =
+    additionalPaths.length > 0 ? await parseExplicitPaths(additionalPaths, session, cwd) : [];
+  const files = mergeFilesByPath(baseFiles, additionalFiles);
+  if (files.length === 0) {
+    return textResult(
+      buildEmptyFilesResponse({ baseline, baselinePath, cwd, mode: describeMode(params) }),
+    );
+  }
+  const { formatted } = await runScanAndFormat(
+    files,
+    session,
+    standards,
+    strParam(params, "minSeverity"),
+    session.effectiveRules(projectConfig),
+    {
+      fromFile: projectConfig.nativeWrappers,
+      fromSession: session.config.nativeWrappers,
+    },
+    cwd,
+    params["verboseMeta"] === true,
+  );
+  logger.debug(`scan_diff: ${files.length} files in ${ms(t0)}ms`);
+
+  const baselineHashes = new Set(baseline.violations.map((v) => v.hash));
+  const { newFiles, newCount } = filterToNewFindings(formatted.files, baselineHashes);
+
+  return textResult({
+    mode: "diff",
+    baselinePath,
+    baselineCount: baseline.violations.length,
+    baselineGeneratedAt: baseline.generatedAt,
+    newCount,
+    newViolations: newFiles,
+    meta: {
+      ...formatted.meta,
+      scannedRoot: cwd,
+      scanMode: describeMode(params),
+      configSource: projectConfig.sourcePath,
+      baselineVersion: baseline.version,
+    },
+    nextStep: buildNextStep(newCount, newFiles),
+  });
+}
+
+/** Default comparison ref for hunks mode when the caller omits `comparisonRef`. */
+const DEFAULT_COMPARISON_REF = "HEAD";
+
+/**
+ * Hunks mode — filter findings to those whose `(filePath, line)` falls
+ * inside a `git diff --unified=0 <ref>` hunk for the comparison ref.
+ * No baseline is loaded. Structured errors cover not-a-git-repo and
+ * unknown-ref; a ref that resolves to no hunks surfaces as a soft
+ * `warnings: ["no_hunks_in_comparison"]` so zero findings aren't
+ * mistaken for a clean scan.
+ */
+async function handleHunksMode(
+  params: Record<string, unknown>,
+  session: import("./session.ts").McpSession,
+  cwd: string,
+) {
+  const comparisonRef = strParam(params, "comparisonRef") ?? DEFAULT_COMPARISON_REF;
+  const hunksResult = getChangedHunks(comparisonRef, cwd);
+  if (hunksResult.status === "not-a-git-repo") {
+    return errorResult({
+      code: "not-a-git-repo",
+      message: `hunksOnly mode requires a git repository — \`${cwd}\` is not inside one.`,
+      details: { cwd },
+      remediation:
+        "Run scan_diff with hunksOnly from inside a git checkout, or drop hunksOnly to use baseline mode.",
+    });
+  }
+  if (hunksResult.status === "unknown-ref") {
+    return errorResult({
+      code: "unknown-ref",
+      message: `Comparison ref \`${comparisonRef}\` does not resolve in the git repo at \`${cwd}\`.`,
+      details: { cwd, comparisonRef },
+      remediation:
+        "Pass an existing ref via `comparisonRef` (e.g. `main`, `HEAD~1`, a commit SHA). Fetch the remote first if you're comparing against an origin branch.",
+    });
+  }
+
+  const projectConfig = await session.loadProjectConfig(cwd);
+  const standards = resolveStandards(strParam(params, "standard"), session);
+  const roots = resolveScanRoots(params, cwd);
+  const t0 = performance.now();
+  const baseFiles = await parseFiles(roots, session, cwd);
+  const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
+  const additionalFiles =
+    additionalPaths.length > 0 ? await parseExplicitPaths(additionalPaths, session, cwd) : [];
+  const files = mergeFilesByPath(baseFiles, additionalFiles);
+
+  const hunksByFile =
+    hunksResult.status === "ok"
+      ? hunksResult.hunksByFile
+      : (new Map<string, readonly HunkRange[]>() as ReadonlyMap<string, readonly HunkRange[]>);
+  const noHunksWarning =
+    hunksResult.status === "no-hunks" ? { warnings: ["no_hunks_in_comparison"] as const } : {};
+
+  if (files.length === 0) {
+    return textResult({
+      mode: "diff",
+      newCount: 0,
+      newViolations: [],
+      ...noHunksWarning,
+      meta: {
+        filesScanned: 0,
+        scannedRoot: cwd,
+        scanMode: "hunks",
+        comparisonRef,
+        configSource: projectConfig.sourcePath,
+      },
+      nextStep:
+        "No parseable files were scanned — hunk diff is vacuously empty. Verify `cwd` points at the project root.",
+    });
+  }
+
+  const { formatted } = await runScanAndFormat(
+    files,
+    session,
+    standards,
+    strParam(params, "minSeverity"),
+    session.effectiveRules(projectConfig),
+    {
+      fromFile: projectConfig.nativeWrappers,
+      fromSession: session.config.nativeWrappers,
+    },
+    cwd,
+    params["verboseMeta"] === true,
+  );
+  logger.debug(`scan_diff (hunks): ${files.length} files in ${ms(t0)}ms`);
+
+  const { newFiles, newCount } = filterToHunkFindings(formatted.files, hunksByFile);
+
+  return textResult({
+    mode: "diff",
+    newCount,
+    newViolations: newFiles,
+    ...noHunksWarning,
+    meta: {
+      ...formatted.meta,
+      scannedRoot: cwd,
+      scanMode: "hunks",
+      comparisonRef,
+      configSource: projectConfig.sourcePath,
+    },
+    nextStep: buildHunkNextStep(newCount, newFiles, comparisonRef, hunksResult.status),
+  });
+}
+
+/**
+ * Walks formatted files and keeps only findings whose `line` falls
+ * inside a hunk range for that file. Mirrors `filterToNewFindings` but
+ * intersects by hunk instead of by baseline hash.
+ */
+function filterToHunkFindings(
+  files: ScanFormatted["files"],
+  hunksByFile: ReadonlyMap<string, readonly HunkRange[]>,
+): {
+  readonly newFiles: { readonly path: string; readonly findings: readonly unknown[] }[];
+  readonly newCount: number;
+} {
+  const newFiles: { readonly path: string; readonly findings: readonly unknown[] }[] = [];
+  let newCount = 0;
+  for (const file of files) {
+    const kept: unknown[] = [];
+    for (const raw of file.findings) {
+      if (!raw || typeof raw !== "object") continue;
+      const f = raw as Record<string, unknown>;
+      const line = f["line"];
+      if (typeof line !== "number") continue;
+      if (!isInsideHunk(file.path, line, hunksByFile)) continue;
+      kept.push(raw);
+    }
+    if (kept.length > 0) {
+      newFiles.push({ path: file.path, findings: kept });
+      newCount += kept.length;
+    }
+  }
+  return { newFiles, newCount };
+}
+
+function buildHunkNextStep(
+  newCount: number,
+  newFiles: readonly { readonly path: string; readonly findings: readonly unknown[] }[],
+  comparisonRef: string,
+  status: "ok" | "no-hunks",
+): string {
+  if (status === "no-hunks") {
+    return `Comparison ref \`${comparisonRef}\` resolved but produced no hunks — nothing changed vs that ref. Check \`warnings\` for the signal; this is not a clean-scan result.`;
+  }
+  if (newCount === 0) {
+    return `No findings inside the hunks for \`${comparisonRef}\`. The PR didn't introduce a violation the scanner can detect statically — pair with runtime axe-core checks before claiming conformance.`;
+  }
+  const first = firstNewFinding(newFiles);
+  const noun = newCount === 1 ? "finding" : "findings";
+  if (first === null) {
+    return `${newCount} ${noun} inside hunks for \`${comparisonRef}\`.`;
+  }
+  return `${newCount} ${noun} inside hunks for \`${comparisonRef}\`. Start with ${first.path}:${first.line} (rule \`${first.ruleId}\`) — call \`suggest_fix\` for a concrete patch.`;
+}
 
 function resolveBaselinePath(rel: string | undefined, cwd: string): string {
   if (rel === undefined) return join(cwd, BASELINE_FILENAME);

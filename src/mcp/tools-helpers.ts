@@ -79,6 +79,12 @@ export type StructuredErrorCode =
   | "baseline-load-failed"
   // scan scope / git-aware narrowing
   | "no-staged-files"
+  // scan_diff hunksOnly: git-shell preconditions for the hunk-
+  // intersection comparison. Distinct from `no-staged-files` because
+  // they describe different failures — not in a git repo at all, vs.
+  // ref doesn't resolve — and the agent branches on them differently.
+  | "not-a-git-repo"
+  | "unknown-ref"
   // apply_fix safety gates
   | "allow-write-disabled"
   | "edit-shape-invalid"
