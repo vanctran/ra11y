@@ -10,14 +10,14 @@ This file is the source of truth for anyone (human or Claude Code) working on ra
 
 Name: homophone of "rally" (a call to action for accessibility) with the `a11y` numeronym baked in. Binary: `ra11y`. npm package: `@ra11y/core` (the unscoped `ra11y` name is owned by a long-dormant package; scoped is our way in). License: MIT.
 
-What makes ra11y different from axe-core / eslint-plugin-jsx-a11y / Pa11y:
+Design priorities — the things the project optimizes for, in roughly decreasing importance:
 
 - **AI-first MCP server.** 12 tools designed around agent workflows — `scan_project` with inline `autoDetectWrappers` + `additionalPaths`, `checklist` with ranked review candidates, `suggest_fix` with primary/alternative fix paths, `detect_native_wrappers` for one-shot onboarding. Responses carry scan-confidence telemetry (opaque component counts, template-directive handling, CSS coverage ratios) so the agent knows when the scan had teeth.
 - **Zero runtime dependencies.** Nothing in `dependencies`. Everything in-house. Tiny install, tiny supply-chain surface, appealing for a compliance tool.
 - **Multi-standard architecture.** Standards → Criteria → Rules. One rule can satisfy WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 criteria simultaneously. Adding a new standard never touches rule code.
-- **Certification moat.** `--vpat`, `--certification`, and `--checklist` produce VPAT-shaped output and a readiness scorecard — the thing teams actually need when pursuing WCAG certification.
-- **Fast.** Sub-second on typical commits. Precommit-friendly. Performance budget enforced in CI.
-- **Elite DX.** Beautiful terminal output, context-aware fix suggestions, six output formats, plugin API, deep rule metadata.
+- **VPAT + certification scorecard.** `--vpat`, `--certification`, and `--checklist` produce VPAT-shaped output and a readiness scorecard — the thing teams actually need when pursuing WCAG certification.
+- **Precommit-speed.** Sub-second on typical commits. Precommit-friendly. Performance budget enforced in CI.
+- **Polish on the human-facing surfaces.** Beautiful terminal output, context-aware fix suggestions, six output formats, plugin API, deep rule metadata. Not the design center, but earned after the AI-first surface is honest.
 
 ### Consumer model: AI-first
 

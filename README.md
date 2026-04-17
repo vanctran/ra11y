@@ -14,19 +14,15 @@ That doesn't make it agent-only. ra11y ships a CLI with beautiful terminal outpu
 
 > **Status: pre-release (v0.0.x).** The engine, plugin API, 49 rules, four built-in standards, eight output formatters, four report kinds (coverage, checklist, VPAT, certification), and a 12-tool MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
-## Why ra11y
+## Design priorities
 
-| | ra11y | axe-core | eslint-plugin-jsx-a11y | Pa11y |
-|---|:---:|:---:|:---:|:---:|
-| AI-first MCP server (scan, checklist, suggest_fix, …) | yes | no | no | no |
-| Agent-optimized response shape (ranked fixes, hints, nextStep) | yes | no | no | no |
-| Zero runtime dependencies | yes | no | no | no |
-| Multi-standard (WCAG + Section 508 + EN 301 549) | yes | partial | no | partial |
-| VPAT + certification scorecard | yes | no | no | no |
-| Runs in precommit (< 1s on typical commits) | yes | partial | yes | no |
-| Context-aware fix suggestions | yes | partial | partial | no |
-| Plugin API for custom standards | yes | no | no | no |
-| First-class TSX + Tailwind class resolution | yes | partial | yes | no |
+- **AI-first MCP server.** A 12-tool surface built for agent workflows — `scan_project`, `checklist`, `suggest_fix`, `detect_native_wrappers` — with responses shaped for one-shot triage (ranked fix paths, per-finding suppression pragmas, `nextStep` hints, scan-confidence telemetry).
+- **Zero runtime dependencies.** Nothing in `dependencies`. Everything in-house. Tiny install, minimal supply-chain surface — what a compliance tool should look like.
+- **Multi-standard by architecture.** Standards → Criteria → Rules, with cross-standard equivalences. One rule satisfies WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 simultaneously; adding a new standard never touches rule code.
+- **VPAT + certification scorecard.** `--vpat`, `--certification`, and `--checklist` produce the shape legal and compliance teams actually need.
+- **Precommit-speed.** Sub-second on typical commits, performance budget enforced in CI.
+- **First-class TSX + Tailwind.** JSX/TSX parsing and Tailwind class resolution ship in the default scan, not behind a plugin.
+- **Plugin API for custom standards.** Bring your own internal accessibility spec; the engine treats it the same as the built-ins.
 
 ## Install
 
