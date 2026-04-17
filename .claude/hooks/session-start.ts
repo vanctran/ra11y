@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 
 // SessionStart hook. Injects a project dashboard as additionalContext so
-// every new session starts with an accurate snapshot: branch, backlog
-// progress, rule/standard counts, last test run, and recent commits.
+// every new session starts with an accurate snapshot: branch, ship state,
+// active-track progress, rule/standard counts, last test run, recent
+// commits.
 
 import { audit } from "./lib/audit.ts";
 import { readHookInput } from "./lib/input.ts";
 import { ok } from "./lib/output.ts";
-import { getProjectState, renderPhaseLine } from "./lib/project-state.ts";
+import { getProjectState, renderTrackLine } from "./lib/project-state.ts";
 import type { SessionStartInput } from "./lib/types.ts";
 
 const input = await readHookInput<SessionStartInput>();
@@ -26,22 +27,31 @@ if (state.testStatus) {
   lines.push(`│ tests: (no run recorded — .claude/test-status.json missing)`);
 }
 lines.push("│");
-if (state.phaseProgress.length > 0) {
-  lines.push("│ backlog:");
-  for (const phase of state.phaseProgress.slice(0, 6)) {
-    lines.push(`│   ${renderPhaseLine(phase)}`);
-  }
-  if (state.phaseProgress.length > 6) {
-    lines.push(`│   … ${state.phaseProgress.length - 6} more phases`);
+
+if (state.shipState) {
+  lines.push("│ ship state:");
+  if (state.shipState.v010) lines.push(`│   v0.1.0 — ${state.shipState.v010}`);
+  if (state.shipState.v020) lines.push(`│   v0.2.0 — ${state.shipState.v020}`);
+  if (state.shipState.v030) lines.push(`│   v0.3.0+ — ${state.shipState.v030}`);
+  lines.push("│");
+}
+
+const activeTracks = state.trackProgress.filter((t) => t.total > 0 && t.done < t.total);
+if (activeTracks.length > 0) {
+  lines.push("│ active tracks:");
+  for (const track of activeTracks) {
+    lines.push(`│   ${renderTrackLine(track)}`);
   }
   lines.push("│");
 }
+
 if (state.lastCommits.length > 0) {
   lines.push("│ recent commits:");
   for (const c of state.lastCommits) lines.push(`│   ${c}`);
   lines.push("│");
 }
 lines.push("│ reminder: zero deps · every rule cites WCAG · never skip /verify");
+lines.push("│ dispatch: /continue picks one item per active track and fans out up to 3 agents");
 lines.push("╰──────────────────────────────────────────────────────────────");
 
 audit({

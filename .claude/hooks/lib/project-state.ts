@@ -10,6 +10,8 @@ export interface ProjectState {
   dirty: boolean;
   dirtyCount: number;
   phaseProgress: PhaseProgress[];
+  trackProgress: TrackProgress[];
+  shipState: ShipState | null;
   ruleCount: number;
   standardCount: number;
   testStatus: TestStatus | null;
@@ -22,6 +24,19 @@ export interface PhaseProgress {
   total: number;
 }
 
+export interface TrackProgress {
+  id: string;
+  name: string;
+  done: number;
+  total: number;
+}
+
+export interface ShipState {
+  v010: string;
+  v020: string;
+  v030: string;
+}
+
 export interface TestStatus {
   passing: number;
   failing: number;
@@ -30,10 +45,13 @@ export interface TestStatus {
 }
 
 export function getProjectState(projectDir: string): ProjectState {
+  const backlog = readBacklog(projectDir);
   return {
     branch: safeGit(projectDir, "rev-parse --abbrev-ref HEAD") ?? "(unknown)",
     ...gitDirty(projectDir),
-    phaseProgress: readBacklog(projectDir),
+    phaseProgress: backlog.phases,
+    trackProgress: backlog.tracks,
+    shipState: backlog.shipState,
     ruleCount: countTsFiles(join(projectDir, "src", "rules")),
     standardCount: countStandards(join(projectDir, "src", "standards")),
     testStatus: readTestStatus(projectDir),
@@ -60,47 +78,147 @@ function gitDirty(cwd: string): { dirty: boolean; dirtyCount: number } {
   return { dirty: lines.length > 0, dirtyCount: lines.length };
 }
 
-const HEADING_RE = /^## (Phase [0-9]+)(?:\s*—\s*)?(.*)$/;
+const PHASE_HEADING_RE = /^## (Phase [0-9]+(?:\.[0-9]+)?)(?:\s*—\s*)?(.*)$/;
+const TRACK_HEADING_RE = /^## Track ([A-Z])(?:\s*—\s*)?(.*)$/;
+const SHIP_STATE_HEADING_RE = /^## Ship state\s*$/;
+const SKIP_SECTION_RE = /^## (Dispatch model|History)/;
 const ITEM_RE = /^- \[(.)\]/;
+const SHIP_BULLET_RE = /^-\s+\*\*(v0\.[0-9]+\.[0-9]+\+?)\s+—\s+([^*]+)\.\*\*/;
 
-function readBacklog(projectDir: string): PhaseProgress[] {
+interface BacklogParse {
+  readonly phases: PhaseProgress[];
+  readonly tracks: TrackProgress[];
+  readonly shipState: ShipState | null;
+}
+
+type SectionKind = "phase" | "track" | "ship" | "skip" | null;
+
+interface ParseState {
+  kind: SectionKind;
+  currentPhase: PhaseProgress | null;
+  currentTrack: TrackProgress | null;
+  readonly phases: PhaseProgress[];
+  readonly tracks: TrackProgress[];
+  readonly shipState: Partial<ShipState>;
+}
+
+function readBacklog(projectDir: string): BacklogParse {
   const path = join(projectDir, ".claude", "backlog.md");
-  if (!existsSync(path)) return [];
+  if (!existsSync(path)) return { phases: [], tracks: [], shipState: null };
   const text = readFileSync(path, "utf8");
-  const phases: PhaseProgress[] = [];
-  let current: PhaseProgress | null = null;
+  const state: ParseState = {
+    kind: null,
+    currentPhase: null,
+    currentTrack: null,
+    phases: [],
+    tracks: [],
+    shipState: {},
+  };
   for (const line of text.split("\n")) {
-    const next = parseBacklogLine(line, current);
-    if (next.pushCurrent && current) phases.push(current);
-    if (next.replaceCurrent !== undefined) current = next.replaceCurrent;
+    processBacklogLine(line, state);
   }
-  if (current) phases.push(current);
-  return phases;
+  flushCurrentSection(state);
+  return {
+    phases: state.phases,
+    tracks: state.tracks,
+    shipState: finalizeShipState(state.shipState),
+  };
 }
 
-interface BacklogLineEffect {
-  readonly pushCurrent: boolean;
-  readonly replaceCurrent: PhaseProgress | null | undefined;
-}
-
-/** Interprets one line of backlog.md, mutating `current` in place if it's an item. */
-function parseBacklogLine(line: string, current: PhaseProgress | null): BacklogLineEffect {
-  const head = HEADING_RE.exec(line);
-  if (head) {
-    const label = (head[2] ?? "").trim();
-    const next: PhaseProgress = {
-      name: `${head[1]}${label ? ` — ${label}` : ""}`,
-      done: 0,
-      total: 0,
-    };
-    return { pushCurrent: current !== null, replaceCurrent: next };
+function processBacklogLine(line: string, state: ParseState): void {
+  const heading = matchHeading(line);
+  if (heading) {
+    flushCurrentSection(state);
+    applyHeading(heading, state);
+    return;
+  }
+  if (state.kind === "ship") {
+    applyShipBullet(line, state.shipState);
+    return;
   }
   const item = ITEM_RE.exec(line);
-  if (item && current) {
-    current.total += 1;
-    if (item[1] === "x") current.done += 1;
+  if (!item) return;
+  recordItem(item[1] === "x", state);
+}
+
+type HeadingMatch =
+  | { kind: "phase"; name: string }
+  | { kind: "track"; id: string; name: string }
+  | { kind: "ship" }
+  | { kind: "skip" }
+  | { kind: "other" };
+
+function matchHeading(line: string): HeadingMatch | null {
+  const phaseHead = PHASE_HEADING_RE.exec(line);
+  if (phaseHead) {
+    const label = (phaseHead[2] ?? "").trim();
+    return { kind: "phase", name: `${phaseHead[1]}${label ? ` — ${label}` : ""}` };
   }
-  return { pushCurrent: false, replaceCurrent: undefined };
+  const trackHead = TRACK_HEADING_RE.exec(line);
+  if (trackHead) {
+    const id = trackHead[1] ?? "";
+    const label = (trackHead[2] ?? "").trim();
+    return { kind: "track", id, name: `Track ${id}${label ? ` — ${label}` : ""}` };
+  }
+  if (SHIP_STATE_HEADING_RE.test(line)) return { kind: "ship" };
+  if (SKIP_SECTION_RE.test(line)) return { kind: "skip" };
+  if (/^## /.test(line)) return { kind: "other" };
+  return null;
+}
+
+function applyHeading(heading: HeadingMatch, state: ParseState): void {
+  if (heading.kind === "phase") {
+    state.currentPhase = { name: heading.name, done: 0, total: 0 };
+    state.kind = "phase";
+    return;
+  }
+  if (heading.kind === "track") {
+    state.currentTrack = { id: heading.id, name: heading.name, done: 0, total: 0 };
+    state.kind = "track";
+    return;
+  }
+  state.kind = heading.kind === "other" ? null : heading.kind;
+}
+
+function flushCurrentSection(state: ParseState): void {
+  if (state.currentPhase) {
+    state.phases.push(state.currentPhase);
+    state.currentPhase = null;
+  }
+  if (state.currentTrack) {
+    state.tracks.push(state.currentTrack);
+    state.currentTrack = null;
+  }
+}
+
+function recordItem(done: boolean, state: ParseState): void {
+  if (state.kind === "phase" && state.currentPhase) {
+    state.currentPhase.total += 1;
+    if (done) state.currentPhase.done += 1;
+  } else if (state.kind === "track" && state.currentTrack) {
+    state.currentTrack.total += 1;
+    if (done) state.currentTrack.done += 1;
+  }
+}
+
+function applyShipBullet(line: string, shipState: Partial<ShipState>): void {
+  const bullet = SHIP_BULLET_RE.exec(line);
+  if (!bullet) return;
+  const [, version, status] = bullet;
+  if (!(version && status)) return;
+  const trimmed = status.trim();
+  if (version.startsWith("v0.1.")) shipState.v010 = trimmed;
+  else if (version.startsWith("v0.2.")) shipState.v020 = trimmed;
+  else if (version.startsWith("v0.3.")) shipState.v030 = trimmed;
+}
+
+function finalizeShipState(shipState: Partial<ShipState>): ShipState | null {
+  if (!(shipState.v010 || shipState.v020 || shipState.v030)) return null;
+  return {
+    v010: shipState.v010 ?? "",
+    v020: shipState.v020 ?? "",
+    v030: shipState.v030 ?? "",
+  };
 }
 
 function countTsFiles(dir: string): number {
@@ -137,4 +255,12 @@ export function renderPhaseLine(phase: PhaseProgress, width = 10): string {
   const bar = `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
   const pct = Math.round((phase.done / phase.total) * 100);
   return `${bar} ${phase.done}/${phase.total} ${String(pct).padStart(3)}%  ${phase.name}`;
+}
+
+export function renderTrackLine(track: TrackProgress, width = 10): string {
+  if (track.total === 0) return `${track.name}: empty`;
+  const filled = Math.round((track.done / track.total) * width);
+  const bar = `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
+  const open = track.total - track.done;
+  return `${bar} ${track.done}/${track.total}  ${track.name} (${open} open)`;
 }
