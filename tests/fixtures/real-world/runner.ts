@@ -63,6 +63,22 @@ export type FixtureExpectation =
       readonly reasonIncludes?: string;
     }
   | { readonly kind: "no-candidate"; readonly criterionId: string }
+  /**
+   * Assert that a review candidate EXISTS for the criterion, but that
+   * NONE of the matching candidates have a reason containing the given
+   * substring. Use this when the criterion must still surface (to avoid
+   * silent suppression) but must NOT carry a specific guidance phrase
+   * that belongs only to a different criterion level.
+   *
+   * Canonical use: wcag22:1.4.9 (AAA, no logotype exemption) vs
+   * wcag22:1.4.5 (AA, logotype exempt). Both criteria must fire on a
+   * logo-annotated image; only 1.4.5 should carry the exemption hint.
+   */
+  | {
+      readonly kind: "candidate-present-without";
+      readonly criterionId: string;
+      readonly reasonExcludes: string;
+    }
   | { readonly kind: "meta-hint-includes"; readonly substring: string }
   | {
       readonly kind: "meta-field";
@@ -379,6 +395,8 @@ function evaluateOne(ctx: FixtureScanContext, exp: FixtureExpectation): Expectat
       return evalCandidatePresent(fixtureId, exp, ctx.report.candidates ?? []);
     case "no-candidate":
       return evalNoCandidate(fixtureId, exp, ctx.report.candidates ?? []);
+    case "candidate-present-without":
+      return evalCandidatePresentWithout(fixtureId, exp, ctx.report.candidates ?? []);
     case "meta-hint-includes":
       return evalMetaHintIncludes(fixtureId, exp, ctx);
     case "meta-field":
@@ -565,6 +583,48 @@ function evalNoCandidate(
     expectation: exp,
     pass: false,
     message: `real-world/${fixtureId}: expected no candidate for '${exp.criterionId}', got ${matching.length}`,
+  };
+}
+
+// ─── candidate-present-without ────────────────────────────────────────────────
+
+/**
+ * Asserts that at least one review candidate exists for the criterion
+ * AND that none of those candidates' reason strings contain the
+ * forbidden substring. This guards the wcag22:1.4.9 (AAA, no-exception
+ * variant) invariant: the candidate must still surface (surfacing is
+ * not suppression), but must NOT carry the logotype-exemption hint
+ * that belongs only to wcag22:1.4.5.
+ *
+ * Failure messages distinguish the two failure modes:
+ *   - "no candidate" -> the criterion emitted nothing (silent miss)
+ *   - "reason contains forbidden text" -> the hint leaked into 1.4.9
+ */
+function evalCandidatePresentWithout(
+  fixtureId: string,
+  exp: FixtureExpectation & { kind: "candidate-present-without" },
+  candidates: readonly ReviewCandidate[],
+): ExpectationResult {
+  const matching = candidates.filter((c) => c.criterionId === exp.criterionId);
+  if (matching.length === 0) {
+    return {
+      expectation: exp,
+      pass: false,
+      message: `real-world/${fixtureId}: expected a review candidate for '${exp.criterionId}' (candidate-present-without), got ${summariseCriterionIds(candidates)}`,
+    };
+  }
+  const offender = matching.find((c) => c.reason.includes(exp.reasonExcludes));
+  if (offender) {
+    return {
+      expectation: exp,
+      pass: false,
+      message: `real-world/${fixtureId}: candidate '${exp.criterionId}' has a reason containing forbidden substring '${exp.reasonExcludes}'. Reason: ${JSON.stringify(offender.reason)}`,
+    };
+  }
+  return {
+    expectation: exp,
+    pass: true,
+    message: `real-world/${fixtureId}: candidate '${exp.criterionId}' present (${matching.length} match${matching.length === 1 ? "" : "es"}) and none contain '${exp.reasonExcludes}'`,
   };
 }
 
