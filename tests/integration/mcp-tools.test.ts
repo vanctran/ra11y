@@ -422,13 +422,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta.nextStepStructured?.tool).toMatch(/^(suggest_fix|explain_rule|scan_file)$/);
   });
 
-  it("scan (directory mode) emits nextStep + nextStepStructured at parity with scan_project (Q2R2-DIR-NEXT)", async () => {
-    // Round-2 eval gap: `scan` in directory mode omitted the
-    // nextStep/nextStepStructured pair that both `scan_project` and
-    // `scan_file` already emit. Straight parity bug, not a design call
-    // — agents branching on `meta.nextStepStructured.tool` had to
-    // special-case the `scan` surface. After the fix, the three tools
-    // carry the same next-call envelope.
+  it("scan (directory mode) emits nextStep + nextStepStructured at parity with scan_project and scan_file", async () => {
     const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [BAD_ALT_DIR] })]);
     const body = bodyOf(responses[1]) as {
       meta: {
@@ -450,7 +444,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     }
   });
 
-  it("clean scan (directory mode) points at checklist via the structured pair (Q2R2-DIR-NEXT)", async () => {
+  it("clean scan (directory mode) points at checklist via the structured pair", async () => {
     const goodDir = join(PROJECT_ROOT, "tests", "fixtures", "good", "alt-text-missing");
     const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [goodDir] })]);
     const body = bodyOf(responses[1]) as {
