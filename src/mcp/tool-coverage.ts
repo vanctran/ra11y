@@ -13,6 +13,8 @@ import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import { detectApplicability, splitManualCriteria } from "./manual-applicability.ts";
 import {
   applyRuleSettings,
+  errorResult,
+  firstUnknownStandard,
   type McpTool,
   parseFiles,
   resolveLevel,
@@ -57,6 +59,17 @@ export const coverageTool: McpTool = {
     const paths = strArrayParam(params, "paths") ?? [cwd];
 
     const standards = resolveStandards(strParam(params, "standard"), session);
+    const unknown = firstUnknownStandard(standards);
+    if (unknown !== null) {
+      const known = BUILTIN_STANDARDS.map((s) => s.id).join(", ");
+      return errorResult({
+        code: "standard-not-found",
+        message: `Unknown standard '${unknown}'. Loaded: ${known}.`,
+        details: { requested: unknown, loaded: BUILTIN_STANDARDS.map((s) => s.id) },
+        remediation:
+          "Pass `standard` with one of the loaded IDs, or omit to use the session default.",
+      });
+    }
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
 

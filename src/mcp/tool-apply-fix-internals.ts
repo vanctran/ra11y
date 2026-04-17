@@ -66,39 +66,55 @@ export async function preflightValidate(
 ): Promise<PreflightResult> {
   if (!session.config.allowWrite) {
     return {
-      error: errorResult(
-        "apply_fix is disabled: session `allowWrite` flag is false. Call `configure` with `{ allowWrite: true }` to enable write access for this session, then retry. The flag is per-session and off by default so no ra11y tool mutates source without explicit host opt-in.",
-      ),
+      error: errorResult({
+        code: "allow-write-disabled",
+        message:
+          "apply_fix is disabled: session `allowWrite` flag is false. Call `configure` with `{ allowWrite: true }` to enable write access for this session, then retry. The flag is per-session and off by default so no ra11y tool mutates source without explicit host opt-in.",
+        remediation: "Call `configure` with `{ allowWrite: true }`, then retry apply_fix.",
+      }),
     };
   }
   const filePathParam = strParam(params, "filePath");
   if (!filePathParam || filePathParam.length === 0) {
-    return { error: errorResult("filePath is required and must be a non-empty string.") };
+    return {
+      error: errorResult({
+        code: "missing-required-param",
+        message: "filePath is required and must be a non-empty string.",
+        details: { param: "filePath" },
+      }),
+    };
   }
   const cwd = strParam(params, "cwd") ?? process.cwd();
   const resolved = resolveInsideCwd(filePathParam, cwd);
   if (resolved === null) {
     return {
-      error: errorResult(
-        `filePath '${filePathParam}' escapes cwd '${cwd}'. Every writable path must resolve inside the scan root.`,
-      ),
+      error: errorResult({
+        code: "path-escapes-cwd",
+        message: `filePath '${filePathParam}' escapes cwd '${cwd}'. Every writable path must resolve inside the scan root.`,
+        details: { filePath: filePathParam, cwd },
+      }),
     };
   }
   const edit = readEdit(params);
   if (edit === null) {
     return {
-      error: errorResult(
-        'edit must be an object with string `oldText` and string `newText` — the shape suggest_fix emits on `kind: "edit"`.',
-      ),
+      error: errorResult({
+        code: "edit-shape-invalid",
+        message:
+          'edit must be an object with string `oldText` and string `newText` — the shape suggest_fix emits on `kind: "edit"`.',
+        remediation: 'Pass `primary.edit` from a `suggest_fix` result whose `kind` is "edit".',
+      }),
     };
   }
   const dryRun = params["dryRun"] !== false;
   const ext = extensionOf(resolved);
   if (ext === null) {
     return {
-      error: errorResult(
-        `Unsupported file extension for ${resolved}. apply_fix handles .tsx/.ts/.jsx/.js, .html/.htm, and .css only.`,
-      ),
+      error: errorResult({
+        code: "file-unsupported",
+        message: `Unsupported file extension for ${resolved}. apply_fix handles .tsx/.ts/.jsx/.js, .html/.htm, and .css only.`,
+        details: { filePath: resolved },
+      }),
     };
   }
   const original = await readOriginal(session, resolved, cwd);
@@ -106,16 +122,23 @@ export async function preflightValidate(
   const matchCount = countOccurrences(original.parsed.source, edit.oldText);
   if (matchCount === 0) {
     return {
-      error: errorResult(
-        `Edit's oldText was not found in ${resolved}. The file may have changed since suggest_fix was called, or oldText has whitespace/quoting that doesn't match. Re-run suggest_fix and retry.`,
-      ),
+      error: errorResult({
+        code: "edit-no-match",
+        message: `Edit's oldText was not found in ${resolved}. The file may have changed since suggest_fix was called, or oldText has whitespace/quoting that doesn't match. Re-run suggest_fix and retry.`,
+        details: { filePath: resolved, matchCount: 0 },
+        remediation: "Re-run `suggest_fix` against the current source and retry with its new edit.",
+      }),
     };
   }
   if (matchCount > 1) {
     return {
-      error: errorResult(
-        `Edit's oldText matches ${matchCount} locations in ${resolved}. apply_fix requires a unique match so the edit can't silently misapply. Widen oldText with surrounding context from suggest_fix's sourceContext and retry.`,
-      ),
+      error: errorResult({
+        code: "edit-multiple-matches",
+        message: `Edit's oldText matches ${matchCount} locations in ${resolved}. apply_fix requires a unique match so the edit can't silently misapply. Widen oldText with surrounding context from suggest_fix's sourceContext and retry.`,
+        details: { filePath: resolved, matchCount },
+        remediation:
+          "Widen `oldText` with disambiguating context from `suggest_fix.sourceContext` so exactly one match remains.",
+      }),
     };
   }
   return { resolved, cwd, edit, ext, original: original.parsed, dryRun };
@@ -128,11 +151,25 @@ async function readOriginal(
 ): Promise<{ readonly parsed: ParsedFile } | { readonly error: McpToolResult }> {
   try {
     const parsed = await session.parseFile(resolved, cwd);
-    if (!parsed) return { error: errorResult(`Unsupported or unreadable file: ${resolved}`) };
+    if (!parsed) {
+      return {
+        error: errorResult({
+          code: "file-unsupported",
+          message: `Unsupported or unreadable file: ${resolved}`,
+          details: { filePath: resolved },
+        }),
+      };
+    }
     return { parsed };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { error: errorResult(`Failed to read ${resolved}: ${message}`) };
+    return {
+      error: errorResult({
+        code: "file-read-failed",
+        message: `Failed to read ${resolved}: ${message}`,
+        details: { filePath: resolved, cause: message },
+      }),
+    };
   }
 }
 
@@ -215,9 +252,17 @@ export function parseErrorEnvelope(
   const msg = firstNew?.message ?? "(no message)";
   const line = firstNew?.position.line ?? 0;
   const column = firstNew?.position.column ?? 0;
-  return errorResult(
-    `Edit would introduce parse errors into ${resolved} — file not written. First new error: "${msg}" at line ${line}, column ${column}.`,
-  );
+  return errorResult({
+    code: "edit-introduces-parse-errors",
+    message: `Edit would introduce parse errors into ${resolved} — file not written. First new error: "${msg}" at line ${line}, column ${column}.`,
+    details: {
+      filePath: resolved,
+      firstNewError: { message: msg, line, column },
+      originalErrorCount,
+      newErrorCount: errors.length,
+    },
+    remediation: "Revise the edit so the post-edit source parses cleanly, then retry.",
+  });
 }
 
 /**

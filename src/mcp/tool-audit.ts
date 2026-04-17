@@ -94,7 +94,15 @@ export const auditTool: McpTool = {
     const coverage = unwrapPayload(coverageRes);
     const checklist = unwrapPayload(checklistRes);
     if (scan === null || coverage === null || checklist === null) {
-      return errorResult("audit sub-tool returned an unparseable payload");
+      return errorResult({
+        code: "audit-sub-tool-unparseable",
+        message: "audit sub-tool returned an unparseable payload",
+        details: {
+          scanOk: scan !== null,
+          coverageOk: coverage !== null,
+          checklistOk: checklist !== null,
+        },
+      });
     }
     return textResult({
       scan,
@@ -113,8 +121,18 @@ export const auditTool: McpTool = {
  */
 function unwrapPayload(res: McpToolResult): unknown {
   if (res.isError) {
+    // Prefer the structuredContent (code + message + details) when the
+    // sub-tool emits one; fall back to parsing the text payload so
+    // legacy string errorResult() calls still surface a readable shape.
+    if (res.structuredContent !== undefined) {
+      return { error: res.structuredContent };
+    }
     const raw = res.content[0]?.text ?? "";
-    return { error: raw };
+    try {
+      return { error: JSON.parse(raw) };
+    } catch {
+      return { error: raw };
+    }
   }
   const first = res.content[0];
   if (!first || first.type !== "text") return null;

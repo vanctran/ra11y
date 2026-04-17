@@ -36,12 +36,23 @@ export const explainStandardTool: McpTool = {
   },
   handler(params) {
     const id = strParam(params, "standardId");
-    if (!id) return errorResult("standardId must be a non-empty string.");
+    if (!id) {
+      return errorResult({
+        code: "missing-required-param",
+        message: "standardId must be a non-empty string.",
+        details: { param: "standardId" },
+      });
+    }
 
     const standard = BUILTIN_STANDARDS.find((s) => s.id === id);
     if (!standard) {
       const known = BUILTIN_STANDARDS.map((s) => s.id).join(", ");
-      return errorResult(`Unknown standard '${id}'. Loaded: ${known}.`);
+      return errorResult({
+        code: "standard-not-found",
+        message: `Unknown standard '${id}'. Loaded: ${known}.`,
+        details: { requested: id, loaded: BUILTIN_STANDARDS.map((s) => s.id) },
+        remediation: "Pass `standardId` with one of the loaded IDs.",
+      });
     }
 
     const level = strParam(params, "level");

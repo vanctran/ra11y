@@ -19,7 +19,9 @@ import {
 } from "./manual-applicability.ts";
 import {
   applyRuleSettings,
+  errorResult,
   findStandard,
+  firstUnknownStandard,
   type McpTool,
   parseFiles,
   resolveLevel,
@@ -119,6 +121,17 @@ export const checklistTool: McpTool = {
     const paths = strArrayParam(params, "paths") ?? [cwd];
 
     const standards = resolveStandards(strParam(params, "standard"), session);
+    const unknown = firstUnknownStandard(standards);
+    if (unknown !== null) {
+      const known = BUILTIN_STANDARDS.map((s) => s.id).join(", ");
+      return errorResult({
+        code: "standard-not-found",
+        message: `Unknown standard '${unknown}'. Loaded: ${known}.`,
+        details: { requested: unknown, loaded: BUILTIN_STANDARDS.map((s) => s.id) },
+        remediation:
+          "Pass `standard` with one of the loaded IDs, or omit to use the session default.",
+      });
+    }
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
 

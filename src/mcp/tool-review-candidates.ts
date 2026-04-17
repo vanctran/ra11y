@@ -22,6 +22,8 @@ import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import {
   applyRuleSettings,
+  errorResult,
+  firstUnknownStandard,
   type McpTool,
   parseFiles,
   resolveLevel,
@@ -64,6 +66,27 @@ export const reviewCandidatesTool: McpTool = {
     const paths = strArrayParam(params, "paths") ?? [cwd];
 
     const standards = resolveStandards(strParam(params, "standard"), session);
+    const unknown = firstUnknownStandard(standards);
+    if (unknown !== null) {
+      const known = BUILTIN_STANDARDS.map((s) => s.id).join(", ");
+      return errorResult({
+        code: "standard-not-found",
+        message: `Unknown standard '${unknown}'. Loaded: ${known}.`,
+        details: { requested: unknown, loaded: BUILTIN_STANDARDS.map((s) => s.id) },
+        remediation:
+          "Pass `standard` with one of the loaded IDs, or omit to use the session default.",
+      });
+    }
+    const filterCriterion = strParam(params, "criterionId");
+    if (filterCriterion !== undefined && !isKnownCriterion(filterCriterion)) {
+      return errorResult({
+        code: "criterion-not-found",
+        message: `Unknown criterion '${filterCriterion}'.`,
+        details: { requested: filterCriterion },
+        remediation:
+          "Use `explain_standard` to list criterion IDs for a given standard (e.g. wcag22:1.2.1).",
+      });
+    }
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
 
@@ -76,7 +99,6 @@ export const reviewCandidatesTool: McpTool = {
       level,
     });
 
-    const filterCriterion = strParam(params, "criterionId");
     const candidates = (report.candidates ?? []).filter((c) => {
       if (filterCriterion && c.criterionId !== filterCriterion) return false;
       return isCriterionInLevel(c.criterionId, level);
@@ -127,4 +149,11 @@ function isCriterionInLevel(criterionId: string, level: string): boolean {
     if (c) return (rank[c.level] ?? 0) <= (rank[level] ?? 3);
   }
   return true;
+}
+
+function isKnownCriterion(criterionId: string): boolean {
+  for (const std of BUILTIN_STANDARDS) {
+    if (std.criteria.some((c) => c.id === criterionId)) return true;
+  }
+  return false;
 }

@@ -113,20 +113,33 @@ export const scanDiffTool: McpTool = {
     // baseline tool's check-mode wording so agents can reuse the same
     // recovery logic (see tool-baseline.ts).
     if (!existsSync(baselinePath)) {
-      return errorResult(
-        `Baseline file not found at ${baselinePath}. Run the \`baseline\` tool with mode: "create" first.`,
-      );
+      return errorResult({
+        code: "baseline-not-found",
+        message: `Baseline file not found at ${baselinePath}. Run the \`baseline\` tool with mode: "create" first.`,
+        details: { baselinePath },
+        remediation: 'Call `baseline` with mode: "create" to write the file, then retry.',
+      });
     }
     let baseline: BaselineFile;
     try {
       const loaded = await loadBaseline(baselinePath);
       if (loaded === null) {
-        return errorResult(`Baseline file not found at ${baselinePath}.`);
+        return errorResult({
+          code: "baseline-not-found",
+          message: `Baseline file not found at ${baselinePath}.`,
+          details: { baselinePath },
+        });
       }
       baseline = loaded;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return errorResult(`Failed to load baseline at ${baselinePath}: ${message}`);
+      return errorResult({
+        code: "baseline-load-failed",
+        message: `Failed to load baseline at ${baselinePath}: ${message}`,
+        details: { baselinePath, cause: message },
+        remediation:
+          'Regenerate the baseline with `baseline` mode: "create" if the file is malformed or version-mismatched.',
+      });
     }
 
     const projectConfig = await session.loadProjectConfig(cwd);

@@ -155,7 +155,11 @@ export const applyFixTool: McpTool = {
         applied = true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return errorResult(`Failed to write ${resolved}: ${message}`);
+        return errorResult({
+          code: "file-write-failed",
+          message: `Failed to write ${resolved}: ${message}`,
+          details: { filePath: resolved, cause: message },
+        });
       }
     }
 

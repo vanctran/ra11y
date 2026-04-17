@@ -41,7 +41,51 @@ export interface McpToolDef {
 
 export interface McpToolResult {
   readonly content: readonly { readonly type: "text"; readonly text: string }[];
+  readonly structuredContent?: Record<string, unknown>;
   readonly isError?: boolean;
+}
+
+/**
+ * Stable, ra11y-scoped codes for structured error envelopes. Agents
+ * branch on `code` — never on the English `message`. Kebab-case; short;
+ * present-tense ("rule-not-found", not "rule was not found"). Add a new
+ * value only when an existing code is a genuine semantic mismatch; if
+ * you just want a different `message`, leave the code alone and change
+ * the message.
+ */
+export type StructuredErrorCode =
+  // shape / shape-level validation of tool params
+  | "missing-required-param"
+  | "invalid-param"
+  // registry lookups
+  | "rule-not-found"
+  | "standard-not-found"
+  | "criterion-not-found"
+  | "mode-invalid"
+  // scan/resource IO
+  | "file-not-found"
+  | "file-unsupported"
+  | "file-read-failed"
+  | "file-write-failed"
+  | "path-escapes-cwd"
+  // baseline lifecycle
+  | "baseline-not-found"
+  | "baseline-load-failed"
+  // apply_fix safety gates
+  | "allow-write-disabled"
+  | "edit-shape-invalid"
+  | "edit-no-match"
+  | "edit-multiple-matches"
+  | "edit-introduces-parse-errors"
+  // meta-tool internal
+  | "audit-sub-tool-unparseable";
+
+/** Structured-error envelope — emitted via `structuredContent` + `isError: true`. */
+export interface StructuredError {
+  readonly code: StructuredErrorCode;
+  readonly message: string;
+  readonly details?: Record<string, unknown>;
+  readonly remediation?: string;
 }
 
 export type ToolHandler = (
@@ -77,9 +121,39 @@ export function textResult(data: unknown): McpToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data) }] };
 }
 
-export function errorResult(message: string): McpToolResult {
+/**
+ * Builds an MCP error result. Pass a `StructuredError` to populate
+ * `structuredContent` with a machine-consumable shape the agent can
+ * branch on by `code` — English `message` stays in `content[0].text`
+ * and the legacy `{ error }` field remains so older consumers don't
+ * break. The string overload is kept for one-off messages that have
+ * no richer context; prefer the structured form for anything an agent
+ * might need to discriminate. `isError: true` is always set.
+ */
+export function errorResult(error: StructuredError | string): McpToolResult {
+  if (typeof error === "string") {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ error }) }],
+      isError: true,
+    };
+  }
+  const { code, message, details, remediation } = error;
+  // structuredContent: spec-facing machine shape. Agents branch on
+  // `code`, read `details` for specifics, surface `remediation` when
+  // present.
+  const structuredContent: Record<string, unknown> = { code, message };
+  if (details !== undefined) structuredContent["details"] = details;
+  if (remediation !== undefined) structuredContent["remediation"] = remediation;
+  // content[0].text: legacy + human-readable payload. Keeps the
+  // top-level `error` string so existing tests + consumers that
+  // grepped the text path still read something sensible, while
+  // exposing the same structured fields alongside it for parity.
+  const textPayload: Record<string, unknown> = { error: message, code };
+  if (details !== undefined) textPayload["details"] = details;
+  if (remediation !== undefined) textPayload["remediation"] = remediation;
   return {
-    content: [{ type: "text", text: JSON.stringify({ error: message }) }],
+    content: [{ type: "text", text: JSON.stringify(textPayload) }],
+    structuredContent,
     isError: true,
   };
 }
@@ -95,6 +169,20 @@ export function resolveStandards(
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/**
+ * Returns the first unknown standard ID in `ids`, or null if every
+ * entry resolves. Used by tools that want a structured error envelope
+ * naming the bad ID rather than scanning with an empty enabled list
+ * (which silently zeroes every criterion count).
+ */
+export function firstUnknownStandard(ids: readonly string[]): string | null {
+  const known = new Set(BUILTIN_STANDARDS.map((s) => s.id));
+  for (const id of ids) {
+    if (!known.has(id)) return id;
+  }
+  return null;
 }
 
 export function resolveLevel(level: string | undefined, session: McpSession): "A" | "AA" | "AAA" {

@@ -92,7 +92,11 @@ const scanTool: McpTool = {
   async handler(params, session) {
     const paths = strArrayParam(params, "paths");
     if (!paths || paths.length === 0) {
-      return errorResult("paths must be a non-empty array of file or directory paths.");
+      return errorResult({
+        code: "missing-required-param",
+        message: "paths must be a non-empty array of file or directory paths.",
+        details: { param: "paths" },
+      });
     }
 
     const cwd = strParam(params, "cwd") ?? process.cwd();
@@ -174,12 +178,21 @@ const scanFileTool: McpTool = {
   async handler(params, session) {
     const filePath = strParam(params, "path");
     if (!filePath || filePath.length === 0) {
-      return errorResult("path must be a non-empty string.");
+      return errorResult({
+        code: "missing-required-param",
+        message: "path must be a non-empty string.",
+        details: { param: "path" },
+      });
     }
 
     const parsed = await session.parseFile(filePath, strParam(params, "cwd"));
     if (!parsed) {
-      return errorResult(`Unsupported or unreadable file: ${filePath}`);
+      return errorResult({
+        code: "file-unsupported",
+        message: `Unsupported or unreadable file: ${filePath}`,
+        details: { filePath },
+        remediation: "Pass a .tsx/.jsx/.ts/.js, .html/.htm, or .css file that exists on disk.",
+      });
     }
 
     const standards = resolveStandards(strParam(params, "standard"), session);
@@ -231,11 +244,20 @@ const explainRuleTool: McpTool = {
   handler(params) {
     const ruleId = strParam(params, "ruleId");
     if (!ruleId) {
-      return errorResult("ruleId is required.");
+      return errorResult({
+        code: "missing-required-param",
+        message: "ruleId is required.",
+        details: { param: "ruleId" },
+      });
     }
     const rule = findRule(ruleId);
     if (!rule) {
-      return errorResult(`Rule '${ruleId}' not found. Use list_rules to see available rules.`);
+      return errorResult({
+        code: "rule-not-found",
+        message: `Rule '${ruleId}' not found. Use list_rules to see available rules.`,
+        details: { requested: ruleId },
+        remediation: "Call `list_rules` to discover valid rule IDs.",
+      });
     }
 
     return textResult({
@@ -284,17 +306,37 @@ const suggestFixTool: McpTool = {
     const line = numParam(params, "line");
 
     if (!(ruleId && filePath) || line === undefined) {
-      return errorResult("ruleId, file, and line are required.");
+      return errorResult({
+        code: "missing-required-param",
+        message: "ruleId, file, and line are required.",
+        details: {
+          missing: [
+            ...(ruleId ? [] : ["ruleId"]),
+            ...(filePath ? [] : ["file"]),
+            ...(line === undefined ? ["line"] : []),
+          ],
+        },
+      });
     }
 
     if (!findRule(ruleId)) {
-      return errorResult(`Rule '${ruleId}' not found.`);
+      return errorResult({
+        code: "rule-not-found",
+        message: `Rule '${ruleId}' not found.`,
+        details: { requested: ruleId },
+        remediation: "Call `list_rules` to discover valid rule IDs.",
+      });
     }
 
     // Parse the file to find the specific violation and its suggestion.
     const parsed = await session.parseFile(filePath, strParam(params, "cwd"));
     if (!parsed) {
-      return errorResult(`Unsupported or unreadable file: ${filePath}`);
+      return errorResult({
+        code: "file-unsupported",
+        message: `Unsupported or unreadable file: ${filePath}`,
+        details: { filePath },
+        remediation: "Pass a .tsx/.jsx/.ts/.js, .html/.htm, or .css file that exists on disk.",
+      });
     }
 
     const standards = resolveStandards(undefined, session);
@@ -395,6 +437,16 @@ const listRulesTool: McpTool = {
 
     const standardFilter = strParam(params, "standard");
     if (standardFilter) {
+      if (!BUILTIN_STANDARDS.some((s) => s.id === standardFilter)) {
+        const known = BUILTIN_STANDARDS.map((s) => s.id).join(", ");
+        return errorResult({
+          code: "standard-not-found",
+          message: `Unknown standard '${standardFilter}'. Loaded: ${known}.`,
+          details: { requested: standardFilter, loaded: BUILTIN_STANDARDS.map((s) => s.id) },
+          remediation:
+            "Pass `standard` with one of the loaded IDs, or omit to list rules from every loaded standard.",
+        });
+      }
       const prefix = `${standardFilter}:`;
       rules = rules.filter((r) => r.satisfies.some((s) => s.startsWith(prefix)));
     }
