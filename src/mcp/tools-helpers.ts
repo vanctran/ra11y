@@ -20,6 +20,7 @@ import type { Violation } from "../types/violation.ts";
 import { buildAnalysisCoverage } from "./analysis-coverage.ts";
 import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
 import { buildPlanSummary } from "./plan-summary.ts";
+import { buildReferenceGuide } from "./reference-guide.ts";
 import type { McpSession } from "./session.ts";
 import {
   type NativeWrapperSources,
@@ -366,6 +367,19 @@ export interface ScanFormatted {
   readonly plan: Record<string, unknown>;
   readonly files: readonly { readonly path: string; readonly findings: unknown[] }[];
   readonly meta: Record<string, unknown>;
+  /**
+   * Top-level prose map — findings reference by file extension rather than
+   * inlining the same paragraph on every entry. Omitted when no findings
+   * exist (so a clean scan ships neither the map nor the keys); populated
+   * only with the extensions actually present in `files`.
+   *
+   * Keys are file extensions without the leading dot (`tsx`, `css`, etc.).
+   * The `default` key covers extensions that don't have a language-specific
+   * placement variant — today that's `.ts` / `.js` / anything else.
+   */
+  readonly referenceGuide?: {
+    readonly suppressPlacement: Readonly<Record<string, string>>;
+  };
 }
 
 /**
@@ -466,6 +480,7 @@ export async function runScanAndFormat(
   const actionableManual = actionableManualIds.size;
   const untargetedCriteria = manualCount - actionableManual;
   const suppressions = suppressionAudit(files);
+  const referenceGuide = buildReferenceGuide(fileEntries);
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
@@ -546,6 +561,7 @@ export async function runScanAndFormat(
       // pragmas exist in any scanned file.
       ...suppressionsMetaBlock(suppressions),
     },
+    ...(referenceGuide === undefined ? {} : { referenceGuide }),
   };
 
   return {
@@ -724,7 +740,6 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     // from "titles are `[]`" (criteria is also `[]`).
     ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
     suppressWith: suppressPragma(v.location.filePath, v.ruleId),
-    suppressPlacement: suppressPlacement(v.location.filePath),
   };
 }
 
@@ -748,26 +763,7 @@ function suppressPragma(filePath: string, ruleId: string): string {
   return `// ra11y-disable-next-line ${ruleId}`;
 }
 
-/**
- * Per-file-type hint about where the pragma goes. The most common
- * wasted edit is a JSX comment placed inline as an attribute value or
- * mixed into a JSX children block — both of which are syntax errors.
- * The TSX/JSX guidance calls that out explicitly so the first edit
- * lands.
- */
-function suppressPlacement(filePath: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
-    return "Place on the line immediately above the opening JSX tag of the flagged element — not inside attributes, and not between adjacent JSX siblings without a wrapping expression. The `{/* … */}` wrapper is valid as a JSX expression or at module scope.";
-  }
-  if (lower.endsWith(".css")) {
-    return "Place on the line immediately above the CSS rule whose declarations are flagged.";
-  }
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    return "Place on the line immediately above the opening tag of the flagged element.";
-  }
-  return "Place on the line immediately above the flagged statement.";
-}
+export { buildReferenceGuide };
 
 export function groupViolationsByFile(violations: readonly Violation[]): Map<string, Violation[]> {
   const map = new Map<string, Violation[]>();

@@ -309,6 +309,9 @@ const scanFileTool: McpTool = {
       findings: flatFindings,
       reviewCandidates: dedupedCandidates,
       plan: formatted.plan,
+      ...(formatted.referenceGuide === undefined
+        ? {}
+        : { referenceGuide: formatted.referenceGuide }),
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         // scan_file has no `scannedRoot` / `rootSource` concept — the

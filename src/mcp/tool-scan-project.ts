@@ -194,6 +194,7 @@ export const scanProjectTool: McpTool = {
       plan: formatted.plan,
       files: page.files,
       ...page.paginationFields,
+      ...referenceGuideField(formatted),
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         rootSource,
@@ -623,6 +624,18 @@ function structuredField(nextStep: { readonly structured?: unknown }): {
 } {
   if (nextStep.structured === undefined) return {};
   return { nextStepStructured: nextStep.structured };
+}
+
+/**
+ * Conditional-spread the top-level `referenceGuide` field — omitted when
+ * no findings exist. Extracted to keep the handler's cognitive
+ * complexity inside the lint budget.
+ */
+function referenceGuideField(formatted: { readonly referenceGuide?: unknown }): {
+  readonly referenceGuide?: unknown;
+} {
+  if (formatted.referenceGuide === undefined) return {};
+  return { referenceGuide: formatted.referenceGuide };
 }
 
 /**

@@ -37,6 +37,7 @@ import {
 } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import {
+  buildReferenceGuide,
   errorResult,
   type McpTool,
   ms,
@@ -212,6 +213,7 @@ async function handleBaselineMode(
   );
   const resolved = resolvedFromBaseline(baseline.violations, scannedHashes);
 
+  const referenceGuide = buildReferenceGuide(newFiles);
   return textResult({
     mode: "diff",
     baselinePath,
@@ -228,6 +230,7 @@ async function handleBaselineMode(
     // is omitted entirely (see handleHunksMode).
     resolvedCount: resolved.length,
     resolved,
+    ...(referenceGuide === undefined ? {} : { referenceGuide }),
     meta: {
       ...formatted.meta,
       scannedRoot: cwd,
@@ -327,12 +330,14 @@ async function handleHunksMode(
   logger.debug(`scan_diff (hunks): ${files.length} files in ${ms(t0)}ms`);
 
   const { newFiles, newCount } = filterToHunkFindings(formatted.files, hunksByFile);
+  const referenceGuide = buildReferenceGuide(newFiles);
 
   return textResult({
     mode: "diff",
     newCount,
     newViolations: newFiles,
     ...noHunksWarning,
+    ...(referenceGuide === undefined ? {} : { referenceGuide }),
     meta: {
       ...formatted.meta,
       scannedRoot: cwd,

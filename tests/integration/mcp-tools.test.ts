@@ -479,6 +479,63 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta.nextStep).toContain("checklist");
   });
 
+  it("scan findings no longer inline suppressPlacement; top-level referenceGuide carries the prose", async () => {
+    // Hoisting the placement paragraph into a top-level map keyed by
+    // file extension strips ~1 paragraph per finding on large scans
+    // (mirrors the prompts-dedupe on review_candidates). Findings keep
+    // `suppressWith` inline because the ruleId makes each one unique
+    // and short; only the long placement prose is deduped.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      files: readonly { findings: readonly Record<string, unknown>[] }[];
+      referenceGuide?: { suppressPlacement: Record<string, string> };
+    };
+    expect(body.files.length).toBeGreaterThan(0);
+    for (const file of body.files) {
+      for (const finding of file.findings) {
+        expect(finding).not.toHaveProperty("suppressPlacement");
+        expect(typeof finding.suppressWith).toBe("string");
+      }
+    }
+    expect(body.referenceGuide).toBeDefined();
+    // The alt-text fixture mixes .html and .tsx — both placements
+    // should appear. CSS isn't in the fixture, so it should be absent
+    // (the guide is populated only from extensions with findings).
+    expect(body.referenceGuide?.suppressPlacement.html).toContain("opening tag");
+    expect(body.referenceGuide?.suppressPlacement.tsx).toContain("opening JSX tag");
+    expect(body.referenceGuide?.suppressPlacement).not.toHaveProperty("css");
+  });
+
+  it("clean scan omits referenceGuide entirely (no findings → no guide)", async () => {
+    const goodDir = join(PROJECT_ROOT, "tests", "fixtures", "good", "alt-text-missing");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "scan_project", { cwd: goodDir })]);
+    const body = bodyOf(responses[1]) as {
+      plan: { violations: number };
+      referenceGuide?: unknown;
+    };
+    expect(body.plan.violations).toBe(0);
+    expect(body).not.toHaveProperty("referenceGuide");
+  });
+
+  it("scan_file hoists suppressPlacement the same way scan_project does", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_file", { path: BAD_ALT_FILE }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      findings: readonly Record<string, unknown>[];
+      referenceGuide?: { suppressPlacement: Record<string, string> };
+    };
+    expect(body.findings.length).toBeGreaterThan(0);
+    for (const finding of body.findings) {
+      expect(finding).not.toHaveProperty("suppressPlacement");
+    }
+    expect(body.referenceGuide?.suppressPlacement.html).toContain("opening tag");
+  });
+
   it("analysisCoverage reports opaque custom components and template directives", async () => {
     // Honest telemetry about what static analysis didn't reach. Not a
     // heuristic — structural gaps the agent needs to calibrate
