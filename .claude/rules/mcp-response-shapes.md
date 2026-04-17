@@ -4,6 +4,9 @@ paths:
   - "src/reports/**/*.ts"
   - "src/output/**/*.ts"
   - "src/review/**/*.ts"
+  - "src/types/violation.ts"
+  - "src/types/review.ts"
+  - "src/engine/scanner.ts"
 ---
 
 # MCP response shapes — AI-first consumer doctrine

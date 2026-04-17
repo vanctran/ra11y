@@ -8,7 +8,7 @@ audience: agents, contributors
 
 ra11y's primary consumer is an AI agent calling the MCP tools — not a human reading a dashboard. CLI and formatters exist, but the design center is the agent. Several common tooling defaults invert under this assumption; treat the rules below as load-bearing when triaging field reports or designing new surfaces (MCP tools, response shapes, reports, formatters).
 
-This doctrine lives here (rather than in CLAUDE.md) so it loads automatically when editing `src/mcp/**`, `src/reports/**`, or `src/output/**` via the path-scoped rule at `.claude/rules/mcp-response-shapes.md`. Outside those paths, the doctrine is still discoverable via this page and CLAUDE.md § 1.
+This doctrine lives here (rather than in CLAUDE.md) so it loads automatically when editing code that shapes MCP tool responses — `src/mcp/**`, `src/reports/**`, `src/output/**`, `src/review/**`, plus the authoritative shape-owning files `src/types/violation.ts`, `src/types/review.ts`, and `src/engine/scanner.ts` — via the path-scoped rule at `.claude/rules/mcp-response-shapes.md`. Outside those paths, the doctrine is still discoverable via this page and CLAUDE.md § 1.
 
 ## Rules
 
