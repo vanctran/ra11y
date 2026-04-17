@@ -153,6 +153,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 ## architecture
 
 - [Input parsers](./architecture/input-parsers.md)
+- [MCP sampling architecture](./architecture/mcp-sampling.md)
 - [MCP server architecture](./architecture/mcp-server.md)
 - [Output formatters](./architecture/output-formatters.md)
 - [Registries: the standards / criteria / rules index chain](./architecture/registries.md)
