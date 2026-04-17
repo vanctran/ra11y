@@ -98,28 +98,28 @@ Owner: `parser-author` + main session. Promoted from staged 2026-04-17. Foundati
 
 - [x] `src/mcp/sampling.ts` — client helper calling `sampling/createMessage` on the host with timeout + max-tokens budget
 - [x] Server capability declaration: read host `sampling` capability from `initialize.params.capabilities`; graceful fallback to "return the prompt for the agent to run" via `SamplingNotSupportedError` on hosts that decline
-- [ ] `src/mcp/tool-resolve-component.ts` — verifies PascalCase wrappers via host-sampled source read
-- [ ] `src/mcp/tool-verdict-candidate.ts` — pass/fail with reasoning for a review candidate + its `reviewPrompt`
-- [ ] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion
-- [ ] `src/mcp/tool-triage-findings.ts` — pure (no sampling) triage that labels each finding — the input for the LLM-backed tools above
-- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (checksum registry for version-pinning)
+- [!] `src/mcp/tool-resolve-component.ts` — verifies PascalCase wrappers via host-sampled source read. ADR 0005 §Follow-up: pick 1–2 speculative tools based on user feedback before wiring; this one is a candidate.
+- [!] `src/mcp/tool-verdict-candidate.ts` — pass/fail with reasoning for a review candidate + its `reviewPrompt`. ADR 0005 §Follow-up: same caveat.
+- [!] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion. ADR 0005 §Follow-up: same caveat.
+- [!] `src/mcp/tool-triage-findings.ts` — pure (no sampling) triage that labels each finding. Scope of the label schema is ambiguous without downstream consumers (the three tools above are its consumers); define + pick one before dispatch.
+- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (checksum registry for version-pinning) — substitution already exists; remaining work is the checksum registry.
 - [x] `tests/unit/mcp/sampling.test.ts` with a fake host recording sampling requests
-- [ ] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter (blocked on first sampling-backed tool)
+- [!] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter — blocked on first sampling-backed tool (one of the three [!] tools above). Scripted host lives at `tests/evals/scripted-host.ts` and is reusable here.
 - [x] Docs: `docs/kb/architecture/mcp-sampling.md`
-- [ ] Docs: `docs/mcp/prompts.md`
-- [ ] `/audit` MCP prompt template: end-to-end workflow (scan → triage → verdict → VPAT draft) exposed as a host-driven prompt
+- [x] Docs: `docs/mcp/prompts.md`
+- [!] `/audit` MCP prompt template: end-to-end workflow (scan → triage → verdict → VPAT draft) — blocked on the three speculative tools landing; template already exists as a prompt (`audit.ts`), the "MCP prompt template" wording refers to the end-to-end wiring.
 
 ---
 
-## Track E — Ecosystem & public benchmark (STAGED; v0.3.0+)
+## Track E — Ecosystem & public benchmark
 
-Owner: `doc-writer` + main session. Items here expand the agent-host matrix and establish the public quality story — valuable but not release-gating.
+Owner: `doc-writer` + main session. Promoted from staged 2026-04-17. Items expand the agent-host matrix and establish the public quality story.
 
-### v0.3.0+
+### v0.2.0
 
-- [ ] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set; CI-gated against a scripted host (no real LLM calls). Paired with Track S.
-- [ ] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code
-- [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
+- [x] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set; CI-gated against a scripted host (no real LLM calls). Paired with Track S. (committed d00535b)
+- [!] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code. Blocked on the Track S speculative tools landing (the workflow references them).
+- [!] `examples/ra11y-in-cursor/` — blocked externally on Cursor's MCP host shipping sampling.
 - [ ] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings
 - [~] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold committed (2f5539a); numeric values land in a follow-up before release
 
