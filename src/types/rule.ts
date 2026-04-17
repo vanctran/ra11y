@@ -141,11 +141,17 @@ export interface ProjectContext {
 
 /**
  * What a rule returns via `ctx.emit()`. The engine owns `ruleId`,
- * `criteria`, `findingId`, and `fixClass` — rules don't know those.
- * `findingId` is derived from the stamped ruleId + relative filePath +
- * source context window, so it can only be computed after the engine
- * has attached the filePath to the emitted location. `fixClass` is a
- * Rule-level property (see docs/adr/0007-violation-fix-class-metadata.md),
- * stamped onto every Violation at emit time.
+ * `criteria`, `findingId`, `groupKey`, and `fixClass` — rules don't
+ * know those. `findingId` is derived from the stamped ruleId + relative
+ * filePath + source-context window, so it can only be computed after
+ * the engine has attached the filePath to the emitted location.
+ * `groupKey` is derived from the stamped ruleId + the normalized AST
+ * shape the engine resolves from the emitted location (see
+ * docs/adr/0008-violation-group-key.md). `fixClass` is a Rule-level
+ * property (see docs/adr/0007-violation-fix-class-metadata.md), stamped
+ * onto every Violation at emit time.
  */
-export type EmittedViolation = Omit<Violation, "ruleId" | "criteria" | "findingId" | "fixClass">;
+export type EmittedViolation = Omit<
+  Violation,
+  "ruleId" | "criteria" | "findingId" | "groupKey" | "fixClass"
+>;

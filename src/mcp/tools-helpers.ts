@@ -695,6 +695,14 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     // X?" by exact ID rather than (file, line, ruleId) fuzzy match
     // that breaks on line-number drift.
     findingId: v.findingId,
+    // Stable group identity — same rule firing on AST-equivalent nodes
+    // in N files all share this key, so "fix every finding with
+    // groupKey X the same way" is a one-line agent loop. See
+    // docs/adr/0008-violation-group-key.md. Conditional spread absorbs
+    // synthetic test fixtures that pass a partial Violation literal —
+    // the Violation type requires this field, but the formatter stays
+    // forgiving at runtime.
+    ...(v.groupKey !== undefined && { groupKey: v.groupKey }),
     ruleId: v.ruleId,
     // Per-finding remediation lane stamped from the rule's `fixClass`
     // metadata. Lets agents batch-route at scan time without a per-

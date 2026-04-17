@@ -42,6 +42,13 @@ interface AgentSnippet {
 
 interface AgentFinding {
   readonly id: string;
+  /**
+   * Stable group identity — same rule firing on AST-equivalent nodes
+   * across files all share this key. Lets agents batch one fix across
+   * every finding with the same `groupKey`. See
+   * docs/adr/0008-violation-group-key.md.
+   */
+  readonly groupKey: string;
   readonly ruleId: string;
   readonly criteria: readonly string[];
   /**
@@ -172,6 +179,9 @@ function buildFinding(v: Violation): AgentFinding {
     // Stable identity — survives line-number drift in the same file.
     // See src/utils/finding-id.ts for the hash recipe.
     id: v.findingId,
+    // Stable group identity — same rule firing on AST-equivalent nodes
+    // across files share this key. docs/adr/0008-violation-group-key.md.
+    groupKey: v.groupKey,
     ruleId: v.ruleId,
     criteria: [...v.criteria],
     // Aligned index-for-index with `criteria`. Conditional-spread so we

@@ -8,12 +8,14 @@
  * violations with ruleId and criteria stamped in).
  */
 
+import { describeNodeShape, findTargetNodeAtLocation } from "../../src/engine/ast-helpers.ts";
 import { buildContext } from "../../src/engine/context-builder.ts";
 import { parseCss, parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
 import type { EmittedViolation, Language, ProjectContext, Rule } from "../../src/types/rule.ts";
 import type { Violation } from "../../src/types/violation.ts";
 import { computeFindingId } from "../../src/utils/finding-id.ts";
+import { computeGroupKey, UNKNOWN_SHAPE } from "../../src/utils/group-key.ts";
 
 export interface RunRuleOptions {
   readonly filePath?: string;
@@ -39,7 +41,7 @@ export function runRule(
     sink,
   );
   invokeLifecycle(rule, ctx, ast, filePath, source, sink);
-  return sink.map((v) => shapeViolation(rule, v, filePath, source));
+  return sink.map((v) => shapeViolation(rule, v, filePath, source, ast));
 }
 
 /** Mirrors the engine's rule-runner lifecycle, plus a single-file afterProject pass. */
@@ -84,6 +86,7 @@ function shapeViolation(
   v: EmittedViolation,
   filePath: string,
   source: string,
+  ast: Ast,
 ): Violation {
   const effectivePath = v.location.filePath || filePath;
   const findingId = computeFindingId({
@@ -92,6 +95,9 @@ function shapeViolation(
     source,
     line: v.location.line,
   });
+  const node = findTargetNodeAtLocation(ast.root, v.location.line, v.location.column);
+  const shape = node ? describeNodeShape(node) : UNKNOWN_SHAPE;
+  const groupKey = computeGroupKey({ ruleId: rule.id, shape });
   return {
     ruleId: rule.id,
     fixClass: rule.fixClass,
@@ -105,6 +111,7 @@ function shapeViolation(
     location: { ...v.location, filePath: effectivePath },
     message: v.message,
     findingId,
+    groupKey,
     ...(v.suggestion !== undefined && { suggestion: v.suggestion }),
     ...(v.fix !== undefined && { fix: v.fix }),
     ...(v.fixPaths !== undefined && { fixPaths: v.fixPaths }),

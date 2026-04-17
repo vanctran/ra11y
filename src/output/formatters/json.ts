@@ -22,6 +22,8 @@ export const jsonFormatter = defineFormatter({
         durationMs: Math.round(result.durationMs),
         violations: result.violations.map((v) => ({
           findingId: v.findingId,
+          // Stable group identity — see docs/adr/0008-violation-group-key.md.
+          groupKey: v.groupKey,
           ruleId: v.ruleId,
           criteria: v.criteria,
           // Aligned index-for-index with `criteria`. Omitted when the

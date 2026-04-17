@@ -186,6 +186,12 @@ function violationToSarifResult(violation: Violation): SarifResult {
       // an unrelated edit above the violation won't invalidate
       // GitHub's dedup key.
       primary: violation.findingId,
+      // Secondary key groups findings that share a rule + AST shape
+      // across files (docs/adr/0008-violation-group-key.md). GitHub
+      // uses secondary fingerprints as a fallback when `primary`
+      // drifts, which matches the polarity here — groupKey is stable
+      // across files for the same kind of problem.
+      groupKey: violation.groupKey,
     },
   };
 }

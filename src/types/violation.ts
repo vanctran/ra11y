@@ -125,6 +125,27 @@ export interface Violation {
    * to synthesize one, use `computeFindingId`.
    */
   readonly findingId: string;
+  /**
+   * Stable grouping key for findings that share a rule and an AST
+   * shape. Sibling of `findingId` with opposite polarity: `findingId`
+   * identifies *one finding* across runs, `groupKey` identifies *one
+   * kind of problem* across findings. Same rule firing on
+   * AST-equivalent `<img>` elements in 40 files → same `groupKey`.
+   *
+   * Lets agents write "fix every finding with groupKey X the same
+   * way" scripts without re-deriving the pattern from rule ID +
+   * filename + line number.
+   *
+   * Computed as `sha256(ruleId + "\0" + normalizedShape)` truncated to
+   * `GROUP_KEY_HEX_LENGTH` hex chars. See `src/utils/group-key.ts`
+   * and `describeNodeShape` in `src/engine/ast-helpers.ts` for the
+   * exact recipe. Required on every Violation — if a call site needs
+   * to synthesize one (synthetic crash records, test helpers), use
+   * `computeGroupKey` with `UNKNOWN_SHAPE`.
+   *
+   * See docs/adr/0008-violation-group-key.md.
+   */
+  readonly groupKey: string;
 }
 
 /** Aggregate result of a full scan. */

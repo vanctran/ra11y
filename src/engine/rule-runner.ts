@@ -9,10 +9,13 @@
  * See docs/kb/architecture/rule-engine.md.
  */
 
+import type { Ast } from "../types/ast.ts";
 import type { EmittedViolation, FixClass, Language, Rule } from "../types/rule.ts";
 import type { Severity, Violation } from "../types/violation.ts";
 import { computeFindingId } from "../utils/finding-id.ts";
+import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
 import { extensionMatches } from "../utils/path.ts";
+import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 import type { StandardFilter } from "./standard-filter.ts";
 
@@ -67,6 +70,7 @@ function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void 
         rule.fixClass,
         input.filePath,
         input.source,
+        input.ast,
       ),
     );
   }
@@ -96,6 +100,12 @@ function collectReturn(maybe: readonly Violation[] | undefined, sink: EmittedVio
  * Rules don't know their own file path — the engine owns that fact —
  * so we stamp it here. This also lets a rule emit with `filePath: ""`
  * as a placeholder without the formatter losing the filename downstream.
+ *
+ * Also stamps `findingId` (stable cross-run identity) and `groupKey`
+ * (stable cross-finding grouping by rule + normalized AST shape — see
+ * docs/adr/0008-violation-group-key.md). The AST root is threaded
+ * through so the engine can resolve the target node at the emitted
+ * location; rules never compute either token themselves.
  */
 function stampViolation(
   emitted: EmittedViolation,
@@ -105,8 +115,13 @@ function stampViolation(
   fixClass: FixClass,
   filePath: string,
   source: string,
+  ast: Ast,
 ): Violation {
   const findingId = computeFindingId({ ruleId, filePath, source, line: emitted.location.line });
+  const groupKey = computeGroupKey({
+    ruleId,
+    shape: shapeAtLocation(ast, emitted.location.line, emitted.location.column),
+  });
   return {
     ruleId,
     fixClass,
@@ -116,6 +131,7 @@ function stampViolation(
     location: { ...emitted.location, filePath },
     message: emitted.message,
     findingId,
+    groupKey,
     ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
     ...(emitted.fix !== undefined && { fix: emitted.fix }),
     ...(emitted.fixPaths !== undefined && { fixPaths: emitted.fixPaths }),
@@ -134,6 +150,19 @@ function applies(rule: Rule, fileExt: string, _language: Language): boolean {
   return extensionMatches(fileExt, extensions);
 }
 
+/**
+ * Resolves the target node at the given emitted `(line, column)` and
+ * describes it. When no node covers the location (synthetic emits,
+ * project-scope rules that point at a placeholder), returns
+ * `UNKNOWN_SHAPE` so every such emission under a single rule groups
+ * into one "un-groupable" bucket — honest, deterministic, and never
+ * throws. See docs/adr/0008-violation-group-key.md.
+ */
+function shapeAtLocation(ast: Ast, line: number, column: number): string {
+  const node = findTargetNodeAtLocation(ast.root, line, column);
+  return node ? describeNodeShape(node) : UNKNOWN_SHAPE;
+}
+
 function ruleCrashViolation(
   ruleId: string,
   filePath: string,
@@ -148,6 +177,10 @@ function ruleCrashViolation(
     source,
     line: 1,
   });
+  // Synthetic crashes have no target node — group every crash record
+  // per-ruleId into one bucket (the "un-groupable" shape) so agents
+  // can still batch-triage "all crashes from rule X" if they want.
+  const groupKey = computeGroupKey({ ruleId: "internal/rule-crash", shape: UNKNOWN_SHAPE });
   return {
     ruleId: "internal/rule-crash",
     // Synthetic crash reports route into the verify-in-source lane:
@@ -162,5 +195,6 @@ function ruleCrashViolation(
     message: `Rule '${ruleId}' crashed: ${message}`,
     suggestion: `This is a ra11y bug in rule '${ruleId}', not a problem with your code. Please file an issue with the stack trace if you can reproduce it.`,
     findingId,
+    groupKey,
   };
 }

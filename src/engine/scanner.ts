@@ -31,6 +31,8 @@ import type {
 import type { Standard } from "../types/standard.ts";
 import type { ReportData, ScanResult, Severity, Violation } from "../types/violation.ts";
 import { computeFindingId } from "../utils/finding-id.ts";
+import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
+import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
@@ -159,13 +161,26 @@ function runProjectRules(
   }));
   const disableMaps = new Map<string, ReadonlyMap<number, ReadonlySet<string>>>();
   const sourcesByPath = new Map<string, string>();
+  // Keep a filePath→Ast map so project-rule emits can resolve their
+  // target node for `groupKey` (docs/adr/0008-violation-group-key.md).
+  const astsByPath = new Map<string, Ast>();
+  for (const f of inputs.files) astsByPath.set(f.filePath, f.ast);
   for (const f of projectFiles) {
     disableMaps.set(f.filePath, f.disableMap);
     sourcesByPath.set(f.filePath, f.source);
   }
   const out: Violation[] = [];
   for (const rule of inputs.rules) {
-    invokeOneProjectRule(rule, projectFiles, enabled, filter, disableMaps, sourcesByPath, out);
+    invokeOneProjectRule(
+      rule,
+      projectFiles,
+      enabled,
+      filter,
+      disableMaps,
+      sourcesByPath,
+      astsByPath,
+      out,
+    );
   }
   return out;
 }
@@ -177,6 +192,7 @@ function invokeOneProjectRule(
   filter: StandardFilter,
   disableMaps: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
   sourcesByPath: ReadonlyMap<string, string>,
+  astsByPath: ReadonlyMap<string, Ast>,
   out: Violation[],
 ): void {
   if (!rule.afterProject) return;
@@ -210,6 +226,15 @@ function invokeOneProjectRule(
       source,
       line: em.location.line,
     });
+    const groupKey = computeGroupKey({
+      ruleId: rule.id,
+      shape: shapeAtEmission(
+        astsByPath,
+        em.location.filePath,
+        em.location.line,
+        em.location.column,
+      ),
+    });
     out.push({
       ruleId: rule.id,
       fixClass: rule.fixClass,
@@ -219,12 +244,33 @@ function invokeOneProjectRule(
       location: em.location,
       message: em.message,
       findingId,
+      groupKey,
       ...(em.suggestion !== undefined && { suggestion: em.suggestion }),
       ...(em.fix !== undefined && { fix: em.fix }),
       ...(em.fixPaths !== undefined && { fixPaths: em.fixPaths }),
       ...(em.snippet !== undefined && { snippet: em.snippet }),
     });
   }
+}
+
+/**
+ * Resolves the shape string for a project-rule emission. Mirrors the
+ * per-file helper in rule-runner.ts but looks up the file's AST from
+ * the `astsByPath` map — a project-rule emission can come from any
+ * file in the scan. UNKNOWN_SHAPE when the file wasn't in the map
+ * (shouldn't happen) or the location doesn't land on any node
+ * (synthetic emit with a placeholder location).
+ */
+function shapeAtEmission(
+  astsByPath: ReadonlyMap<string, Ast>,
+  filePath: string,
+  line: number,
+  column: number,
+): string {
+  const ast = astsByPath.get(filePath);
+  if (!ast) return UNKNOWN_SHAPE;
+  const node = findTargetNodeAtLocation(ast.root, line, column);
+  return node ? describeNodeShape(node) : UNKNOWN_SHAPE;
 }
 
 function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
@@ -235,6 +281,10 @@ function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
     source: "",
     line: 1,
   });
+  // Synthetic crashes have no target node — every crash record from
+  // the project-rule path shares one groupKey with the per-file crash
+  // path, so "all internal/rule-crash findings" groups honestly.
+  const groupKey = computeGroupKey({ ruleId: "internal/rule-crash", shape: UNKNOWN_SHAPE });
   return {
     ruleId: "internal/rule-crash",
     // Synthetic crash reports route into the verify-in-source lane:
@@ -248,6 +298,7 @@ function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
     message: `Project-scope rule '${ruleId}' crashed: ${err instanceof Error ? err.message : String(err)}`,
     suggestion: `This is a ra11y bug in rule '${ruleId}', not a problem with your code. Please file an issue with the stack trace if you can reproduce it.`,
     findingId,
+    groupKey,
   };
 }
 
