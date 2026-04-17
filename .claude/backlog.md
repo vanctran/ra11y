@@ -14,9 +14,11 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 
 Tracks below are independent. `/continue` picks the next open item from each of up to 3 active tracks per turn and dispatches them in parallel (details in `.claude/skills/continue/SKILL.md`). Within a track, items run in order — some tracks have sequencing; cross-track work is always parallelizable.
 
-Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals).
+Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals) · **Q** (agent-consumer feedback).
 
 Staged tracks: (none). Tracks S and E were promoted on 2026-04-17 after the user directed "go all the way without releasing until finalized" — M/R/F are complete, so the remaining pre-release work spans S and E. ADR 0005 §Follow-up work still applies to the speculative tool choices inside S; foundation items (sampling.ts, capability, prompt library, KB docs) are safe to build.
+
+Track Q was added on 2026-04-17 in response to a 10-agent independent eval brief — MCP shape honesty + silent-failure elimination, all derived from real consumer pain on an external React codebase.
 
 ---
 
@@ -122,6 +124,46 @@ Owner: `doc-writer` + main session. Promoted from staged 2026-04-17. Items expan
 - [!] `examples/ra11y-in-cursor/` — blocked externally on Cursor's MCP host shipping sampling.
 - [x] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings (f0508dd). Sibling project with isolated toolchain; no runtime deps leak into @ra11y/core. Explicit non-goals (marketplace, EDH smoke test, CodeActionProvider, per-file scan-on-save, streaming, multi-root, reconnection) listed in README for follow-up.
 - [x] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold (2f5539a) + ra11y-side numbers via `scripts/benchmark-run.ts` (f3878e3). Cold start 41.3ms, 10/100/1000 files 3.4/28.3/235.9ms, real-world corpus 72.4ms for 9 fixtures. Competitor columns remain "pending" until those tools are added as isolated dev deps.
+
+---
+
+## Track Q — Agent-consumer feedback
+
+Owner: main session + general-purpose. Source: 10 independent agent runs against an external React codebase (2026-04-17 eval brief). All accepted items are MCP shape/honesty fixes — none touch detection logic. Dispatch in parallel; each touches a different surface.
+
+### v0.2.0 — accepted (P0/P1)
+
+- [ ] **P0-E** Top-level `warnings: string[]` for silent-failure modes on `scan_project` / `scan` responses. Codes: `scanned_zero_files`, `root_source_defaulted`, `no_config_found`, `tailwind_detected_css_undercounted`, `template_files_parsed_as_literal`. Closes the silent-success failure mode where a scan against a nonexistent path returns success with 0 findings. (Anchored by new CLAUDE.md §1 "Zero-output success is ambiguous failure".)
+- [ ] **P0-C** Populate `snippet` (±3–5 lines, ≤300 chars cap) on every `review_candidates` and `checklist` candidate. Currently always `null`, contradicting tool description and forcing N extra `Read` calls per review pass. Use existing parsed AST source — no new I/O.
+- [ ] **P0-D** Widen `suggest_fix.oldText` to a unique anchor window — include enough surrounding tokens (containing opening-tag attribute cluster, or ±1 line, or unique bracket context) that a literal find-and-replace matches exactly once in the file. Eliminates collision risk on files with repeated `aria-hidden="true"` etc.
+- [ ] **P1-F** AST-verify auto-detected native wrappers; split `confirmed` vs `assumed` in `activeNativeWrappersBySource.fromAutoDetect`. One-hop AST probe: if wrapper file's JSX root resolves to a native interactive element, mark `confirmed`. Only `confirmed` wrappers silently silence findings; `assumed` keep their findings with reason text noting the assumption. Reduces silent-silencing risk for slider/menu wrappers that rendered `<div role="...">` underneath.
+- [ ] **P1-J** Stable `findingId: string` on every finding — `hash(rulePath, relativeFilePath, lineContextHash)` so identity survives line-number drift within a file. Propagate through `baseline` diff output. Lets agents verify "did my edit close finding X" by exact identity.
+- [ ] **P1-M** Split `manualReviewRequired` into `actionableManualItems` + `untargetedCriteria` (both top-level on `plan`); summary string leads with the actionable count. Honest labeling — both are deterministic from evidence (grounded vs bare-criterion). Anchored by new CLAUDE.md §1 "Composite headline counts are dishonest."
+- [ ] **P1-H** Split `fixSuggestionAvailable` into `mechanicalEditsAvailable` + `guidanceFixesAvailable`. Same composite-count bug as P1-M; lets agents batch-apply mechanical edits and route guidance to a copy-rewrite pipeline at plan-time without an extra discovery call.
+- [ ] **P1-K** Emit `nextStepStructured: { tool: string, args: object }` alongside the prose `nextStep`. Don't replace the prose (still useful for weaker models); ship both. Deterministic orchestration without English parsing.
+- [ ] **P1-L** Concrete `editCandidate` for `label-in-name` `kind: "guidance"` fixes — when diagnosis is "visible tokens present in aria-label but non-contiguous," synthesize `aria-label="<visible text verbatim>: <remaining aria-label words in order>"` and surface as a *candidate* edit (kind unchanged; agent decides). Adds signal without promising a mechanical edit.
+
+### v0.2.0 — accepted (P2)
+
+- [ ] **P2-V** `criteriaTitles: string[]` alongside `criteria: string[]` on every finding. Lets PR-body / commit-message composition skip the `explain_rule` round-trip.
+- [ ] **P2-N** Always emit `limitations: string[]` (runtime-only checks not performed: live regions, focus traps, ARIA state, post-render contrast), not only on clean scans. Currently advertised by server instructions but missing on mixed-result responses.
+- [ ] **P2-P** `opaqueCustomComponents` fully enumerable when count ≤ 50 (names only inline; locations still gated by `verboseMeta`). Above 50 keep current top-5 + count + `verboseMeta` pattern.
+- [ ] **P2-R** Align `file` vs `filePath` parameter naming across `suggest_fix` and `apply_fix`. Pick `file` (shorter), accept `filePath` as alias for one release with a deprecation note.
+
+### Considered and rejected (per CLAUDE.md §1)
+
+- **P0-A** Heuristic pre-filter for `wcag22:2.2.1` setTimeout/setInterval candidates by filename (`hooks/useDebounce*`, `telemetry/`, `auth/`), enclosing-function name regex, and duration threshold. → rejected per **§1 "Numeric-threshold heuristics are suppression"** + **"No heuristic suppression, even for spec carve-outs"** + **§17** "Adding a numeric-threshold gate." A 4.5s debounce and a 4.5s session timeout are indistinguishable from static analysis. The reason-text enrichment shipped under Track F (`real-world/timing-role-hints`) — "session-keepalive / debounce / animation" — is the correct mechanism. If agents still struggle, sharpen the reason text further; do not filter the candidate list.
+- **P0-B** Tighten `wcag22:3.2.2 On Input` to skip `onChange` handlers whose body is `(e) => setX(e.target.value)`. → rejected for the same reason. The agent reading the handler body is the only correct arbiter; a controlled-input setter and a `navigate()` call are both `onChange` from the AST. Enrich the `reason` text with the detected handler shape ("body calls a single React setter") as additive context if the existing reason is thin; do not drop the candidate.
+- **P1-I** SPA-mode / file-class awareness — auto-suppress `2.4.5 Multiple Ways` / `1.4.5 Images of Text` / `2.4.1 Bypass Blocks` on server-template SPA shells. → rejected per **§1 "No heuristic suppression, even for spec carve-outs."** Whether a template is "the SPA shell" or "the start of a content site" cannot be statically determined. The deterministic disable pragma (`<!-- ra11y-disable wcag22:2.4.5 -->`) is the durable mechanism. Reason-text enrichment ("template parsed as literal — verify whether navigation is owned by the SPA") is acceptable; suppression is not.
+- **P2-W** Severity downgrade for `aria/hidden-focus` when descendants are `disabled` + container has `pointer-events-none`. → rejected per **§1 "Don't downgrade priority to hide things."** Severity is for sorting; downgrading hides the candidate from agents that filter by severity. The reason text already explains state-dependent nature; that is enough. If a `caveat` field would help, add it as additive metadata at the same severity.
+
+### Deferred (worth doing eventually, not in this batch)
+
+- **P1-G** Auto-detect compiled-CSS output paths via vite/next/tsup config. The current `additionalPaths: ["dist/assets"]` hint is wrong for many projects. Worth doing properly (read config, surface as `meta.inferredBuildOutput`), but scope is larger than the rest of Track Q. Park for later sprint.
+- **P2-Q** Batch variant of `suggest_fix({ findings: [...] })`. Nice-to-have; round-trip reduction is real but not urgent.
+- **P2-S** `plan.candidateCountsByCriterion: { ... }` histogram. Cheap, but no agent in the brief said they were blocked on it. Park.
+- **P2-T** Gate `unusedNativeWrappers` on full-scan only. Single-observer (run #8 only); the existing `unusedNativeWrappersNote` already disclaims. Low ROI.
+- **P2-U** Promote `absentDeclaredWrappers` to `meta.configHealth.staleWrappers` on `scan_project`. Single-observer; nice but not urgent.
 
 ---
 
