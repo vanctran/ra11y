@@ -5,6 +5,8 @@
  *   - initialize / initialized
  *   - tools/list
  *   - tools/call
+ *   - prompts/list
+ *   - prompts/get
  *
  * Zero dependencies. Reads newline-delimited JSON from stdin, writes
  * JSON responses to stdout. Logs go to stderr via the logger.
@@ -12,6 +14,7 @@
 
 import { createInterface } from "node:readline";
 import { logger } from "../utils/logger.ts";
+import { BUILTIN_PROMPTS } from "./prompts/index.ts";
 import { McpSession } from "./session.ts";
 import { MCP_TOOLS } from "./tools.ts";
 
@@ -33,6 +36,12 @@ interface JsonRpcResponse {
 
 /** Typed view of the tools/call params so dot access satisfies both TS and Biome. */
 interface ToolCallParams {
+  readonly name: string | undefined;
+  readonly arguments: Record<string, unknown> | undefined;
+}
+
+/** Typed view of the prompts/get params. Arguments are always string-valued per spec. */
+interface PromptGetParams {
   readonly name: string | undefined;
   readonly arguments: Record<string, unknown> | undefined;
 }
@@ -70,6 +79,7 @@ const SERVER_INSTRUCTIONS = [
 // ─── Tool index ─────────────────────────────────────────────────────────────
 
 const TOOL_BY_NAME = new Map(MCP_TOOLS.map((t) => [t.def.name, t]));
+const PROMPT_BY_NAME = new Map(BUILTIN_PROMPTS.map((p) => [p.name, p]));
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -173,6 +183,10 @@ function route(
   if (request.method === "tools/call") {
     return handleToolsCall(id, request.params ?? {}, session);
   }
+  if (request.method === "prompts/list") return promptsListResponse(id);
+  if (request.method === "prompts/get") {
+    return handlePromptsGet(id, request.params ?? {});
+  }
   return {
     jsonrpc: "2.0",
     id,
@@ -186,7 +200,10 @@ function initializeResponse(id: string | number | null): JsonRpcResponse {
     id,
     result: {
       protocolVersion: PROTOCOL_VERSION,
-      capabilities: { tools: {} },
+      // `listChanged: false` tells the host we won't emit
+      // `notifications/prompts/list_changed` — prompt inventory is
+      // baked in at build time. Tools ship the same guarantee.
+      capabilities: { tools: {}, prompts: { listChanged: false } },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: SERVER_INSTRUCTIONS,
     },
@@ -206,6 +223,78 @@ function toolsListResponse(id: string | number | null): JsonRpcResponse {
       })),
     },
   };
+}
+
+function promptsListResponse(id: string | number | null): JsonRpcResponse {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: {
+      prompts: BUILTIN_PROMPTS.map((p) => ({
+        name: p.name,
+        description: p.description,
+        arguments: p.arguments.map((a) => ({
+          name: a.name,
+          description: a.description,
+          required: a.required,
+        })),
+      })),
+    },
+  };
+}
+
+function handlePromptsGet(
+  id: string | number | null,
+  rawParams: Record<string, unknown>,
+): JsonRpcResponse {
+  const params = rawParams as unknown as PromptGetParams;
+  const name = params.name;
+  if (typeof name !== "string") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: INVALID_PARAMS, message: "Missing or invalid prompt name." },
+    };
+  }
+  const prompt = PROMPT_BY_NAME.get(name);
+  if (!prompt) {
+    // Spec parity with tools/call: unknown prompt → method-not-found
+    // on the name, not invalid-params. Matches how clients (incl.
+    // Claude Code) discriminate "registry miss" from "bad argument".
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: METHOD_NOT_FOUND, message: `Unknown prompt: ${name}` },
+    };
+  }
+  const stringArgs = coercePromptArgs(params.arguments ?? {});
+  const messages = prompt.render(stringArgs);
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: {
+      description: prompt.description,
+      messages,
+    },
+  };
+}
+
+/**
+ * MCP prompt arguments are spec'd as `{ [name]: string }`. Hosts
+ * occasionally pass numbers or booleans by mistake; coerce to string
+ * so template rendering stays deterministic and non-string values
+ * don't leak into substitution sites.
+ */
+function coercePromptArgs(raw: Record<string, unknown>): Readonly<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") {
+      out[key] = value;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      out[key] = String(value);
+    }
+  }
+  return out;
 }
 
 // ─── I/O helpers ────────────────────────────────────────────────────────────

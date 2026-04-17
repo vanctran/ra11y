@@ -58,7 +58,7 @@ describe("MCP server JSON-RPC", () => {
     expect(res.id).toBe(1);
     const result = res.result as Record<string, unknown>;
     expect(result.protocolVersion).toBe("2024-11-05");
-    expect(result.capabilities).toEqual({ tools: {} });
+    expect(result.capabilities).toEqual({ tools: {}, prompts: { listChanged: false } });
     const info = result.serverInfo as Record<string, unknown>;
     expect(info.name).toBe("ra11y");
     expect(typeof info.version).toBe("string");
