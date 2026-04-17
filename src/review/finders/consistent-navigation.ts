@@ -232,10 +232,15 @@ function emitGroupCandidates(members: readonly NavInstance[], out: ReviewCandida
       `— this file: [${inst.order.join(", ")}]; counterpart: [${counterpart.order.join(", ")}]`;
     const reason = `${reasonCore} — verify the repeated navigational mechanism appears in the same relative order on both pages`;
     for (const criterionId of CRITERION_IDS) {
+      // Confidence "high": the divergent-ordering evidence is concrete
+      // — two real navs in the scanned files share a link set and
+      // emit them in a different order. The reviewer's question is
+      // only whether the divergence is user-initiated.
       out.push({
         criterionId,
         location: { filePath: inst.filePath, line: inst.line, column: inst.column },
         reason,
+        confidence: "high",
       });
     }
   }

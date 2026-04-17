@@ -41,6 +41,10 @@ export const finder = defineCandidateFinder({
       const orderDecl = findCssDeclaration(rule, "order");
       if (orderDecl) {
         for (const criterionId of CRITERION_IDS) {
+          // Confidence "high": `order` and `flex-direction: *-reverse`
+          // are deterministic CSS properties whose effect on visual
+          // order is unambiguous. The reviewer question is whether
+          // the reordering matches meaning, not whether it happened.
           candidates.push({
             criterionId,
             location: {
@@ -50,6 +54,7 @@ export const finder = defineCandidateFinder({
             },
             reason:
               "CSS `order` property reorders visual layout -- verify reading sequence matches DOM order",
+            confidence: "high",
           });
         }
       }
@@ -66,6 +71,7 @@ export const finder = defineCandidateFinder({
             },
             reason:
               "CSS `flex-direction` reverses visual layout -- verify reading sequence matches DOM order",
+            confidence: "high",
           });
         }
       }

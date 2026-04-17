@@ -117,10 +117,15 @@ function emitHeading(
 ): void {
   const reason = `<${tag}> text "${text}" is a generic phrase -- verify the heading describes the topic or purpose of the content it heads`;
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "low": generic-phrase regex on heading text content.
+    // "Overview" / "Introduction" / "Page 2" often really are fine in
+    // context; the finder is a prompt to verify, not evidence of a
+    // failure. Biased toward false positives per the docstring.
     candidates.push({
       criterionId,
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason,
+      confidence: "low",
     });
   }
 }
@@ -133,10 +138,14 @@ function emitLabel(
 ): void {
   const reason = `<label> text "${text}" is a generic phrase -- verify the label describes the purpose of the form control`;
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "low": same regex-on-text heuristic — a "Label" or
+    // "Field" form label might be a stub the team left, or might be
+    // the correct UI. Reviewer decides.
     candidates.push({
       criterionId,
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason,
+      confidence: "low",
     });
   }
 }

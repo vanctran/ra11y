@@ -88,6 +88,10 @@ function findHtmlCandidates(
     const desc = isHtmlTrapCandidate(el);
     if (desc) {
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": deterministic check — dialog tag, role
+        // on a container, aria-modal="true", or a numeric tabindex.
+        // The reviewer verifies the escape path; the candidate
+        // itself is concrete.
         candidates.push({
           criterionId,
           location: {
@@ -96,6 +100,7 @@ function findHtmlCandidates(
             column: el.loc.start.column,
           },
           reason: `${desc} -- verify keyboard focus can exit without mouse`,
+          confidence: "high",
         });
       }
     }
@@ -107,6 +112,10 @@ function findJsxCandidates(root: TsxModule, filePath: string, candidates: Review
     const desc = isJsxTrapCandidate(el);
     if (desc) {
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": deterministic check — dialog tag, role
+        // on a container, aria-modal="true", or a numeric tabindex.
+        // The reviewer verifies the escape path; the candidate
+        // itself is concrete.
         candidates.push({
           criterionId,
           location: {
@@ -115,6 +124,7 @@ function findJsxCandidates(root: TsxModule, filePath: string, candidates: Review
             column: el.loc.start.column,
           },
           reason: `${desc} -- verify keyboard focus can exit without mouse`,
+          confidence: "high",
         });
       }
     }

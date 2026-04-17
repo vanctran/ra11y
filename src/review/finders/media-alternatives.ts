@@ -72,6 +72,10 @@ function findHtmlCandidates(
   for (const tag of MEDIA_TAGS) {
     for (const el of findHtmlElementsByTag(root, tag)) {
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": deterministic tag match on <video>,
+        // <audio>, <iframe>. The reviewer question is about
+        // transcripts/captions/alternatives — the element is
+        // unambiguous.
         candidates.push({
           criterionId,
           location: {
@@ -81,6 +85,7 @@ function findHtmlCandidates(
           },
           reason: reasonForTag(tag),
           snippet: source.slice(el.range.start, Math.min(el.range.start + 120, el.range.end)),
+          confidence: "high",
         });
       }
     }
@@ -96,6 +101,10 @@ function findJsxCandidates(
   for (const tag of MEDIA_TAGS) {
     for (const el of findJsxElementsByTag(root, tag)) {
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": deterministic tag match on <video>,
+        // <audio>, <iframe>. The reviewer question is about
+        // transcripts/captions/alternatives — the element is
+        // unambiguous.
         candidates.push({
           criterionId,
           location: {
@@ -105,6 +114,7 @@ function findJsxCandidates(
           },
           reason: reasonForTag(tag),
           snippet: source.slice(el.range.start, Math.min(el.range.start + 120, el.range.end)),
+          confidence: "high",
         });
       }
     }

@@ -90,10 +90,15 @@ function findHtmlCandidates(
   for (const el of walkHtmlElements(root)) {
     const matched = matchedMotionAttr(el);
     if (!matched) continue;
+    // Confidence "high": `ondevicemotion`/`ondeviceorientation` HTML
+    // attributes are single-purpose — if the element defines one, the
+    // device-motion API is wired in. Only the feature's disable path
+    // is the reviewer question.
     candidates.push({
       criterionId: CRITERION_IDS[0],
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason: `<${el.tagName}> defines ${matched} — verify the feature is also operable via a UI control and that motion response can be disabled`,
+      confidence: "high",
     });
     // Emit for each cross-standard equivalent.
     for (let i = 1; i < CRITERION_IDS.length; i++) {
@@ -103,6 +108,7 @@ function findHtmlCandidates(
         criterionId: id,
         location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
         reason: `<${el.tagName}> defines ${matched} — verify the feature is also operable via a UI control and that motion response can be disabled`,
+        confidence: "high",
       });
     }
   }
@@ -128,10 +134,14 @@ function findSourceCandidates(ctx: RuleContext, candidates: ReviewCandidate[]): 
       const { line, column } = offsetToLineColumn(ctx.source, offset);
       const rendered = renderLabel(label, match);
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": DeviceMotionEvent, DeviceOrientationEvent,
+        // and the lowercase listener strings have no other purpose in
+        // web code — the signal is tight by design.
         candidates.push({
           criterionId,
           location: { filePath: ctx.filePath, line, column },
           reason: `${rendered} — verify the feature is also operable via a UI control and that motion response can be disabled`,
+          confidence: "high",
         });
       }
     }

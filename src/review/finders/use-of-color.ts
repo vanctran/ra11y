@@ -156,10 +156,17 @@ function emit(
 ): void {
   const reason = `className uses status color "${matched}" with no visible text, icon, or aria-label -- verify color is not the sole signal`;
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "low": className-regex on status-color utility
+    // tokens (red/green/danger/success…) combined with an absence-
+    // of-sibling-signal check. An element genuinely communicating
+    // only by color matches; so does a styled chip whose context
+    // (parent heading, sibling label) carries the real signal. The
+    // reviewer decides. Biased toward false positives per docstring.
     candidates.push({
       criterionId,
       location: { filePath, line: loc.line, column: loc.column },
       reason,
+      confidence: "low",
     });
   }
 }

@@ -152,11 +152,20 @@ function emit(
   candidates: ReviewCandidate[],
 ): void {
   const reason = buildReason(handler, tag, source);
+  // Confidence tracks the existing reason-text tier: when the
+  // handler source contains a static nav/submit pattern we can
+  // claim concrete evidence of a context change (high). When the
+  // body is opaque (bare identifier reference) or inline-but-no-
+  // nav-pattern we surface the candidate but the reviewer must
+  // open the handler (low). Per CLAUDE.md §1 we surface every
+  // handler; confidence just mirrors what the static signal knows.
+  const confidence = detectContextChange(source) === undefined ? "low" : "high";
   for (const criterionId of criteriaForHandler(handler)) {
     candidates.push({
       criterionId,
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason,
+      confidence,
     });
   }
 }

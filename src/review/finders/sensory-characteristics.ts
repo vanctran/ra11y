@@ -117,11 +117,16 @@ function emitSensoryCandidates(
 ): void {
   const reason = `text references sensory characteristic "${matchedPhrase}" -- verify a non-sensory alternative exists`;
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "low": regex on visible text. "Click below" and
+    // "the button above" match even when the surrounding UI does
+    // carry a non-sensory alternative (icon, heading, landmark).
+    // The finder is a prompt to verify, not evidence of a failure.
     candidates.push({
       criterionId,
       location: { filePath, line: loc.line, column: loc.column },
       reason,
       snippet: text.slice(0, 120),
+      confidence: "low",
     });
   }
 }

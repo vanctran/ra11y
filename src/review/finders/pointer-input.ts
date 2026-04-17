@@ -89,10 +89,16 @@ function findJsxHandlers(module: TsxModule, filePath: string, out: ReviewCandida
     for (const attr of el.attributes) {
       if (!GESTURE_HANDLERS.has(attr.name)) continue;
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": the path-based / multipoint handler
+        // attribute set (onPointerMove, onTouchMove, gesture*) is a
+        // closed list — a JSX element carrying one of these names IS
+        // using gesture-style input. Point-in-time handlers (onClick,
+        // onPointerDown) are not in the set.
         out.push({
           criterionId,
           location: { filePath, line: attr.loc.start.line, column: attr.loc.start.column },
           reason: `<${el.tagName}> has ${attr.name}${GESTURE_REASON}`,
+          confidence: "high",
         });
       }
     }
@@ -111,10 +117,14 @@ function findSourceHandlers(ctx: RuleContext, out: ReviewCandidate[]): void {
       const token = match[1] ?? "";
       const rendered = label.replace("$1", token);
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "high": addEventListener with one of the closed
+        // gesture-event strings (pointermove, touchmove, gesture*) —
+        // the string literal is unambiguous evidence of wiring.
         out.push({
           criterionId,
           location: { filePath: ctx.filePath, line, column },
           reason: `${rendered}${GESTURE_REASON}`,
+          confidence: "high",
         });
       }
     }

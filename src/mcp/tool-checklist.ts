@@ -10,7 +10,7 @@ import { buildCoverageReport, type PerStandardCoverage } from "../reports/covera
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
-import type { ReviewCandidate } from "../types/review.ts";
+import type { ReviewCandidate, ReviewConfidence } from "../types/review.ts";
 import {
   type Applicability,
   detectApplicability,
@@ -36,6 +36,7 @@ interface ChecklistCandidateOut {
   readonly path: string;
   readonly line: number;
   readonly reason: string;
+  readonly confidence: ReviewConfidence;
   readonly snippet?: string;
 }
 
@@ -51,10 +52,39 @@ interface ChecklistItemOut {
   readonly title: string;
   readonly level: string;
   readonly priority: ChecklistPriority;
+  /**
+   * Item-level confidence. When the criterion is grounded in at
+   * least one finder-emitted candidate, this is the highest
+   * confidence across those candidates (a single "high" hit is the
+   * signal that sizes the item even if other hits are "low"). When
+   * no finder grounded the criterion (a bare-criterion pure WCAG
+   * prompt), this is "low" — by definition there is no specific
+   * evidence at the criterion level. Same enum/semantics as the
+   * per-candidate `confidence`.
+   */
+  readonly confidence: ReviewConfidence;
   readonly principle?: WcagPrinciple;
   readonly candidates: readonly ChecklistCandidateOut[];
   readonly likelyRelevant?: false;
   readonly relevanceReason?: string;
+}
+
+const CONFIDENCE_RANK: Readonly<Record<ReviewConfidence, number>> = {
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+function highestConfidence(
+  candidates: readonly { readonly confidence: ReviewConfidence }[],
+): ReviewConfidence | null {
+  let best: ReviewConfidence | null = null;
+  for (const c of candidates) {
+    if (best === null || CONFIDENCE_RANK[c.confidence] > CONFIDENCE_RANK[best]) {
+      best = c.confidence;
+    }
+  }
+  return best;
 }
 
 /**
@@ -236,10 +266,14 @@ function mapCandidates(
       // a cache-only lookup. Omit the field when neither is available
       // — empty-string is a dishonest shape per CLAUDE.md §1.
       const snippet = finderOrBuiltSnippet(c, sources);
+      // `confidence` passes through verbatim from the finder. See
+      // CLAUDE.md §1 — this is identity-like metadata, not an
+      // optional enrichment, so it is always present.
       return {
         path: c.location.filePath,
         line: c.location.line,
         reason: c.reason,
+        confidence: c.confidence,
         ...(snippet === undefined ? {} : { snippet }),
       };
     });
@@ -263,11 +297,19 @@ function buildChecklistItem(
 ): { item: ChecklistItemOut; relevant: boolean } {
   const mapped = mapCandidates(criterion.id, candidates, sources);
   const principle = wcagPrincipleFor(criterion.standardId, criterion.localId);
+  // Bare-criterion items (no candidates grounded by a finder) carry
+  // "low" confidence — by definition the scanner has no specific
+  // evidence tying this criterion to the scanned code. Grounded
+  // items take the highest confidence across their candidates, so a
+  // single "high" hit sizes the item honestly even when other hits
+  // are lower-signal.
+  const itemConfidence: ReviewConfidence = highestConfidence(mapped) ?? "low";
   const base: ChecklistItemOut = {
     criterionId: criterion.id,
     title: criterion.title,
     level: criterion.level,
     priority: priorityFor(criterion.level, mapped.length > 0),
+    confidence: itemConfidence,
     ...(principle === null ? {} : { principle }),
     candidates: mapped,
   };

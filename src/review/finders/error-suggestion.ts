@@ -461,6 +461,15 @@ function pushForAllCriteria(
 ): void {
   const reason = `<input> has a constrained validation path, but the associated message via ${match.association} is bare text "${match.text}" with no corrective suggestion`;
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    // Confidence "low": the "bare error text" signal is a keyword list
+    // against short strings — wording like "Required" / "Invalid"
+    // without the helpful-cue vocabulary. Real missing suggestions
+    // match; so do terse-but-appropriate copy the reviewer approved.
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason,
+      confidence: "low",
+    });
   }
 }

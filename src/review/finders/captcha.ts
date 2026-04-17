@@ -213,7 +213,16 @@ function pushForAllCriteria(
 ): void {
   const reason = `${reasonCore} — verify the authentication flow also offers a non-cognitive alternative (WebAuthn, hardware token, email magic link)`;
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    // Confidence "high": known CAPTCHA package names, vendor hostnames,
+    // and widget component tags are single-purpose signals — the
+    // element IS a CAPTCHA. The reviewer question is about the sibling
+    // alternative, not whether this is really a CAPTCHA.
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason,
+      confidence: "high",
+    });
   }
 }
 

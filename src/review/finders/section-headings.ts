@@ -99,6 +99,15 @@ function pushForAllCriteria(
   const reason =
     "<section> has no descendant heading and no aria-label/aria-labelledby -- verify the section is organized with a heading or equivalent label";
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    // Confidence "high": `<section>` without either a labeling
+    // attribute or any h1-h6 descendant is a deterministic structural
+    // finding. The reviewer's only question is whether the section is
+    // intentionally unnamed.
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason,
+      confidence: "high",
+    });
   }
 }

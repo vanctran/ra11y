@@ -274,10 +274,18 @@ function candidatesForAllCriteria(
   const base =
     "Likely root layout has no search, sitemap, breadcrumb, or 3-link navigation signal; verify users have more than one way to locate pages";
   const reason = annotation === null ? base : `${base} — ${annotation}`;
+  // Confidence "low": the finder infers the root-layout role from
+  // filename/root-tag heuristics, and the "no multiple-ways signal"
+  // determination rides on a small set of structural proxies
+  // (search input, sitemap href, breadcrumb aria-label, ≥3 direct
+  // nav anchors) that legitimate layouts can route through other
+  // files. Biased toward false positives — the candidate is a prompt
+  // to verify, not a failure claim.
   return CRITERION_IDS.map((criterionId) => ({
     criterionId,
     location: { filePath, line, column },
     reason,
+    confidence: "low" as const,
   }));
 }
 

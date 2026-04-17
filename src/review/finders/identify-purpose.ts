@@ -123,10 +123,16 @@ function jsxInputNeedsReview(el: JsxElement): boolean {
 
 function emitHtml(el: HtmlElement, filePath: string, out: ReviewCandidate[]): void {
   for (const id of CRITERION_IDS) {
+    // Confidence "medium": "input without autocomplete" is a
+    // deterministic attribute check, but whether the control collects
+    // a WCAG Input Purpose (and therefore whether 1.3.6 applies) is a
+    // reviewer decision the static scanner can't make. Every candidate
+    // is worth reading; many will dismiss after one look at the label.
     out.push({
       criterionId: id,
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason: `<${el.tagName.toLowerCase()}> ${REASON}`,
+      confidence: "medium",
     });
   }
 }
@@ -137,6 +143,7 @@ function emitJsx(el: JsxElement, filePath: string, out: ReviewCandidate[]): void
       criterionId: id,
       location: { filePath, line: el.loc.start.line, column: el.loc.start.column },
       reason: `<${el.tagName}> ${REASON}`,
+      confidence: "medium",
     });
   }
 }

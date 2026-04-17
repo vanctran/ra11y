@@ -135,10 +135,20 @@ function findSourceCandidates(ctx: RuleContext, out: ReviewCandidate[]): void {
       seen.add(offset);
       const { line, column } = offsetToLineColumn(ctx.source, offset);
       for (const criterionId of CRITERION_IDS) {
+        // Confidence "medium": setTimeout/setInterval is concrete
+        // evidence of a timer, but the reviewer's question — "does
+        // this govern a user-facing time limit?" — depends on what
+        // the timer actually does. Session-keepalive vs debounce vs
+        // animation are indistinguishable from the call site alone.
+        // Per CLAUDE.md §1 we don't gate on duration thresholds; the
+        // agent reading the surrounding code is the only correct
+        // arbiter, so we surface at medium and let the reason text
+        // carry the dismissal vocabulary.
         out.push({
           criterionId,
           location: { filePath: ctx.filePath, line, column },
           reason: `${label}${JS_REASON_PREFIX}`,
+          confidence: "medium",
         });
       }
     }
@@ -152,10 +162,14 @@ function emitAtLocation(
   out: ReviewCandidate[],
 ): void {
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "high": `<meta http-equiv="refresh">` is a
+    // deterministic, single-purpose signal — the page IS auto-
+    // refreshing. The reviewer just confirms the user control.
     out.push({
       criterionId,
       location: { filePath, line: pos.line, column: pos.column },
       reason,
+      confidence: "high",
     });
   }
 }

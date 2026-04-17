@@ -147,7 +147,11 @@ function emitHtml(
     const reason = kind === "video" ? prompt.videoReason : prompt.audioReason;
     if (reason === null) continue;
     for (const id of [prompt.criterionId, ...prompt.equivalentIds]) {
-      out.push({ criterionId: id, location, reason, snippet });
+      // Confidence "high": deterministic <video>/<audio> tag match.
+      // The criterion-level prompts (live captions, sign language,
+      // background audio, etc.) each ask the reviewer to classify
+      // the content, but the element is unambiguous.
+      out.push({ criterionId: id, location, reason, snippet, confidence: "high" });
     }
   }
 }
@@ -165,7 +169,11 @@ function emitJsx(
     const reason = kind === "video" ? prompt.videoReason : prompt.audioReason;
     if (reason === null) continue;
     for (const id of [prompt.criterionId, ...prompt.equivalentIds]) {
-      out.push({ criterionId: id, location, reason, snippet });
+      // Confidence "high": deterministic <video>/<audio> tag match.
+      // The criterion-level prompts (live captions, sign language,
+      // background audio, etc.) each ask the reviewer to classify
+      // the content, but the element is unambiguous.
+      out.push({ criterionId: id, location, reason, snippet, confidence: "high" });
     }
   }
 }

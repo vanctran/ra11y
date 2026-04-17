@@ -322,10 +322,16 @@ function pushForAllCriteria(
       logoLikelyExempt && criterionAllowsLogotypeExemption(criterionId)
         ? `${reason} — if this is a logo or brand mark, WCAG 1.4.5 has a logotype exemption (essential presentation); the AAA "no exception" variant (1.4.9) still applies`
         : reason;
+    // Confidence "low": alt/className/src pattern matching on
+    // "logo"/"banner"/"heading" tokens and short-alt-duplicated-in-text
+    // heuristics. Biased toward false positives by design (see
+    // docstring); the finder is a prompt to confirm, not a failure
+    // claim.
     candidates.push({
       criterionId,
       location: { filePath, line, column },
       reason: augmented,
+      confidence: "low",
     });
   }
 }

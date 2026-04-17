@@ -18,6 +18,30 @@ import type { Ast } from "./ast.ts";
 import type { AppliesTo, FileContext, RuleContext } from "./rule.ts";
 import type { Location } from "./violation.ts";
 
+/**
+ * How strongly the finder's static evidence supports this being a real
+ * review candidate. Same enum, same semantics as the `confidence` field
+ * on automated findings (see `severityToConfidence` in
+ * src/mcp/tools-helpers.ts) so an agent's threshold/filter logic reads
+ * the same way across surfaces.
+ *
+ * - `"high"`: deterministic match. The scanner can name the exact static
+ *   evidence (element tag, attribute combination, known library import,
+ *   cross-file ordering divergence) and a reviewer's next read confirms
+ *   or rejects the question the criterion asks. Near-zero false-positive
+ *   floor.
+ * - `"medium"`: concrete evidence exists but the question the finder
+ *   surfaces depends on context the scanner can't see (e.g.
+ *   "setTimeout" — real session timeout vs debounce). The candidate is
+ *   always worth reading; the dismissal is often one file Read away.
+ * - `"low"`: heuristic match on narrow evidence (text-regex, className
+ *   convention, structural proxy for a page-set concern). The finder's
+ *   docstring typically notes it is "biased toward false positives."
+ *   Still surface — an agent dismisses in milliseconds — but threshold
+ *   filtering here is meaningful for batch workflows.
+ */
+export type ReviewConfidence = "high" | "medium" | "low";
+
 /** A location where a human reviewer should verify a manual criterion. */
 export interface ReviewCandidate {
   /** The criterion this candidate is relevant to (e.g., "wcag22:1.2.1"). */
@@ -26,6 +50,13 @@ export interface ReviewCandidate {
   readonly location: Location;
   /** Short explanation of why this location needs review. */
   readonly reason: string;
+  /**
+   * How strongly the finder's static evidence supports this candidate.
+   * Required — every grounded candidate carries a confidence value.
+   * Finders choose the value based on what their static signal can
+   * actually claim; see {@link ReviewConfidence}.
+   */
+  readonly confidence: ReviewConfidence;
   /** Optional source snippet for context in reports. */
   readonly snippet?: string;
 }

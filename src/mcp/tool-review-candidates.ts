@@ -146,12 +146,19 @@ export const reviewCandidatesTool: McpTool = {
         const standard = standardsById.get(standardId);
         const criterion = standard?.criteria.find((ck) => ck.id === criterionKey);
         const snippet = candidateSnippet(c, sources);
+        // `confidence` is required on every grounded candidate —
+        // finders set it based on what their static signal can claim
+        // (deterministic match -> "high", structural-with-context
+        // ambiguity -> "medium", narrow-heuristic -> "low"). Passed
+        // through verbatim so an agent's threshold/filter logic reads
+        // the same across automated findings and review candidates.
         return {
           criterionId: c.criterionId,
           title: criterion?.title ?? null,
           level: criterion?.level ?? null,
           location: c.location,
           reason: c.reason,
+          confidence: c.confidence,
           ...(snippet === undefined ? {} : { snippet }),
         };
       }),

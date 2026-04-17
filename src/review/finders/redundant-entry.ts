@@ -346,6 +346,16 @@ function pushForAllCriteria(
 ): void {
   const reason = `A prior <input> in the same <form> already uses ${detail} -- verify the user can reuse previously entered information instead of typing it again`;
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    // Confidence "low": the "same purpose twice" detection rides on a
+    // same-form proxy (not the full "process" the spec scopes on),
+    // plus personal-data keyword matching and label-text dedupe. A
+    // real redundant entry will match; so will "old password / new
+    // password" fields that genuinely need both. Reviewer decides.
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason,
+      confidence: "low",
+    });
   }
 }

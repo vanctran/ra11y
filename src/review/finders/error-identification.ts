@@ -171,6 +171,14 @@ function pushForAllCriteria(
 ): void {
   const reason = `<${tagName}> has aria-invalid="true" but no aria-describedby or aria-errormessage — verify the error is described in text and programmatically associated`;
   for (const criterionId of CRITERION_IDS) {
-    candidates.push({ criterionId, location: { filePath, line, column }, reason });
+    // Confidence "high": deterministic attribute check — native form
+    // control + literal aria-invalid="true" + neither association
+    // attribute present. The signal space is narrow by design.
+    candidates.push({
+      criterionId,
+      location: { filePath, line, column },
+      reason,
+      confidence: "high",
+    });
   }
 }

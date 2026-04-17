@@ -418,10 +418,16 @@ function pushForAllCriteria(
   reason: string,
 ): void {
   for (const criterionId of CRITERION_IDS) {
+    // Confidence "low": the "high-impact submission" signal rides on
+    // keyword matches in action/class/id/name plus a file-scoped
+    // absence-of-confirm heuristic. Real checkout forms match; so do
+    // plain forms whose names happen to include "confirm" or "cancel."
+    // Biased toward false positives by design (see docstring).
     candidates.push({
       criterionId,
       location: { filePath, line, column },
       reason,
+      confidence: "low",
     });
   }
 }
