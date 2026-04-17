@@ -10,6 +10,7 @@ import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import {
+  errorResult,
   type McpTool,
   ms,
   parseExplicitPaths,
@@ -17,6 +18,7 @@ import {
   resolveStandards,
   runScanAndFormat,
   type ScanFormatted,
+  type StructuredErrorCode,
   strArrayParam,
   strParam,
   textResult,
@@ -97,7 +99,9 @@ export const scanProjectTool: McpTool = {
     const projectConfig = await session.loadProjectConfig(root);
     const configHint = buildConfigHint(projectConfig.sourcePath, explicitCwd, root, autoPromoted);
     const standards = resolveStandards(strParam(params, "standard"), session);
-    const roots = resolveScanRoots(params, root);
+    const scanScope = resolveScanScope(params, root);
+    if (scanScope.kind === "error") return scopeErrorToResult(scanScope);
+    const { roots, mode: actualMode, fallbackReason } = scanScope;
     const t0 = performance.now();
     const baseFiles = await parseFiles(roots, session, root);
     const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
@@ -107,17 +111,12 @@ export const scanProjectTool: McpTool = {
     const parseMs = ms(t0);
     if (files.length === 0) {
       logger.debug(`scan_project: 0 parseable files (${parseMs}ms discover)`);
-      return textResult({
-        plan: { totalFindings: 0, summary: "No parseable files found." },
-        files: [],
-        meta: { filesScanned: 0, scannedRoot: root, scanMode: describeMode(params) },
-        ...warningsField({
-          filesScanned: 0,
-          rootSource,
-          configSource: projectConfig.sourcePath,
-          analysisCoverage: undefined,
-          filesByExtension: undefined,
-        }),
+      return buildEmptyFilesResult({
+        root,
+        actualMode,
+        fallbackReason,
+        rootSource,
+        configSource: projectConfig.sourcePath,
       });
     }
     const autoDetect = params["autoDetectWrappers"] === true;
@@ -157,7 +156,7 @@ export const scanProjectTool: McpTool = {
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
     );
-    const nextStep = suggestNextStep(formatted, describeMode(params));
+    const nextStep = suggestNextStep(formatted, actualMode);
     return textResult({
       ...formatted,
       ...warningsFieldFromScanMeta({
@@ -168,7 +167,8 @@ export const scanProjectTool: McpTool = {
       meta: {
         ...formatted.meta,
         scannedRoot: root,
-        scanMode: describeMode(params),
+        scanMode: actualMode,
+        ...(fallbackReason === undefined ? {} : { fallbackReason }),
         rootSource,
         ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
         configSource: projectConfig.sourcePath,
@@ -441,22 +441,149 @@ function readFindingRuleIdAndLine(
 }
 
 /**
- * Resolves which files to scan based on the optional git-aware params.
- * Falls back to the full tree if the git helper returns nothing (not a
- * repo, nothing staged, or unknown ref).
+ * The scan scope for a given `scan_project` invocation. Either the
+ * (roots, mode) pair the scanner consumes — with an optional
+ * `fallbackReason` when the requested mode couldn't execute and we
+ * degraded to a full scan — or an `error` descriptor the handler
+ * surfaces via `errorResult` before any scan work happens.
+ *
+ * The error variant exists for `changedOnly: true` inside a git repo
+ * with zero staged files: the previous behavior silently fell back to
+ * a full scan AND reported `scanMode: "changedOnly"`, which made
+ * pre-commit / CI-on-diff workflows believe their diff gate was
+ * working when it wasn't. Hard-erroring is the honest shape.
+ *
+ * The `full-fallback` variant covers `changedOnly: true` outside a git
+ * repo — genuinely unavoidable, but we stop lying about what ran by
+ * reporting `scanMode: "full-fallback"` + a named `fallbackReason`.
  */
-function resolveScanRoots(params: Record<string, unknown>, root: string): readonly string[] {
+type ScanScope =
+  | {
+      readonly kind: "scan";
+      readonly roots: readonly string[];
+      readonly mode: string;
+      readonly fallbackReason?: string;
+    }
+  | {
+      readonly kind: "error";
+      readonly code: StructuredErrorCode;
+      readonly message: string;
+      readonly details: Record<string, unknown>;
+      readonly remediation: string;
+    };
+
+/**
+ * Decides which files to scan, and what to truthfully report as
+ * `scanMode`, based on the git-aware params. Three branches:
+ *
+ *   - `changedOnly: true`:
+ *       - not a git repo        → full-fallback (kept for compatibility
+ *                                  with the pre-fix behavior, but now
+ *                                  with a named fallbackReason).
+ *       - repo, nothing staged  → error envelope `no_staged_files`.
+ *       - repo, files staged    → scan those paths as `changedOnly`.
+ *   - `since: "<ref>"`:
+ *       - empty result          → full-fallback (fallbackReason names why).
+ *       - any result            → scan those paths as `since:<ref>`.
+ *   - neither flag              → full scan of `root`.
+ */
+function resolveScanScope(params: Record<string, unknown>, root: string): ScanScope {
   const changedOnly = (params as { changedOnly?: unknown }).changedOnly === true;
   const since = strParam(params, "since");
   if (changedOnly) {
+    if (gitRoot(root) === null) {
+      return {
+        kind: "scan",
+        roots: [root],
+        mode: "full-fallback",
+        fallbackReason: "not-a-git-repo",
+      };
+    }
     const files = stagedFiles(root);
-    return files.length > 0 ? files : [root];
+    if (files.length === 0) {
+      return {
+        kind: "error",
+        code: "no-staged-files",
+        message:
+          "changedOnly: true was set, but no files are staged in the git index — the scan would silently run against the full tree. Stage the files you want to scan, or omit changedOnly to request a full scan explicitly.",
+        details: { gitRoot: gitRoot(root), cwd: root },
+        remediation:
+          "Stage files with `git add <path>` before calling with changedOnly: true; or drop changedOnly to run a full scan.",
+      };
+    }
+    return { kind: "scan", roots: files, mode: "changedOnly" };
   }
   if (since !== undefined && since.length > 0) {
+    if (gitRoot(root) === null) {
+      return {
+        kind: "scan",
+        roots: [root],
+        mode: "full-fallback",
+        fallbackReason: "not-a-git-repo",
+      };
+    }
     const files = filesChangedSince(since, root);
-    return files.length > 0 ? files : [root];
+    if (files.length === 0) {
+      return {
+        kind: "scan",
+        roots: [root],
+        mode: "full-fallback",
+        fallbackReason: `no-files-changed-since:${since}`,
+      };
+    }
+    return { kind: "scan", roots: files, mode: `since:${since}` };
   }
-  return [root];
+  return { kind: "scan", roots: [root], mode: "full" };
+}
+
+/**
+ * Narrows a `ScanScope` error variant to the MCP `errorResult` shape.
+ * Lives next to `resolveScanScope` so the error-surfacing path and the
+ * scope-decision path stay together, and extracted as its own function
+ * so the handler's cognitive complexity stays linear — the early-return
+ * plus the `if (files.length === 0)` branch would otherwise tip it over
+ * the lint threshold.
+ */
+function scopeErrorToResult(scope: Extract<ScanScope, { kind: "error" }>) {
+  return errorResult({
+    code: scope.code,
+    message: scope.message,
+    details: scope.details,
+    remediation: scope.remediation,
+  });
+}
+
+/**
+ * Builds the zero-parseable-files response, with truthful scan-mode and
+ * optional `fallbackReason` (when git-aware narrowing fell back to a
+ * full scan that still parsed nothing). Extracted so the handler's
+ * cognitive-complexity score stays under the lint cap.
+ */
+function buildEmptyFilesResult(args: {
+  readonly root: string;
+  readonly actualMode: string;
+  readonly fallbackReason: string | undefined;
+  readonly rootSource: "explicit" | "host-root" | "git" | "spawn-cwd";
+  readonly configSource: string | null;
+}) {
+  const { root, actualMode, fallbackReason, rootSource, configSource } = args;
+  return textResult({
+    plan: { totalFindings: 0, summary: "No parseable files found." },
+    files: [],
+    meta: {
+      filesScanned: 0,
+      scannedRoot: root,
+      scanMode: actualMode,
+      ...(fallbackReason === undefined ? {} : { fallbackReason }),
+    },
+    ...warningsField({
+      filesScanned: 0,
+      rootSource,
+      configSource,
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+    }),
+  });
 }
 
 /**
@@ -474,11 +601,4 @@ function mergeFilesByPath<T extends { readonly filePath: string }>(
   const extras = secondary.filter((f) => !seen.has(f.filePath));
   if (extras.length === 0) return primary;
   return [...primary, ...extras];
-}
-
-function describeMode(params: Record<string, unknown>): string {
-  if ((params as { changedOnly?: unknown }).changedOnly === true) return "changedOnly";
-  const since = strParam(params, "since");
-  if (since !== undefined && since.length > 0) return `since:${since}`;
-  return "full";
 }

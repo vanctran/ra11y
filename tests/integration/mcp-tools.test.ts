@@ -12,6 +12,9 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const PROJECT_ROOT = join(import.meta.dir, "..", "..");
@@ -84,6 +87,109 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta.scannedRoot).toBe(BAD_ALT_DIR);
     expect(body.plan.totalFindings).toBeGreaterThan(0);
     expect(body.meta.scanMode).toBe("full");
+  });
+
+  it("scan_project changedOnly scans only staged files when the git index has some", async () => {
+    // Initialize a git repo with an initial commit, then write a new bad
+    // file and stage it. `changedOnly: true` should scan only that one
+    // staged file and truthfully report `scanMode: "changedOnly"`.
+    const dir = await mkdtemp(join(tmpdir(), "ra11y-scan-project-staged-"));
+    try {
+      await writeFile(join(dir, "clean.html"), "<html><body></body></html>\n");
+      const git = (args: readonly string[]) =>
+        spawnSync("git", [...args], { cwd: dir, stdio: "ignore" });
+      git(["init"]);
+      git(["config", "user.email", "test@example.com"]);
+      git(["config", "user.name", "Test"]);
+      git(["add", "."]);
+      git(["commit", "-m", "initial"]);
+      // New bad file staged on top of the initial commit.
+      await writeFile(join(dir, "bad.html"), '<html><body><img src="/x.png"></body></html>\n');
+      git(["add", "bad.html"]);
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "scan_project", { cwd: dir, changedOnly: true }),
+      ]);
+      const body = bodyOf(responses[1]) as {
+        files: readonly { path: string }[];
+        meta: { scanMode: string; filesScanned: number; fallbackReason?: string };
+      };
+      expect(body.meta.scanMode).toBe("changedOnly");
+      expect(body.meta.fallbackReason).toBeUndefined();
+      expect(body.meta.filesScanned).toBe(1);
+      // Only `bad.html` was staged — the clean file must not have been scanned.
+      expect(body.files.some((f) => f.path.endsWith("bad.html"))).toBe(true);
+      expect(body.files.some((f) => f.path.endsWith("clean.html"))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scan_project changedOnly in a git repo with zero staged files returns an error envelope", async () => {
+    // The pre-fix behavior silently fell back to a full scan AND reported
+    // `scanMode: "changedOnly"` — pre-commit and CI-on-diff workflows
+    // couldn't detect that their diff gate was a no-op. The honest shape
+    // is a `no-staged-files` error envelope so the agent can surface
+    // the precondition miss and stage files (or drop changedOnly).
+    const dir = await mkdtemp(join(tmpdir(), "ra11y-scan-project-no-staged-"));
+    try {
+      await writeFile(join(dir, "index.html"), '<html><body><img src="/x.png"></body></html>\n');
+      const git = (args: readonly string[]) =>
+        spawnSync("git", [...args], { cwd: dir, stdio: "ignore" });
+      git(["init"]);
+      git(["config", "user.email", "test@example.com"]);
+      git(["config", "user.name", "Test"]);
+      git(["add", "."]);
+      git(["commit", "-m", "initial"]);
+      // Nothing new staged after the initial commit.
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "scan_project", { cwd: dir, changedOnly: true }),
+      ]);
+      const result = responses[1].result as {
+        isError?: boolean;
+        content: { text: string }[];
+        structuredContent?: {
+          code?: string;
+          message?: string;
+          details?: { gitRoot?: string };
+          remediation?: string;
+        };
+      };
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent?.code).toBe("no-staged-files");
+      expect(typeof result.structuredContent?.message).toBe("string");
+      expect(typeof result.structuredContent?.remediation).toBe("string");
+      expect(typeof result.structuredContent?.details?.gitRoot).toBe("string");
+      const body = JSON.parse(result.content[0].text) as { code: string; error: string };
+      expect(body.code).toBe("no-staged-files");
+      expect(body.error).toContain("changedOnly");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scan_project changedOnly outside a git repo reports a named fallback instead of lying about the mode", async () => {
+    // When cwd isn't a git repo, we keep the existing fallback behavior
+    // (run a full scan rather than error) but STOP lying about it:
+    // `scanMode` reports "full-fallback", never "changedOnly", and
+    // `fallbackReason` names why.
+    const dir = await mkdtemp(join(tmpdir(), "ra11y-scan-project-not-git-"));
+    try {
+      await writeFile(join(dir, "index.html"), '<html><body><img src="/x.png"></body></html>\n');
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "scan_project", { cwd: dir, changedOnly: true }),
+      ]);
+      const body = bodyOf(responses[1]) as {
+        meta: { scanMode: string; fallbackReason?: string; filesScanned: number };
+      };
+      expect(body.meta.scanMode).toBe("full-fallback");
+      expect(body.meta.fallbackReason).toBe("not-a-git-repo");
+      expect(body.meta.filesScanned).toBeGreaterThan(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("detect_native_wrappers returns a candidates list", async () => {

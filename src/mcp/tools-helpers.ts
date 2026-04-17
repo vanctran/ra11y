@@ -71,6 +71,8 @@ export type StructuredErrorCode =
   // baseline lifecycle
   | "baseline-not-found"
   | "baseline-load-failed"
+  // scan scope / git-aware narrowing
+  | "no-staged-files"
   // apply_fix safety gates
   | "allow-write-disabled"
   | "edit-shape-invalid"
