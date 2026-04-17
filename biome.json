@@ -35,7 +35,8 @@
           "options": { "maxAllowedComplexity": 15 }
         },
         "noExcessiveNestedTestSuites": "error",
-        "useSimplifiedLogicExpression": "error"
+        "useSimplifiedLogicExpression": "error",
+        "useLiteralKeys": "off"
       },
       "correctness": {
         "noUnusedImports": "error",
@@ -101,9 +102,6 @@
       "includes": ["tests/**/*.ts"],
       "linter": {
         "rules": {
-          "complexity": {
-            "useLiteralKeys": "off"
-          },
           "suspicious": {
             "noConsole": "off"
           },
