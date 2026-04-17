@@ -1,0 +1,193 @@
+{
+  "tool": "ra11y",
+  "generatedAt": "2026-04-17T06:24:37.095Z",
+  "generatedAtLocalDate": "2026-04-16",
+  "generator": "scripts/benchmark-run.ts",
+  "coldStart": {
+    "samples": [
+      39.72333299999991,
+      40.8012920000001,
+      41.34358299999985,
+      45.71354199999996,
+      47.416291999999885
+    ],
+    "medianMs": 41.34358299999985,
+    "minMs": 39.72333299999991,
+    "maxMs": 47.416291999999885
+  },
+  "synthetic": [
+    {
+      "fileCount": 10,
+      "samples": [
+        2.7840409999999736,
+        2.942875000000015,
+        3.030040999999983,
+        3.3339579999999955,
+        3.3838340000000073,
+        3.3980829999999855,
+        3.5933749999999947,
+        3.8475420000000042,
+        3.9841670000000136,
+        4.038708999999997,
+        4.524041000000011
+      ],
+      "medianMs": 3.3980829999999855,
+      "minMs": 2.7840409999999736,
+      "maxMs": 4.524041000000011
+    },
+    {
+      "fileCount": 100,
+      "samples": [
+        25.444416999999987,
+        26.028999999999996,
+        26.23804199999995,
+        26.303292,
+        27.40141699999998,
+        28.261749999999978,
+        30.380209000000036,
+        30.799874999999986,
+        32.51783300000005,
+        33.56550000000004,
+        33.75125
+      ],
+      "medianMs": 28.261749999999978,
+      "minMs": 25.444416999999987,
+      "maxMs": 33.75125
+    },
+    {
+      "fileCount": 1000,
+      "samples": [
+        221.846583,
+        225.7545,
+        228.20445799999993,
+        234.12687499999993,
+        235.8360419999999,
+        235.89958400000023,
+        236.33808299999998,
+        238.9130419999999,
+        255.71770800000013,
+        261.1173749999998,
+        272.19395800000007
+      ],
+      "medianMs": 235.89958400000023,
+      "minMs": 221.846583,
+      "maxMs": 272.19395800000007
+    }
+  ],
+  "realWorld": {
+    "fixtures": [
+      {
+        "id": "autodetect-attribution",
+        "filesScanned": 3,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 4,
+        "durationMs": 14.396083999999998
+      },
+      {
+        "id": "logotype-annotation",
+        "filesScanned": 2,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 12,
+        "durationMs": 4.747166
+      },
+      {
+        "id": "opaque-components-top",
+        "filesScanned": 12,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 4,
+        "durationMs": 9.603958999999996
+      },
+      {
+        "id": "spa-shell-vite",
+        "filesScanned": 3,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 4,
+        "durationMs": 8.211374999999997
+      },
+      {
+        "id": "suppression-reason-slot",
+        "filesScanned": 3,
+        "violations": {
+          "total": 2,
+          "error": 2,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 4,
+        "durationMs": 2.524291000000005
+      },
+      {
+        "id": "tailwind-coverage",
+        "filesScanned": 41,
+        "violations": {
+          "total": 9,
+          "error": 8,
+          "warning": 1,
+          "info": 0
+        },
+        "reviewCandidates": 18,
+        "durationMs": 26.64725
+      },
+      {
+        "id": "template-directives",
+        "filesScanned": 2,
+        "violations": {
+          "total": 2,
+          "error": 0,
+          "warning": 2,
+          "info": 0
+        },
+        "reviewCandidates": 4,
+        "durationMs": 2.603499999999997
+      },
+      {
+        "id": "timing-role-hints",
+        "filesScanned": 3,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 60,
+        "durationMs": 2.0192090000000036
+      },
+      {
+        "id": "tsx-generics",
+        "filesScanned": 3,
+        "violations": {
+          "total": 0,
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "reviewCandidates": 0,
+        "durationMs": 1.6562080000000066
+      }
+    ],
+    "totalFiles": 72,
+    "totalViolations": 13,
+    "totalCandidates": 110,
+    "totalDurationMs": 72.409042
+  }
+}
