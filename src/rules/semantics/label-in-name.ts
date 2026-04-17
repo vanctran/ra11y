@@ -27,7 +27,7 @@ import {
   walkJsxElements,
 } from "../../engine/ast-helpers.ts";
 import type { HtmlDocument, HtmlElement, JsxElement, TsxModule } from "../../types/ast.ts";
-import type { FixPaths } from "../../types/violation.ts";
+import type { FixPath, FixPaths } from "../../types/violation.ts";
 
 /** Interactive elements whose visible label must be contained in their accessible name. */
 const HTML_INTERACTIVE_TAGS: ReadonlySet<string> = new Set([
@@ -296,8 +296,21 @@ function emitViolation(
   const suggestion =
     `${expansionNote}${caseNote}Primary fix: ${ranked.primary}. ` +
     `Alternatives (less likely): (a) ${ranked.alternatives[0]}; (b) ${ranked.alternatives[1]}.`;
+  // Synthesize an `editCandidate` only on the "non-contiguous tokens"
+  // diagnosis (interleaved expansion). In that case we have enough
+  // signal to propose a concrete rewrite — a verbatim visible-text
+  // prefix plus the remaining aria-label words. For other diagnoses
+  // (visible text absent from aria-label, different words entirely) a
+  // synthesized rewrite would be a guess, so we omit the field. Per
+  // CLAUDE.md §1 "Ambiguous field shapes are dishonest" — omitted, not
+  // emitted as an empty pair.
+  const editCandidate = interleaved ? synthesizeEditCandidate(visibleText, ariaLabel) : undefined;
+  const primaryPath: FixPath = {
+    label: ranked.primary,
+    ...(editCandidate ? { editCandidate } : {}),
+  };
   const fixPaths: FixPaths = {
-    primary: { label: ranked.primary },
+    primary: primaryPath,
     alternatives: ranked.alternatives.map((label) => ({ label })),
   };
   emit({
@@ -307,4 +320,48 @@ function emitViolation(
     suggestion,
     fixPaths,
   });
+}
+
+/**
+ * Build a candidate aria-label rewrite for the interleaved-expansion
+ * case. Shape:
+ *
+ *   `aria-label="<visible text verbatim>: <remaining aria-label words>"`
+ *
+ * Where "remaining aria-label words" is the aria-label token stream
+ * with any token that also appears in the visible text (case-
+ * insensitive, preserving original aria-label casing) removed, keeping
+ * the original order. The visible text is inserted verbatim so the
+ * voice-control substring match is guaranteed; the colon + space is a
+ * neutral separator that reads naturally in screen-reader output.
+ *
+ * Returned as an `{ oldText, newText }` pair on the `aria-label="..."`
+ * attribute span — compatible with the suggest_fix payload builder,
+ * which can optionally widen `primary.edit` via `widenToUniqueAnchor`
+ * but leaves `primary.editCandidate` untouched (candidates are not
+ * promised to be applicable verbatim).
+ */
+function synthesizeEditCandidate(
+  visibleText: string,
+  ariaLabel: string,
+): { oldText: string; newText: string } | undefined {
+  const visibleWordsLower = new Set(
+    visibleText
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.toLowerCase()),
+  );
+  const remaining = ariaLabel
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !visibleWordsLower.has(w.toLowerCase()));
+  // If every aria-label word overlapped the visible text (no remaining
+  // context), a rephrase to "visible:" with nothing after it would be
+  // nonsense — fall back to "visible" alone.
+  const rewrittenValue =
+    remaining.length > 0 ? `${visibleText}: ${remaining.join(" ")}` : visibleText;
+  return {
+    oldText: `aria-label="${ariaLabel}"`,
+    newText: `aria-label="${rewrittenValue}"`,
+  };
 }

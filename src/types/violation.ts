@@ -37,10 +37,28 @@ export interface Fix {
  * visible text…"). When a rule can also produce a mechanical edit it
  * may populate `edit` on a path; absent `edit`, the path is guidance
  * only (still more useful than an empty oldText/newText pair).
+ *
+ * `editCandidate` is the softer sibling of `edit`: a synthesized
+ * rewrite the rule would write "if it had to" — same shape as `edit`,
+ * but the caller still has to decide whether the text is right. The
+ * response `kind` remains `"guidance"` when only `editCandidate` is
+ * populated (see `buildSuggestFixPayload`) — promotion to `kind: "edit"`
+ * is reserved for deterministic rewrites. Use this for cases where a
+ * templated rewrite is useful as a starting point but the choice of
+ * phrasing is genuinely the author's call (e.g. `label-in-name` when
+ * visible-text tokens are non-contiguous in aria-label).
+ *
+ * Per CLAUDE.md §1 "Ambiguous field shapes are dishonest": omit
+ * `editCandidate` entirely when no candidate can be synthesized; never
+ * emit `editCandidate: { oldText: "", newText: "" }`.
  */
 export interface FixPath {
   readonly label: string;
   readonly edit?: {
+    readonly oldText: string;
+    readonly newText: string;
+  };
+  readonly editCandidate?: {
     readonly oldText: string;
     readonly newText: string;
   };

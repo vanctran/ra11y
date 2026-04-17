@@ -219,4 +219,81 @@ describe("rule semantics/label-in-name", () => {
       expect(v[0]?.suggestion).toContain('"Assessment"');
     });
   });
+
+  describe("editCandidate synthesis (non-contiguous tokens)", () => {
+    // P1-L (Track Q, 2026-04-17 agent-consumer eval): when the
+    // diagnosis is "visible tokens present in aria-label but non-
+    // contiguous", the rule has enough signal to synthesize a concrete
+    // rewrite — verbatim visible-text prefix + `": "` + remaining
+    // aria-label words. Surfaced as a *candidate* (kind stays
+    // "guidance"); agent decides whether to apply.
+    it("populates primary.editCandidate for the non-contiguous tokens case", () => {
+      const v = runRule(
+        rule,
+        `<button aria-label="Start the 8-question Perception Gap Assessment">Start the Assessment</button>`,
+        { filePath: "index.html" },
+      );
+      expect(v).toHaveLength(1);
+      const candidate = v[0]?.fixPaths?.primary.editCandidate;
+      expect(candidate).toBeDefined();
+      expect(candidate?.oldText).toBe(
+        'aria-label="Start the 8-question Perception Gap Assessment"',
+      );
+      // Visible text verbatim as prefix; remaining aria-label words
+      // ("8-question Perception Gap") in original order after `: `.
+      // "Assessment" is dropped because it already appears in the
+      // visible text (case-insensitive dedupe).
+      expect(candidate?.newText).toBe(
+        'aria-label="Start the Assessment: 8-question Perception Gap"',
+      );
+    });
+
+    it("synthesizes for a two-word interleaved expansion", () => {
+      // Visible "Save changes" tokens both appear in aria-label in
+      // order, but with "your" inserted between them — classic
+      // interleaved expansion, non-contiguous substring. Synthesis
+      // rule: visible text verbatim + ": " + remaining aria-label
+      // words ("your") after dropping words that overlap the visible
+      // text.
+      const v = runRule(rule, `<button aria-label="Save your changes now">Save changes</button>`, {
+        filePath: "index.html",
+      });
+      expect(v).toHaveLength(1);
+      const candidate = v[0]?.fixPaths?.primary.editCandidate;
+      expect(candidate).toBeDefined();
+      expect(candidate?.oldText).toBe('aria-label="Save your changes now"');
+      expect(candidate?.newText).toBe('aria-label="Save changes: your now"');
+    });
+
+    it("omits editCandidate when the diagnosis is not non-contiguous tokens", () => {
+      // Visible text "Cancel" is absent from aria-label "Close dialog"
+      // entirely — not an interleaved expansion. The rule cannot
+      // synthesize a sensible rewrite, so `editCandidate` is omitted
+      // (not emitted as `""`). Per CLAUDE.md §1 "Ambiguous field
+      // shapes are dishonest".
+      const v = runRule(rule, `<button aria-label="Close dialog">Cancel</button>`, {
+        filePath: "index.html",
+      });
+      expect(v).toHaveLength(1);
+      expect(v[0]?.fixPaths?.primary.editCandidate).toBeUndefined();
+      // Also assert the field is truly absent rather than set to an
+      // empty pair — the test above proves `.editCandidate` reads as
+      // undefined; this asserts the key is not present on the object
+      // at all, matching the conditional-spread emit.
+      expect(Object.hasOwn(v[0]?.fixPaths?.primary ?? {}, "editCandidate")).toBe(false);
+    });
+
+    it("kind stays guidance — no mechanical edit on editCandidate", () => {
+      // The rule does not populate `edit` (mechanical), only
+      // `editCandidate` (softer). The suggest_fix payload builder
+      // treats this as `kind: "guidance"`.
+      const v = runRule(
+        rule,
+        `<button aria-label="Start the 8-question Perception Gap Assessment">Start the Assessment</button>`,
+        { filePath: "index.html" },
+      );
+      expect(v[0]?.fixPaths?.primary.edit).toBeUndefined();
+      expect(v[0]?.fixPaths?.primary.editCandidate).toBeDefined();
+    });
+  });
 });
