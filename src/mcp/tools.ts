@@ -15,6 +15,7 @@ import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import { buildNextStep } from "./next-step.ts";
 import { pathExists } from "./path-exists.ts";
 import { dedupeReviewCandidatesForSingleFile } from "./review-candidate-dedup.ts";
+import { includeRuleDetailsSchema, ruleCatalogField } from "./rule-catalog.ts";
 import { applyFixTool } from "./tool-apply-fix.ts";
 import { auditTool } from "./tool-audit.ts";
 import { baselineTool } from "./tool-baseline.ts";
@@ -83,6 +84,7 @@ const scanTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
         },
+        includeRuleDetails: includeRuleDetailsSchema,
       },
       required: ["paths"],
     },
@@ -157,6 +159,7 @@ const scanTool: McpTool = {
 
     return textResult({
       ...formatted,
+      ...ruleCatalogField(params, BUILTIN_RULES, formatted.files),
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         rootSource: null,

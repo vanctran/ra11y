@@ -7,12 +7,14 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
+import { BUILTIN_RULES } from "../rules/index.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import { probeBaselineStatus } from "./baseline-status.ts";
 import { collectBuildArtifacts } from "./build-artifacts.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { buildNextStep } from "./next-step.ts";
+import { includeRuleDetailsSchema, ruleCatalogField } from "./rule-catalog.ts";
 import {
   errorResult,
   type McpTool,
@@ -93,6 +95,7 @@ export const scanProjectTool: McpTool = {
           description:
             "Starting index into the full files-with-findings list. Defaults to 0. Use with `limit` + the `nextOffset` from a previous truncated response to iterate.",
         },
+        includeRuleDetails: includeRuleDetailsSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -195,6 +198,7 @@ export const scanProjectTool: McpTool = {
       files: page.files,
       ...page.paginationFields,
       ...referenceGuideField(formatted),
+      ...ruleCatalogField(params, BUILTIN_RULES, formatted.files),
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         rootSource,

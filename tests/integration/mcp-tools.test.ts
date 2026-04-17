@@ -536,6 +536,60 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.referenceGuide?.suppressPlacement.html).toContain("opening tag");
   });
 
+  it("includeRuleDetails: 'unique' inlines catalog entries only for rules that fired", async () => {
+    // Agents triaging a scan response otherwise have to round-trip
+    // through `explain_rule` once per unique rule. With `unique`, the
+    // response carries the same description/rationale/examples/
+    // references/normativeQuote up front, keyed by ruleId.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR, includeRuleDetails: "unique" }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      files: readonly { findings: readonly { ruleId: string }[] }[];
+      ruleCatalog?: Record<
+        string,
+        { description: string; rationale: string; references: readonly string[] }
+      >;
+    };
+    expect(body.ruleCatalog).toBeDefined();
+    const firedIds = new Set<string>();
+    for (const f of body.files) for (const v of f.findings) firedIds.add(v.ruleId);
+    expect(firedIds.size).toBeGreaterThan(0);
+    for (const id of firedIds) {
+      expect(body.ruleCatalog?.[id]).toBeDefined();
+      expect(typeof body.ruleCatalog?.[id]?.description).toBe("string");
+      expect(typeof body.ruleCatalog?.[id]?.rationale).toBe("string");
+    }
+    // `unique` must NOT include rules that didn't fire. Pick a rule ID
+    // the alt-text fixture demonstrably doesn't trigger.
+    expect(body.ruleCatalog?.["contrast/minimum"]).toBeUndefined();
+  });
+
+  it("includeRuleDetails: 'all' inlines every loaded rule, not just ones that fired", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR, includeRuleDetails: "all" }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      ruleCatalog?: Record<string, { description: string }>;
+    };
+    expect(body.ruleCatalog).toBeDefined();
+    // `all` includes the whole catalog — entries for rules that didn't
+    // fire in this scan must appear.
+    expect(body.ruleCatalog?.["contrast/minimum"]).toBeDefined();
+    expect(body.ruleCatalog?.["media/alt-text-missing"]).toBeDefined();
+  });
+
+  it("includeRuleDetails omitted or 'none' keeps the baseline response shape", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as { ruleCatalog?: unknown };
+    expect(body).not.toHaveProperty("ruleCatalog");
+  });
+
   it("analysisCoverage reports opaque custom components and template directives", async () => {
     // Honest telemetry about what static analysis didn't reach. Not a
     // heuristic — structural gaps the agent needs to calibrate
