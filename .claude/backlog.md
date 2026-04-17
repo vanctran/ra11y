@@ -102,7 +102,7 @@ Owner: `parser-author` + main session. Promoted from staged 2026-04-17. Foundati
 - [!] `src/mcp/tool-verdict-candidate.ts` — pass/fail with reasoning for a review candidate + its `reviewPrompt`. ADR 0005 §Follow-up: same caveat.
 - [!] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion. ADR 0005 §Follow-up: same caveat.
 - [!] `src/mcp/tool-triage-findings.ts` — pure (no sampling) triage that labels each finding. Scope of the label schema is ambiguous without downstream consumers (the three tools above are its consumers); define + pick one before dispatch.
-- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (checksum registry for version-pinning) — substitution already exists; remaining work is the checksum registry.
+- [x] Prompt library under `src/mcp/prompts/` — checksum registry for version-pinning (9cfc547). Surfaced on `prompts/list` + `prompts/get` via `_meta.checksum`. Substitution was already in place.
 - [x] `tests/unit/mcp/sampling.test.ts` with a fake host recording sampling requests
 - [!] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter — blocked on first sampling-backed tool (one of the three [!] tools above). Scripted host lives at `tests/evals/scripted-host.ts` and is reusable here.
 - [x] Docs: `docs/kb/architecture/mcp-sampling.md`
@@ -120,7 +120,7 @@ Owner: `doc-writer` + main session. Promoted from staged 2026-04-17. Items expan
 - [x] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set; CI-gated against a scripted host (no real LLM calls). Paired with Track S. (committed d00535b)
 - [!] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code. Blocked on the Track S speculative tools landing (the workflow references them).
 - [!] `examples/ra11y-in-cursor/` — blocked externally on Cursor's MCP host shipping sampling.
-- [ ] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings
+- [x] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings (f0508dd). Sibling project with isolated toolchain; no runtime deps leak into @ra11y/core. Explicit non-goals (marketplace, EDH smoke test, CodeActionProvider, per-file scan-on-save, streaming, multi-root, reconnection) listed in README for follow-up.
 - [~] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold committed (2f5539a); numeric values land in a follow-up before release
 
 ---
