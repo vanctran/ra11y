@@ -515,7 +515,6 @@ function promptListEntry(prompt: Prompt): Record<string, unknown> {
     })),
   };
   if (checksum === undefined) return base;
-  // biome-ignore lint/style/useNamingConvention: `_meta` is MCP's reserved namespace for server annotations.
   base["_meta"] = { checksum };
   return base;
 }
@@ -562,7 +561,6 @@ function handlePromptsGet(
   // Mirror the `_meta.checksum` annotation from `prompts/list` so a
   // host that calls `prompts/get` directly can still pin.
   if (checksum !== undefined) {
-    // biome-ignore lint/style/useNamingConvention: `_meta` is MCP's reserved namespace for server annotations.
     result["_meta"] = { checksum };
   }
   return { jsonrpc: "2.0", id, result };
