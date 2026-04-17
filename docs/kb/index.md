@@ -152,6 +152,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 ## architecture
 
+- [AI-first consumer model](./architecture/ai-first-consumer.md)
 - [Input parsers](./architecture/input-parsers.md)
 - [MCP sampling architecture](./architecture/mcp-sampling.md)
 - [MCP server architecture](./architecture/mcp-server.md)
