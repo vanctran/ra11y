@@ -7,6 +7,8 @@
  *   - tools/call
  *   - prompts/list
  *   - prompts/get
+ *   - resources/list
+ *   - resources/read
  *
  * Zero dependencies. Reads newline-delimited JSON from stdin, writes
  * JSON responses to stdout. Logs go to stderr via the logger.
@@ -15,6 +17,12 @@
 import { createInterface } from "node:readline";
 import { logger } from "../utils/logger.ts";
 import { BUILTIN_PROMPTS } from "./prompts/index.ts";
+import {
+  loadKbResources,
+  RESOURCE_NOT_FOUND,
+  ResourceError,
+  readKbResource,
+} from "./resources/index.ts";
 import { McpSession } from "./session.ts";
 import { MCP_TOOLS } from "./tools.ts";
 
@@ -44,6 +52,11 @@ interface ToolCallParams {
 interface PromptGetParams {
   readonly name: string | undefined;
   readonly arguments: Record<string, unknown> | undefined;
+}
+
+/** Typed view of the resources/read params. */
+interface ResourcesReadParams {
+  readonly uri: string | undefined;
 }
 
 // ─── JSON-RPC error codes ───────────────────────────────────────────────────
@@ -187,6 +200,10 @@ function route(
   if (request.method === "prompts/get") {
     return handlePromptsGet(id, request.params ?? {});
   }
+  if (request.method === "resources/list") return handleResourcesList(id);
+  if (request.method === "resources/read") {
+    return handleResourcesRead(id, request.params ?? {});
+  }
   return {
     jsonrpc: "2.0",
     id,
@@ -203,7 +220,15 @@ function initializeResponse(id: string | number | null): JsonRpcResponse {
       // `listChanged: false` tells the host we won't emit
       // `notifications/prompts/list_changed` — prompt inventory is
       // baked in at build time. Tools ship the same guarantee.
-      capabilities: { tools: {}, prompts: { listChanged: false } },
+      // Resources are file-backed (`docs/kb/**`), so changes do happen
+      // at dev time; the flag still says `false` because we don't push
+      // notifications to the host — agents call `resources/list` on
+      // demand.
+      capabilities: {
+        tools: {},
+        prompts: { listChanged: false },
+        resources: { listChanged: false },
+      },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: SERVER_INSTRUCTIONS,
     },
@@ -277,6 +302,50 @@ function handlePromptsGet(
       messages,
     },
   };
+}
+
+async function handleResourcesList(id: string | number | null): Promise<JsonRpcResponse> {
+  const resources = await loadKbResources(process.cwd());
+  return {
+    jsonrpc: "2.0",
+    id,
+    result: { resources },
+  };
+}
+
+async function handleResourcesRead(
+  id: string | number | null,
+  rawParams: Record<string, unknown>,
+): Promise<JsonRpcResponse> {
+  const params = rawParams as unknown as ResourcesReadParams;
+  const uri = params.uri;
+  if (typeof uri !== "string") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: INVALID_PARAMS, message: "Missing or invalid resource uri." },
+    };
+  }
+  try {
+    const content = await readKbResource(process.cwd(), uri);
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: { contents: [content] },
+    };
+  } catch (err: unknown) {
+    if (err instanceof ResourceError) {
+      // Separate shape so agents can distinguish "scheme/path rejected"
+      // (client bug) from "file genuinely missing" (stale inventory).
+      const code = err.code === RESOURCE_NOT_FOUND ? RESOURCE_NOT_FOUND : INVALID_PARAMS;
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: { code, message: err.message },
+      };
+    }
+    throw err;
+  }
 }
 
 /**
