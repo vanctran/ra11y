@@ -690,6 +690,13 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     // that breaks on line-number drift.
     findingId: v.findingId,
     ruleId: v.ruleId,
+    // Per-finding remediation lane stamped from the rule's `fixClass`
+    // metadata. Lets agents batch-route at scan time without a per-
+    // finding `suggest_fix` round-trip — see Violation.fixClass docs
+    // and docs/adr/0007-violation-fix-class-metadata.md. Distinct axis
+    // from `suggest_fix.kind` ("what does the payload contain") — do
+    // not conflate.
+    fixClass: v.fixClass,
     severity: v.severity,
     confidence: severityToConfidence(v.severity),
     line: v.location.line,
