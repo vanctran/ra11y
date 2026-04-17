@@ -1,348 +1,150 @@
 # ra11y backlog
 
-The `/continue` skill reads this file, picks the next unchecked item, dispatches to a specialist subagent, verifies, commits, and checks off the item. Each item should be small enough that one specialist can finish it in under 20 minutes and 5–7 commits. When an item would produce more work, split it in place before dispatching.
+The `/continue` skill reads this file and dispatches work to specialist subagents. Each item should be small enough that one specialist can finish it in under 20 minutes. When an item would produce more work, split it in place before dispatching.
 
 Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason in comment)
 
+## Ship state
+
+- **v0.1.0 — ready to tag.** Code-complete: 54 rules, 4 standards, 9 formatters, 10 MCP tools, 4 reports, CLI wired, release workflow configured. Remaining work is the demo + the tag + publish (Track D).
+- **v0.2.0 — in flight.** MCP hardening (Track M), review-candidate coverage + focus-ring cross-ref (Track R), real-world fixture corpus (Track F). Target: 3–4 weeks post-0.1.0.
+- **v0.3.0+ — staged, not started.** MCP sampling (Track S), ecosystem integrations + public benchmark (Track E). Phase 20 work is deliberately deferred until after 0.2.0 ships and user feedback tells us which sampling-backed tool matters most. See ADR 0005 for the sampling architecture.
+
+## Dispatch model (parallel tracks, not sequential phases)
+
+Tracks below are independent. `/continue` picks the next open item from each of up to 3 active tracks per turn and dispatches them in parallel (details in `.claude/skills/continue/SKILL.md`). Within a track, items run in order — some tracks have sequencing; cross-track work is always parallelizable.
+
+Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures).
+Staged tracks: **S** (MCP sampling) · **E** (ecosystem/evals). Items here stay untouched until ship state moves.
+
 ---
 
-## Phase 0 — Autonomous Claude Code infrastructure  ✅ COMPLETE
+## Track D — Docs & release
 
-Hooks, agents, skills, settings — all 50 items landed. Do not modify without updating this phase.
+Owner: `release-captain` + `doc-writer`. Blocks nothing; can ship independently.
 
-## Phase 1 — Guards and scaffolding scripts  ✅ COMPLETE
+### v0.1.0
 
-All guard + generator scripts shipped. `scripts/verify.ts` is the single entrypoint (parallel execution, ordered output). Advisory-only: check-dead-exports, check-magic-numbers, check-docs-links, check-api-docs-drift.
-
-## Phase 2 — Core types and registries  ✅ COMPLETE
-
-Types, registries, scanner skeleton, AST helpers, and public API surface are all in place.
-
-## Phase 3 — WCAG 2.2 standard module  ✅ COMPLETE
-
-86 active criteria + historical 4.1.1; golden tests green.
-
-## Phase 4 — In-house utilities
-
-- [x] `src/utils/logger.ts`
-- [x] `src/utils/assert.ts`
-- [x] `src/utils/fs.ts`
-- [x] `src/utils/path.ts`
-- [x] `src/utils/glob.ts`
-- [x] `src/utils/git.ts`
-- [x] `src/utils/ansi.ts`
-- [x] `src/utils/string-width.ts`
-- [x] `src/utils/wrap.ts` + tests
-- [x] `src/utils/color.ts`
-- [x] `src/utils/contrast.ts`
-- [x] `src/utils/args.ts`
-- [x] `src/utils/index.ts`
-
-## Phase 5 — Parsers
-
-- [x] `src/input/parsers/tsx.ts`
-- [x] `src/input/parsers/html.ts`
-- [x] `src/input/parsers/css.ts`
-- [x] `src/input/parsers/tailwind.ts` (class extraction + arbitrary value resolution)
-- [x] `src/input/resolvers/theme.ts` (resolve tailwind theme tokens → concrete values)
-- [x] `src/input/discover.ts`
-- [x] `src/input/index.ts`
-- [x] Unit tests for html, tsx, css parsers
-- [x] Fuzz tests for html and css parsers (deterministic seeds, bounded-time assertions, O(n²)-regression guards)
-
-## Phase 6 — Rule engine and first five rules  ✅ COMPLETE
-
-Initial 5 rules (`alt-text-missing`, `contrast/minimum`, `link-descriptive-text`, `focus/outline-visible`, `parsing/duplicate-id`) all shipped. Engine lifecycle finalized.
-
-## Phase 7 — Scanner + default formatters  ✅ COMPLETE
-
-Terminal + plain + JSON formatters + theme + snapshot tests.
-
-## Phase 8 — CLI
-
-- [x] `src/cli.ts`, `src/cli/run.ts`, `src/cli/args.ts`, `src/cli/help.ts`
-- [x] `src/cli/commands/scan.ts`
-- [x] `src/cli/commands/list-rules.ts`
-- [x] `src/cli/commands/list-standards.ts`
-- [x] `src/cli/commands/explain.ts`
-- [x] `src/cli/commands/coverage.ts`
-- [x] `src/cli/commands/checklist.ts`
-- [x] `src/cli/commands/vpat.ts`
-- [x] `src/cli/commands/certification.ts`
-- [x] `src/cli/commands/init.ts` (scaffolds `ra11y.config.ts`)
-- [x] `src/cli/commands/doctor.ts` (env + config sanity check)
-- [x] `tests/cli/cli.test.ts`
-
-## Phase 9 — WCAG 2.1 standard  ✅ COMPLETE
-
-wcag21/ module shipped; `--standard wcag21` reuses existing rules via equivalentTo.
-
-## Phase 10 — Section 508 + EN 301 549  ✅ COMPLETE
-
-Both standards shipped as thin `equivalentTo` data. Integration tests pending in Phase 18 polish.
-
-## Phase 11 — Remaining rules
-
-36 rules shipped (see `src/rules/index.ts`). The rules below still need implementation.
-
-- [x] contrast/enhanced (1.4.6 AAA) — shares _shared.ts with minimum
-- [x] contrast/non-text (1.4.11 AA)
-- [x] focus/not-obscured (2.4.11 WCAG 2.2 AA)
-- [x] keyboard/character-shortcuts (2.1.4)
-- [x] aria/live-region-valid (4.1.3)
-- [x] semantics/landmark-main (1.3.1) — pages with header/nav/footer/aside must have `<main>`
-- [x] forms/non-empty-label (2.4.6) — label elements must have text content
-- [x] pointer/drag-alternative (2.5.7 WCAG 2.2)
-- [x] pointer/target-size (2.5.8 WCAG 2.2)
-- [x] navigation/skip-link (2.4.1) — validates a skip link precedes the primary nav and points at a real id
-- [x] layout/reflow-hardcoded-width (1.4.10) — flags fixed px widths >320 and physical-unit widths outside @media breakpoints
-- [x] tooltip/dismissable (1.4.13)
-- [x] document/lang-on-parts (3.1.2)
-
-## Phase 12 — Alternative formatters  ✅ COMPLETE
-
-terminal, plain, json, sarif, junit, markdown, agent — all shipped.
-
-- [x] `src/output/formatters/html.ts` + snapshot tests (self-contained inline-CSS artifact for CI uploads)
-
-## Phase 13 — Reports  ✅ COMPLETE
-
-coverage, checklist, vpat, certification all shipped with tests.
-
-## Phase 14 — Config, inline disables, baseline mode
-
-- [x] `src/config/defaults.ts`
-- [x] `src/config/define.ts`
-- [x] `src/config/loader.ts`
-- [x] Inline disable parser
-- [x] Baseline mode: create / check / update (CLI flags wired through src/cli/commands/scan.ts; baseline.ts has unit tests)
-- [x] Monorepo `projects: []` support in loader (loader + types threaded through; integration CLI coverage lives in Phase 18)
-- [x] Config precedence tests (`tests/unit/config/loader.test.ts`)
-
-## Phase 15 — Plugin API + example plugins
-
-- [x] `defineRule`, `defineStandard`, `defineFormatter`, `defineConfig`
-- [x] `examples/plugin-rule/` with package.json + test.ts smoke script
-- [x] `examples/plugin-standard/` with package.json + test.ts smoke script
-- [x] `examples/plugin-formatter/` (slack-markdown) with package.json + test.ts
-- [x] CI plugin-examples job runs all three smoke scripts on every push
-
-## Phase 16 — Long-form documentation
-
-User-facing guides + architecture KB + authoring guides + ADRs. These are all stubs in `docs/` today.
-
-- [x] `docs/getting-started.md` (196 lines; revisit for v0.1 polish)
-- [x] `docs/cli.md` (158 lines)
-- [x] `docs/configuration.md` (180 lines)
-- [x] `docs/architecture.md` (191 lines)
-- [x] `docs/kb/architecture/three-layer-model.md`
-- [x] `docs/kb/architecture/rule-engine.md`
-- [x] `docs/kb/architecture/registries.md`
-- [x] `docs/kb/architecture/input-parsers.md`
-- [x] `docs/kb/architecture/output-formatters.md`
-- [x] `docs/kb/architecture/reports.md`
-- [x] `docs/kb/architecture/mcp-server.md`
-- [x] `docs/kb/patterns/writing-a-rule.md` (pre-existing)
-- [x] `docs/kb/patterns/writing-a-standard.md`
-- [x] `docs/kb/patterns/writing-a-formatter.md`
-- [x] `docs/kb/patterns/writing-a-test.md`
-- [x] `docs/kb/patterns/using-ast-helpers.md`
-- [x] `docs/kb/patterns/adding-a-fixture.md`
-- [x] `docs/kb/patterns/evaluator-optimizer-loop.md`
-- [x] `docs/kb/patterns/using-mcp-from-agents.md`
-- [x] `docs/kb/concepts/accessible-name-computation.md`
-- [x] `docs/kb/concepts/interactive-elements.md`
-- [x] `docs/kb/concepts/focus-visible-semantics.md`
-- [x] `docs/kb/concepts/tailwind-class-resolution.md`
-- [x] `docs/kb/concepts/wcag-contrast-formula.md`
-- [x] `docs/kb/concepts/aria-valid-roles.md`
-- [x] `docs/kb/gotchas/biome-quirks.md`
-- [x] `docs/kb/gotchas/bun-vs-node-differences.md`
-- [x] `docs/kb/gotchas/typescript-compiler-gotchas.md`
-- [x] `docs/kb/gotchas/wcag-edge-cases.md`
-- [x] `docs/kb/gotchas/test-flakiness.md`
-- [x] `docs/kb/glossary.md`
-- [x] `docs/certification/vpat-mapping.md`
-- [x] `docs/certification/readiness-scoring.md`
-- [x] `docs/certification/wcag-certification-guide.md`
-- [x] `docs/plugins/authoring-a-rule.md`
-- [x] `docs/plugins/authoring-a-standard.md`
-- [x] `docs/plugins/authoring-a-formatter.md`
-- [x] `docs/mcp/server-setup.md`
-- [x] `docs/mcp/tool-reference.md`
-- [x] `docs/adr/0001-zero-runtime-dependencies.md`
-- [x] `docs/adr/0002-three-layer-standards-criteria-rules.md`
-- [x] `docs/adr/0003-typescript-peer-for-tsx-parsing.md`
-- [x] `docs/adr/0004-bun-test-over-vitest.md`
-- [x] `docs/adr/0005-in-house-mcp-server.md`
-
-## Phase 17 — CI workflows
-
-- [x] `.github/workflows/ci.yml`
-- [x] `.github/workflows/release.yml`
-- [x] `.github/ISSUE_TEMPLATE/bug_report.md`
-- [x] `.github/ISSUE_TEMPLATE/rule_request.md`
-- [x] `.github/ISSUE_TEMPLATE/standard_request.md`
-- [x] `.github/PULL_REQUEST_TEMPLATE.md`
-- [x] `.github/dependabot.yml`
-
-## Phase 18 — Polish and v0.1.0
-
-- [x] README with real output snapshots (Mermaid diagram, `--mcp` demo, badges)
-- [ ] asciinema demo recording
-- [x] `tests/integration/multi-standard-scan.test.ts` covers cross-standard reuse via equivalentTo closure
-- [x] `tests/integration/mcp-session.test.ts` coverage audit
-- [ ] Version bump to 0.1.0
-- [ ] First npm publish
+- [ ] asciinema demo recording embedded in README
+- [ ] Version bump confirmation (package.json already reads `0.1.0`; verify + commit a release-prep chore if anything else drifts)
+- [ ] Tag `v0.1.0` and push (triggers `release.yml` → npm publish with provenance)
 - [ ] GitHub release with changelog excerpt
 
+### v0.2.0
+
+- [ ] Release notes for 0.2.0 (M + R + F deltas)
+- [ ] Migration notes if any track introduces a breaking MCP shape (expected: none)
+
 ---
 
-## Phase 19 — MCP server (Phase 1 complete, ongoing hardening)  ✅ SHIPPED
+## Track M — MCP hardening
 
-Status per `.claude/notes/mcp-iteration.md`: 10 tools live, verified on a 329-file real project, sub-second scans. **This is our moat.** See settled-decisions list in the notes before changing anything in `src/mcp/`.
+Owner: main session. Internal ordering: baseline first (unlocks scan-diff), then apply-fix, then prompts/resources/capability, then structured errors, then tests last.
 
-Completed (do not regress):
-- [x] In-house JSON-RPC 2.0 server (zero-dep; ~200 lines in `src/mcp/server.ts`)
-- [x] Session state + AST cache by mtime
-- [x] Tools: `scan`, `scan_project`, `scan_file`, `detect_native_wrappers`, `explain_rule`, `suggest_fix`, `coverage`, `checklist`, `list_rules`, `configure`
-- [x] `scan_project` auto-promotes to git root; `changedOnly`/`since` for CI-on-diff
-- [x] `nativeWrappers` session config (quiets keyboard/handler-missing noise on React native-element wrappers)
-- [x] `.mcp.json` at repo root for Claude Code auto-attach
-- [x] Integration tests (spawn server as subprocess, drive JSON-RPC)
-- [x] `unusedNativeWrappers` + `manualReviewRequired` + iterative-scan tip
-- [x] Session/file wrapper split + WCAG titles on coverage
+### v0.2.0
 
-Hardening / polish still open:
-- [ ] `src/mcp/tool-baseline.ts` — tools to create/check/update a baseline from within an MCP session (pairs with Phase 14 baseline work)
-- [ ] `src/mcp/tool-scan-diff.ts` — compare current scan vs a baseline or previous result; emit only new findings (matches the `changedOnly` mental model but structural)
-- [x] `src/mcp/tool-explain-standard.ts` — returns metadata + criterion list (filterable by level)
-- [x] `src/mcp/tool-review-candidates.ts` — surfaces tier-1 candidates with source snippets + finder reviewPrompt for LLM pass/fail
-- [ ] `src/mcp/tool-apply-fix.ts` — take a `suggest_fix` result, apply the search/replace, re-scan automatically, return the delta (kept disabled by default behind a `--allow-write` session flag — opt-in destructive)
-- [ ] Prompt templates under `src/mcp/prompts/` — reusable `prompts/list` entries for common agent workflows (triage, fix, audit, VPAT narrative)
-- [ ] `resources/list` support — expose `docs/kb/**` as MCP resources so attached agents can retrieve KB entries without filesystem tools
-- [ ] Capability declaration polish: `logging`, `completions` where meaningful, `roots` so the server respects the host's project boundaries
-- [ ] Structured errors: replace text-only error payloads with `structuredContent` where the tool result is machine-consumable (coverage, checklist, list_rules)
-- [ ] `tests/integration/mcp-resources.test.ts` covering resources/list + resources/read round-trip
-- [ ] `tests/integration/mcp-prompts.test.ts` covering prompts/list + prompts/get round-trip
+- [ ] `src/mcp/tool-baseline.ts` — create/check/update a baseline from within an MCP session (pairs with Phase 14 baseline work)
+- [ ] `src/mcp/tool-scan-diff.ts` — compare current scan vs a baseline; emit only new findings
+- [ ] `src/mcp/tool-apply-fix.ts` — take a `suggest_fix` result, apply the search/replace, re-scan, return the delta (opt-in via `--allow-write` session flag)
+- [ ] Prompt templates under `src/mcp/prompts/` — reusable `prompts/list` entries for triage / fix / audit / VPAT narrative workflows (pure strings, no template engine)
+- [ ] `resources/list` support — expose `docs/kb/**` as MCP resources so attached agents can retrieve KB entries without filesystem access
+- [ ] Capability declaration polish: `logging`, `completions` where meaningful, `roots` so `scan_project` respects the host's declared project boundaries
+- [ ] Structured errors across tools — replace text-only error payloads with `structuredContent` where the result is machine-consumable (coverage, checklist, list_rules, review_candidates)
+- [ ] `tests/integration/mcp-resources.test.ts` — resources/list + resources/read round-trip
+- [ ] `tests/integration/mcp-prompts.test.ts` — prompts/list + prompts/get round-trip
 
-## Phase 20 — MCP sampling + sampling-backed tools (v0.2.0, the real moat)
+---
 
-**Why the pivot (was: `ra11y --fix` with an API key).** Building our own LLM client would mean duplicating the prompt + billing + rate-limit surface that every agent host already runs, punching a hole in the network-isolation invariant that's core to the trust pitch, and competing with Claude Code / Cursor / Zed on agent UX — we'd lose. MCP sampling (`sampling/createMessage`) lets the server request a completion from the *host*; host owns the model and the key. One conduit for everything LLM-backed. ra11y stays fully offline. Works with any MCP host. This is Phase 20 now.
+## Track R — Rules + review-candidate coverage
 
-- [ ] `src/mcp/sampling.ts` — client-side sampling helper: given a prompt + tool context, call `sampling/createMessage` on the host, parse the response, enforce timeout + max-tokens budget
-- [ ] Server capability declaration: advertise `sampling` in the initialize response so hosts know to wire the channel; handle hosts that decline gracefully (fall back to "return the prompt for the agent to run")
-- [ ] `src/mcp/tool-resolve-component.ts` — takes a finding on a PascalCase element, samples the host to read the referenced component file and verify whether it wraps a native interactive element; returns verdict + rationale
-- [ ] `src/mcp/tool-verdict-candidate.ts` — takes a review candidate + source snippet + the finder's `reviewPrompt`; samples the host for pass/fail with reasoning
-- [ ] `src/mcp/tool-draft-vpat-narrative.ts` — takes a criterion's coverage data; samples the host to draft the VPAT "Remarks and explanations" cell
-- [ ] `src/mcp/tool-triage-findings.ts` — pure, no-sampling triage that labels each finding (auto-fixable / needs-component-source / needs-manual-review) — the input the LLM-backed tools above consume
-- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (no template engine, no deps); version-pinned with a checksum registry so prompt drift is reviewable
-- [ ] `tests/unit/mcp/sampling.test.ts` — unit test with a fake host that records sampling requests
-- [ ] `tests/integration/mcp-sampling.test.ts` — end-to-end via a scripted host adapter that canned-responds
-- [ ] Docs: `docs/kb/architecture/mcp-sampling.md` (trust model, what the server can and cannot ask), `docs/mcp/prompts.md`
+Owner: `rule-implementer` (rules) + main session (review finders). Rules within the track are independent; dispatch 3 in parallel when you have 3 open items.
 
-## Phase 21 — Polish the agent experience (v0.2.x moat-deepening)
+### v0.2.0
 
-Items that turn "it works" into "it's the obvious choice for agentic a11y work."
+- [ ] `src/review/finders/consistent-navigation.ts` — wcag22:3.2.3. Compare `<nav>` children structure/order across route files; flag divergent routes as candidates.
+- [ ] `tests/unit/review/finders/consistent-navigation.test.ts` — ≥3 positive, ≥3 negative, ≥1 edge case against fixtures under `tests/fixtures/review/consistent-navigation/`.
+- [ ] Tailwind focus-ring cross-reference for `focus/outline-visible`. When `.classname:focus-visible { outline: none }` currently downgrades to `info`, cross-reference against `tailwind.ts` class output: if an element with that className also carries `focus-visible:ring-*` / `focus-visible:outline-*` / `focus-visible:shadow-*` utilities, auto-resolve the info candidate. Not heuristic suppression — a named class-token link is concrete evidence. Extends existing parser output; no new architecture.
 
-- [ ] `/audit` MCP prompt template: end-to-end workflow — scan, triage, sample-verdict every review candidate, draft a VPAT, output a markdown report (host drives; server exposes the prompt)
-- [ ] `resources/list` support — expose `docs/kb/**` as MCP resources so hosts can retrieve KB entries without filesystem access
-- [ ] Structured errors across every tool: replace text-only error payloads with `structuredContent` where the result is machine-consumable (coverage, checklist, list_rules, review_candidates)
-- [ ] `roots` capability: respect the host's declared project boundaries so `scan_project` doesn't wander outside the agent's working root
-- [ ] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set, CI-gated (runs against a scripted host, no real LLM calls)
-- [ ] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + a sample `CLAUDE.md` section showing the triage → verdict → draft-VPAT workflow from inside Claude Code
-- [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
-- [ ] VS Code extension skeleton under `integrations/vscode/` (out-of-tree but linked from README) — wraps the MCP server for IDE-native findings and surfaces sampled verdicts inline
-- [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` vs axe-core + jsx-a11y against a labeled fixture set, published on releases — accuracy, false-positive rate, and *agent-workflow completion rate* which is where we expect to win
-- [ ] **Tailwind focus-ring cross-reference for `focus/outline-visible`.** When a CSS rule with a scoped selector (e.g., `.composer-scrollbar:focus-visible { outline: none }`) currently downgrades to `info`, cross-reference with the JSX class strings already parsed in Phase 5's `src/input/parsers/tailwind.ts`: if any element whose className contains `composer-scrollbar` also carries `focus-visible:ring-*` / `focus-visible:outline-*` / `focus-visible:shadow-*` utilities, auto-resolve the info candidate. Adds *more* analysis, not heuristic suppression — a named class name linking CSS and JSX is the concrete evidence. Not suppression by class-pattern guess — the match is a specific class token. Extends existing parser output; no new architecture. Closes the primary false-positive source on focus/outline-visible in Tailwind codebases.
+---
 
-## Phase 22 — Review-candidate coverage (unbiased-agent feedback, post-v0.1.0)
+## Track F — Real-world fixture corpus
 
-Three batches of unbiased feedback against ~/dev/leela converged on the same shape: the checklist reads like a "WCAG spec dump" because most manual criteria have no candidates. Moving criteria from empty-list to location-anchored is the highest-leverage work to make the manual-review half of the tool genuinely useful. Each finder is ~1–2h of work.
+Owner: `fixture-curator` + `test-author`. **Sequenced: ADR → harness prototype → fixture backfill (9 items in parallel).** The 9 fixture cases cannot start until the harness lands.
 
-- [x] `src/review/finders/use-of-color.ts` — wcag22:1.4.1. Scan CSS/Tailwind class strings for status-conveying color names (red-500, success, warning, error, danger) without an adjacent icon, text label, or aria-label. Emit candidates at the JSX/HTML element where the color-only signal lives.
-- [x] `src/review/finders/error-identification.ts` — wcag22:3.3.1. Detect form `<input>`/`<select>`/`<textarea>` elements with `required`, `pattern`, `min`/`max`, or `type="email"`/`type="url"` and no associated error-message element (no `aria-describedby` pointing to a `role="alert"` or error text node). Pairs well with 3.3.3 Error Suggestion.
-- [ ] `src/review/finders/consistent-navigation.ts` — wcag22:3.2.3. Compare the structure/order of `<nav>` children across route files; flag routes whose nav differs from the modal pattern as candidates.
-- [x] `src/review/finders/headings-and-labels.ts` — wcag22:2.4.6. Extend heading work to flag generic headings ("Click here", "More info", "Section", "Overview") as candidates for descriptiveness review.
-- [x] `src/review/finders/on-input-body.ts` — tighten 3.2.2 confidence. Inspect the onChange handler's function body (arrow/named) for a call to `router.push`, `navigate`, `history.push`, `window.location.*`, or `.submit()`. Handlers with those calls get `confidence: "high"`; handlers without get `confidence: "low"` so reviewers can skip filter-bar noise in seconds. **Landed as reason-text tiers on the existing `on-input-change.ts` finder per CLAUDE.md §1 — no new file, no new type field; confidence stays in `reason`.**
-- [x] `src/mcp/tool-audit.ts` — meta-tool that runs scan + coverage + checklist in one round-trip and returns all three payloads under `{ scan, coverage, checklist }`. Keeps the existing three tools intact; just saves the round-trips for agents that want one-shot workflow.
-- [ ] `tests/unit/review/finders/*` — each new finder gets the standard ≥3 positive, ≥3 negative, ≥1 edge-case suite against fixtures under `tests/fixtures/review/<finder>/`.
+### v0.2.0
 
-## Phase 23 — Real-world fixture corpus (regression moat)
-
-CLAUDE.md's `fixture-curator` subagent is described as "the project's moat — edge cases discovered in production codebases that existing a11y tools miss." The directory it's meant to write to — `tests/fixtures/real-world/` — doesn't exist yet. Current test shape is dominated by implementation-shaped unit tests ("the top-5 cap returns 5 entries," "the ranker orders alphabetically on ties") that need to change with every refactor. Real-world fixtures lock in the *bug*, not the code; they survive refactors.
-
-The Apr 2026 leela-feedback rounds surfaced ~8 real-world bug categories (parser generics, SPA shell, Tailwind coverage, logotype annotation, timing role hints, template-directive handling, opaque-component ranking, ra11y-disable reason slot). Each landed with unit tests. Each should ALSO live as a sanitized snippet under real-world/ so a future parser rewrite (or any refactor) doesn't silently reopen them.
-
-**Design questions to resolve before building** (take a position, commit an ADR):
-
-- **Assertion shape.** Snapshot match on full scan output is brittle (every meta-field change breaks every fixture); property-based assertions (`expectReasonContains`, `expectMetaHintIncludes`, `expectZeroParseErrors`, `expectCriterionPresent`) survive shape drift but require an enumeration. Lean property-based; golden-snapshot only for stable high-value shapes (e.g., the full `formatted.plan` of a canonical clean scan).
-- **Per-fixture config.** Some fixtures need `ra11y.config.ts` to exercise the flag under test (autoDetectWrappers, additionalPaths, suppressions with reasons). Some don't. Convention: bare source-only directory means "run scan_project with defaults"; fixture dir containing `ra11y.config.ts` overrides. Document the contract on the harness, not per-fixture.
-- **Relationship to existing `tests/fixtures/bad/<rule>/` and `tests/fixtures/good/<rule>/`.** Those are *rule-level* per-rule positive/negative cases driving unit rule tests. `real-world/<case>/` is *cross-cutting* — one snippet might hit parser + coverage hint + review candidate + meta field. Keep them separate namespaces; don't merge.
-- **Sanitization policy.** Snippets come from real codebases; must not carry the original project's identifiers, copy, or visual style verbatim. Minimum rewrite: replace brand/component names with generic equivalents ("Button" → "Widget", "ComposerSendButton" → "ComposerFooButton"), strip business copy, keep the structural pattern intact. If rewriting would destroy the reproduction, the pattern is too specific — capture the minimum structural skeleton instead.
-- **Golden-output generation vs hand-written assertions.** Generated expectations are tempting but lock in every coincidence of current behavior; a hand-written assertion explicitly names the *one thing* the fixture is guarding. Default hand-written; allow generated-golden only for "full canonical output" smoke tests where the whole shape is load-bearing.
-
-**Harness architecture** (sketch — refine in the ADR):
-
-```
-tests/fixtures/real-world/
-  <case-id>/
-    source/            # sanitized snippets — scanner input
-      *.ts|*.tsx|*.html|*.css|*.ra11y.config.ts?
-    assertions.ts      # typed expectations (see below)
-    README.md          # which commit/feedback-round introduced this case + what it guards
-```
-
-`assertions.ts` exports a typed object:
-
-```ts
-export const assertions: FixtureAssertions = {
-  description: "TS generics (Pick<T,K>, ForwardRefRenderFunction<...>) parse without emitting JSX parse errors",
-  origin: { commit: "2968d87", feedbackRound: "leela-round-1" },
-  toolInput: { autoDetectWrappers: false, verboseMeta: false },
-  expectations: [
-    { kind: "zero-parse-errors" },
-    { kind: "no-violation-with-rule", ruleId: "*" },  // no rule fires on type-only code
-  ],
-};
-```
-
-`FixtureExpectation` primitives (round-trip-safe, decoupled from output-shape internals):
-
-- `zero-parse-errors` — `formatted.meta.analysisCoverage.parseErrorFileCount` absent or `=== 0`
-- `parse-errors-at-path` — specific file failed to parse (for guarding known-bad syntax)
-- `violation-present { ruleId, reasonIncludes? }` — at least one finding for ruleId, optionally with substring in reason/message/suggestion
-- `no-violation { ruleId }` — rule never fires on this fixture
-- `candidate-present { criterionId, reasonIncludes? }` — same shape for review candidates
-- `no-candidate { criterionId }` — criterion not flagged (lets a fixture assert e.g. "SPA shell annotation suppressed the false-positive nav finding on wcag22:2.4.5")
-- `meta-hint-includes { substring }` — `analysisCoverage.hints` array contains a matching hint
-- `meta-field { path: string[]; predicate: "present" | "absent" | { equals: unknown } | { contains: string } }` — generic accessor for one-off cases (sessionNativeWrappers, autoDetectedWrappers, suppressions)
-
-One integration test walks `tests/fixtures/real-world/`, reads each `assertions.ts` dynamically, runs scan_project, evaluates. Failure message names the fixture + the failing expectation: "real-world/tsx-generics: expected zero-parse-errors, got 3 parse errors (uuid-like.ts, forward-ref.tsx, array-promise.ts)."
-
-**Cases to populate on first landing** (each ~15-30 min once the harness is in place):
-
-- [ ] `real-world/tsx-generics/` — Pick<T,K>, ForwardRefRenderFunction<...>, Array<string>, Promise<void>, generic function calls. Guards commit `2968d87`. Assertion: zero-parse-errors.
-- [ ] `real-world/spa-shell-vite/` — Vite-style `<div id="root">` + module script index.html. Guards commit `bc3aae4`. Assertion: wcag22:2.4.5 candidate reason includes "SPA index shell".
-- [ ] `real-world/tailwind-coverage/` — 60 JSX files with utility-class strings, zero CSS. Guards commit `4700a13`. Assertion: analysisCoverage.hints includes "Tailwind usage detected" + `additionalPaths: ["dist/assets"]`.
-- [ ] `real-world/logotype-annotation/` — `<img className="site-logo" alt="Acme">`. Guards commit `71b9954`. Assertions: wcag22:1.4.5 reason contains "logotype exemption"; wcag22:1.4.9 reason does NOT contain it.
-- [ ] `real-world/timing-role-hints/` — useDebouncedCallback.ts, authManager.ts, telemetryService.ts. Guards commit `3ada44a`. Assertion: wcag22:2.2.1 candidate reason contains "likely not user-facing" for each.
-- [ ] `real-world/template-directives/` — Jinja `{% extends %}` + `{{ x }}`. Guards commit `a554d27`. Assertion: analysisCoverage.templateDirectiveHandling includes "parsed as literal".
-- [ ] `real-world/opaque-components-top/` — 10 PascalCase components with varied call-site counts. Guards commit `0ee28e1`. Assertion: analysisCoverage.opaqueCustomComponentsTop is a ranked list of length ≤5.
-- [ ] `real-world/suppression-reason-slot/` — pragma with `: reason` syntax. Guards commit `d820186`. Assertion: meta.suppressions contains an entry with `reason: "..."` present.
+- [ ] ADR 0006 `docs/adr/0006-real-world-fixture-harness.md` — resolve the five design questions (assertion shape, per-fixture config, sanitization policy, golden-output generation, harness architecture). Chosen positions go in the ADR.
+- [ ] Harness prototype against `tests/fixtures/real-world/tsx-generics/` validating the `FixtureAssertions` primitives from the ADR before committing to the shape.
+- [ ] Extend `fixture-curator` subagent definition in `.claude/agents/fixture-curator.md` with the new `tests/fixtures/real-world/` conventions once the ADR lands.
+- [ ] `real-world/tsx-generics/` — Pick<T,K>, ForwardRefRenderFunction<...>, generic function calls. Guards commit `2968d87`. Assertion: zero-parse-errors.
+- [ ] `real-world/spa-shell-vite/` — Vite-style `<div id="root">` + module script index.html. Guards `bc3aae4`. Assertion: wcag22:2.4.5 candidate reason includes "SPA index shell".
+- [ ] `real-world/tailwind-coverage/` — 60 JSX files with utility-class strings, zero CSS. Guards `4700a13`. Assertion: analysisCoverage.hints includes "Tailwind usage detected" + `additionalPaths: ["dist/assets"]`.
+- [ ] `real-world/logotype-annotation/` — `<img className="site-logo" alt="Acme">`. Guards `71b9954`. Assertions: wcag22:1.4.5 reason contains "logotype exemption"; wcag22:1.4.9 reason does NOT.
+- [ ] `real-world/timing-role-hints/` — useDebouncedCallback, authManager, telemetryService. Guards `3ada44a`. Assertion: wcag22:2.2.1 reason contains "likely not user-facing".
+- [ ] `real-world/template-directives/` — Jinja `{% extends %}` + `{{ x }}`. Guards `a554d27`. Assertion: analysisCoverage.templateDirectiveHandling includes "parsed as literal".
+- [ ] `real-world/opaque-components-top/` — 10 PascalCase components with varied call-site counts. Guards `0ee28e1`. Assertion: analysisCoverage.opaqueCustomComponentsTop is a ranked list of length ≤5.
+- [ ] `real-world/suppression-reason-slot/` — pragma with `: reason` syntax. Guards `d820186`. Assertion: meta.suppressions contains an entry with `reason: "..."`.
 - [ ] `real-world/autodetect-attribution/` — autoDetectWrappers scan; assert sessionNativeWrappers is absent (regression on `6821b77`).
+- [ ] Policy change: update `CLAUDE.md` §7 and §17 — when fixing a real-world bug (not adding a new rule from spec), add a sanitized repro to `tests/fixtures/real-world/<case>/` FIRST. Unit tests are for invariants; behavior-rehearsals migrate to real-world fixtures on touch.
 
-**Policy / process change this phase requires** (update `CLAUDE.md` §7 "How to add a new rule" and §17 "Common mistakes"):
+---
 
-- When fixing a real-world bug (not adding a new rule from spec), add a sanitized repro to `tests/fixtures/real-world/<case>/` FIRST. That's the regression guard.
-- Unit tests are for *invariants* (properties that survive refactors: "every pragma declaration has a line number," "no finder emits suppressions by filename"), not behavior rehearsals ("the ranker orders alphabetically on ties" — covered by the fixture).
-- The "case tests disguised as unit tests" pattern — where a unit test encodes a real-world failure mode verbatim — is a symptom of missing fixture infrastructure. Migrate those on touch.
+## Track S — MCP sampling (STAGED; defer until v0.3.0+)
 
-**Open design work before starting implementation:**
+Owner: `parser-author` + main session. **Do not start** until v0.2.0 ships and user feedback selects 1–2 high-value tools. Shipping all four speculatively wastes the 0.2 budget on unvalidated surface. See `docs/adr/0005-in-house-mcp-server.md` §Follow-up work.
 
-- [ ] ADR — `docs/adr/NNNN-real-world-fixture-corpus.md` capturing the five design questions above with a chosen position.
-- [ ] Prototype harness against 1 fixture (tsx-generics) to validate the assertion primitives before committing to the shape.
-- [ ] Decide whether to backfill the 9 cases above in one phase or staged alongside each fixture-relevant refactor.
-- [ ] Extend the `fixture-curator` subagent definition in `.claude/agents/` with the new directory conventions once the ADR is cut.
+### v0.3.0+ (candidates)
 
-Dispatch the harness to `fixture-curator` + `test-author` collaboratively, with `fixture-curator` owning the sanitized snippets and `test-author` owning the harness + assertion primitives. Do NOT spawn either before the ADR lands — the assertion shape needs a durable decision first.
+- [ ] `src/mcp/sampling.ts` — client helper calling `sampling/createMessage` on the host with timeout + max-tokens budget
+- [ ] Server capability declaration: advertise `sampling` in initialize; graceful fallback to "return the prompt for the agent to run" on hosts that decline
+- [ ] `src/mcp/tool-resolve-component.ts` — verifies PascalCase wrappers via host-sampled source read
+- [ ] `src/mcp/tool-verdict-candidate.ts` — pass/fail with reasoning for a review candidate + its `reviewPrompt`
+- [ ] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion
+- [ ] `src/mcp/tool-triage-findings.ts` — pure (no sampling) triage that labels each finding — the input for the LLM-backed tools above
+- [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (checksum registry for version-pinning)
+- [ ] `tests/unit/mcp/sampling.test.ts` with a fake host recording sampling requests
+- [ ] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter
+- [ ] Docs: `docs/kb/architecture/mcp-sampling.md`, `docs/mcp/prompts.md`
+- [ ] `/audit` MCP prompt template: end-to-end workflow (scan → triage → verdict → VPAT draft) exposed as a host-driven prompt
+
+---
+
+## Track E — Ecosystem & public benchmark (STAGED; v0.3.0+)
+
+Owner: `doc-writer` + main session. Items here expand the agent-host matrix and establish the public quality story — valuable but not release-gating.
+
+### v0.3.0+
+
+- [ ] Prompt evals harness in `tests/evals/` — measure each sampling prompt's accuracy against a labeled fixture set; CI-gated against a scripted host (no real LLM calls). Paired with Track S.
+- [ ] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code
+- [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
+- [ ] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings
+- [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` — accuracy, false-positive rate, agent-workflow completion rate against a labeled fixture set, published with each release
+
+---
+
+## History — Phases 0–17 complete
+
+Historical record; do not modify. The `/continue` skill does not walk this section.
+
+- **Phase 0** — Autonomous Claude Code infrastructure (hooks, agents, skills, settings).
+- **Phase 1** — Guard + generator scripts; `scripts/verify.ts` single entrypoint.
+- **Phase 2** — Core types, registries, scanner skeleton, AST helpers, public API surface.
+- **Phase 3** — WCAG 2.2 standard module; 86 active criteria + historical 4.1.1.
+- **Phase 4** — In-house utilities (logger, assert, fs, path, glob, git, ansi, string-width, wrap, color, contrast, args, index).
+- **Phase 5** — Parsers: tsx, html, css, tailwind + theme resolver + discover; unit + fuzz tests.
+- **Phase 6** — Rule engine + first 5 rules (alt-text-missing, contrast/minimum, link-descriptive-text, focus/outline-visible, parsing/duplicate-id).
+- **Phase 7** — Scanner + terminal/plain/json formatters + theme + snapshot tests.
+- **Phase 8** — CLI: scan, list-rules, list-standards, explain, coverage, checklist, vpat, certification, init, doctor.
+- **Phase 9** — WCAG 2.1 standard module (reuses rules via equivalentTo).
+- **Phase 10** — Section 508 + EN 301 549 standard modules (thin equivalentTo wrappers).
+- **Phase 11** — Remaining rules across contrast, focus, keyboard, aria, semantics, forms, pointer, navigation, layout, tooltip, document domains. 54 rules total.
+- **Phase 12** — Alternative formatters: sarif, junit, markdown, html, agent.
+- **Phase 13** — Reports: coverage, checklist, vpat, certification.
+- **Phase 14** — Config, inline disables, baseline mode (create/check/update), monorepo `projects: []` support.
+- **Phase 15** — Plugin API (`defineRule`, `defineStandard`, `defineFormatter`, `defineConfig`) + three example plugins + CI smoke job.
+- **Phase 16** — Long-form docs: getting-started, CLI, configuration, architecture, KB (architecture + patterns + concepts + gotchas + glossary), certification guides, plugin authoring, MCP docs, ADRs 0001–0005.
+- **Phase 17** — CI workflows (ci.yml, release.yml), issue + PR templates, dependabot.
+- **Phase 18 partial** — README with real output snapshots + multi-standard-scan integration test + mcp-session integration test coverage audit. Remaining demo/tag/publish items live in Track D above.
+- **Phase 19 partial** — In-house JSON-RPC 2.0 MCP server (~200 LoC), session state + AST cache by mtime, 10 live tools, session config for `nativeWrappers`, `.mcp.json` auto-attach, integration tests. Remaining hardening items live in Track M above.
+- **Phase 22 partial** — Review finders shipped: use-of-color, error-identification, headings-and-labels, on-input-body (landed as reason-text tiers on on-input-change per CLAUDE.md §1), `tool-audit` meta-tool. Remaining finder + finder tests live in Track R.
