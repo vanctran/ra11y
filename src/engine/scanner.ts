@@ -418,7 +418,27 @@ function dedupUniquePerCriterion(
   return kept;
 }
 
-/** Collects the set of manual criterion IDs across enabled standards. */
+/**
+ * Built-in process-rule criterion IDs. These are ra11y's own hygiene /
+ * process checks that aren't traceable to any WCAG SC, Section 508
+ * provision, or EN 301 549 clause — suppression-accountability and
+ * similar meta-rules. The scanner activates them unconditionally so the
+ * backing finders fire regardless of which standards are enabled.
+ *
+ * Lives in the engine (not in a standard module) because a Standard is
+ * pure data declaring WCAG/508/EN criteria — splicing ra11y's process
+ * IDs into a real standard would break the Standards → Criteria → Rules
+ * invariants. Kept deliberately tiny.
+ */
+const RA11Y_PROCESS_CRITERION_IDS: readonly string[] = ["ra11y:suppression-no-reason"];
+
+/**
+ * Collects the set of manual criterion IDs across enabled standards,
+ * plus ra11y's process-rule criteria (see
+ * {@link RA11Y_PROCESS_CRITERION_IDS}). Process criteria are always
+ * active — they don't belong to any standard, so "enabled standards"
+ * doesn't gate them.
+ */
 function collectManualCriterionIds(
   standards: StandardsRegistry,
   enabled: ReadonlySet<string>,
@@ -431,6 +451,7 @@ function collectManualCriterionIds(
       if (criterion.automatable === "manual") ids.add(criterion.id);
     }
   }
+  for (const id of RA11Y_PROCESS_CRITERION_IDS) ids.add(id);
   return ids;
 }
 

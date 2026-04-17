@@ -25,11 +25,15 @@ function tsxFile(filePath: string, source: string): ParsedFile {
 }
 
 describe("candidate-runner — inline-disable suppresses candidates", () => {
-  it("`<!-- ra11y-disable -->` at top of file silences review candidates", async () => {
+  it("`<!-- ra11y-disable -->` at top of file silences WCAG-based review candidates", async () => {
     // Jinja templates and LLM prompt fragments aren't rendered UI but
     // trip manual-review heuristics (sensory wording, logo alt text,
-    // etc.). A file-level disable must quiet candidates, not just
-    // violations.
+    // etc.). A file-level disable must quiet WCAG-based candidates,
+    // not just violations. The `ra11y:suppression-no-reason` process-
+    // rule candidate still fires on the bare pragma itself — that
+    // accountability signal is load-bearing and explicitly not gated
+    // by the wildcard suppression (see `suppression-no-reason` finder
+    // docstring for the self-suppression semantics).
     const { parseInlineDisables } = await import("../../src/config/inline-disables.ts");
     const source = "<!-- ra11y-disable -->\n<p>consider the view above</p>\n";
     const r = parseHtml(source);
@@ -46,7 +50,10 @@ describe("candidate-runner — inline-disable suppresses candidates", () => {
       files: [file],
       finders: (await import("../../src/review/index.ts")).BUILTIN_CANDIDATE_FINDERS,
     });
-    expect(report.candidates ?? []).toEqual([]);
+    const wcagCandidates = (report.candidates ?? []).filter((c) =>
+      c.criterionId.startsWith("wcag"),
+    );
+    expect(wcagCandidates).toEqual([]);
   });
 
   it("`<!-- ra11y-disable wcag22:1.3.3 -->` silences one criterion without touching others", async () => {
