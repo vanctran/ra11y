@@ -45,6 +45,8 @@ export type {
   CandidateFinder,
   CandidateFinderDocs,
   CandidateFinderScope,
+  ProjectCandidateContext,
+  ProjectFile,
   ReviewCandidate,
 } from "./review.ts";
 export type {

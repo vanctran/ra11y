@@ -14,6 +14,7 @@
  * See docs/architecture.md for context on how this fits the three-layer model.
  */
 
+import type { Ast } from "./ast.ts";
 import type { AppliesTo, FileContext, RuleContext } from "./rule.ts";
 import type { Location } from "./violation.ts";
 
@@ -43,6 +44,29 @@ export interface CandidateFinderDocs {
 }
 
 /**
+ * The minimal per-file record a project-scoped finder sees. This is the
+ * already-parsed material the scanner collected on the per-file pass;
+ * project finders MUST NOT re-parse.
+ */
+export interface ProjectFile {
+  readonly filePath: string;
+  readonly source: string;
+  readonly ast: Ast;
+  readonly disableMap: ReadonlyMap<number, ReadonlySet<string>>;
+}
+
+/**
+ * Context passed to a candidate finder's `afterProject` hook. Carries
+ * every parsed file the scanner touched plus the enabled-standards set,
+ * so a cross-file finder (e.g. WCAG 3.2.3 Consistent Navigation) can
+ * compare structures between routes without reopening files.
+ */
+export interface ProjectCandidateContext {
+  readonly files: readonly ProjectFile[];
+  readonly enabledStandards: ReadonlySet<string>;
+}
+
+/**
  * A candidate finder — finds locations that need human review for
  * manual accessibility criteria. Structurally parallel to Rule but
  * emits ReviewCandidate[] instead of Violation[].
@@ -67,4 +91,13 @@ export interface CandidateFinder {
   find?(ctx: RuleContext): readonly ReviewCandidate[] | undefined;
   /** Document-scoped finder — called after file parsing. */
   afterFile?(ctx: FileContext): readonly ReviewCandidate[] | undefined;
+  /**
+   * Project-scoped finder — called once after every file has been
+   * processed. Used for cross-file checks like WCAG 3.2.3 Consistent
+   * Navigation, where a candidate only exists relative to other
+   * files. The returned candidates' `location.filePath` MUST be one
+   * of the paths in `ctx.files`; the scanner applies per-file
+   * disableMap filtering before surfacing them.
+   */
+  afterProject?(ctx: ProjectCandidateContext): readonly ReviewCandidate[] | undefined;
 }

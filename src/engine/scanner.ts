@@ -180,8 +180,93 @@ function collectCandidatesFromFiles(
     });
     for (const c of perFile) out.push(c);
   }
+  for (const c of runProjectFinders(inputs, finders, enabled, activeCriterionIds)) {
+    out.push(c);
+  }
   out.sort(compareCandidates);
   return dedupUniquePerCriterion(out, finders);
+}
+
+/**
+ * Runs every finder's `afterProject` hook once with the full set of
+ * parsed files. Used by cross-file finders (e.g. WCAG 3.2.3 Consistent
+ * Navigation) that can only judge a location relative to its peers.
+ *
+ * A crashing project-finder contributes zero candidates silently —
+ * advisory only, same contract as the per-file runner.
+ */
+function runProjectFinders(
+  inputs: ScanInputs,
+  finders: readonly CandidateFinder[],
+  enabled: ReadonlySet<string>,
+  activeCriterionIds: ReadonlySet<string>,
+): readonly ReviewCandidate[] {
+  const projectFiles = inputs.files.map((f) => ({
+    filePath: f.filePath,
+    source: f.source,
+    ast: f.ast,
+    disableMap: f.disableMap ?? new Map<number, ReadonlySet<string>>(),
+  }));
+  const pathToDisableMap = new Map<string, ReadonlyMap<number, ReadonlySet<string>>>();
+  for (const f of projectFiles) pathToDisableMap.set(f.filePath, f.disableMap);
+
+  const out: ReviewCandidate[] = [];
+  for (const finder of finders) {
+    invokeOneProjectFinder(
+      finder,
+      projectFiles,
+      enabled,
+      activeCriterionIds,
+      pathToDisableMap,
+      out,
+    );
+  }
+  return out;
+}
+
+/**
+ * Invokes one finder's `afterProject` hook and appends its surviving
+ * candidates (those not silenced by per-file disableMaps) to `out`.
+ * Split out so `runProjectFinders` stays under the cognitive-complexity
+ * budget — the loop body is otherwise the whole function.
+ */
+function invokeOneProjectFinder(
+  finder: CandidateFinder,
+  projectFiles: readonly {
+    readonly filePath: string;
+    readonly source: string;
+    readonly ast: Ast;
+    readonly disableMap: ReadonlyMap<number, ReadonlySet<string>>;
+  }[],
+  enabled: ReadonlySet<string>,
+  activeCriterionIds: ReadonlySet<string>,
+  pathToDisableMap: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
+  out: ReviewCandidate[],
+): void {
+  if (!finder.afterProject) return;
+  if (!finder.criterionIds.some((id) => activeCriterionIds.has(id))) return;
+  let emitted: readonly ReviewCandidate[] | undefined;
+  try {
+    emitted = finder.afterProject({ files: projectFiles, enabledStandards: enabled });
+  } catch {
+    return;
+  }
+  if (!emitted) return;
+  for (const c of emitted) {
+    const disableMap = pathToDisableMap.get(c.location.filePath);
+    if (disableMap && isCandidateDisabled(disableMap, c.location.line, c.criterionId)) continue;
+    out.push(c);
+  }
+}
+
+function isCandidateDisabled(
+  disableMap: ReadonlyMap<number, ReadonlySet<string>>,
+  line: number,
+  criterionId: string,
+): boolean {
+  const disabled = disableMap.get(line);
+  if (!disabled) return false;
+  return disabled.has("*") || disabled.has(criterionId);
 }
 
 /**
