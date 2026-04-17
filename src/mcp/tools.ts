@@ -20,6 +20,7 @@ import { coverageTool } from "./tool-coverage.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { explainStandardTool } from "./tool-explain-standard.ts";
 import { reviewCandidatesTool } from "./tool-review-candidates.ts";
+import { scanDiffTool } from "./tool-scan-diff.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import {
   applyRuleSettings,
@@ -458,6 +459,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   scanTool,
   scanProjectTool,
   scanFileTool,
+  scanDiffTool,
   detectNativeWrappersTool,
   explainRuleTool,
   explainStandardTool,

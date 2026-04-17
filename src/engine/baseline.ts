@@ -61,11 +61,17 @@ export interface BaselineDiff {
 
 /** Builds a stable fingerprint for a violation. Line numbers are excluded by design. */
 export function fingerprint(violation: Violation): string {
-  const canonical = [
-    violation.ruleId,
-    normalizeFilePath(violation.location.filePath),
-    violation.message,
-  ].join("\u0000");
+  return fingerprintOf(violation.ruleId, violation.location.filePath, violation.message);
+}
+
+/**
+ * Component-level fingerprint, for callers that already have the
+ * fingerprint inputs as separate strings (e.g. MCP response-shape diffs
+ * that operate on `{ ruleId, path, message }` rather than full
+ * `Violation` objects). Identical hashing to `fingerprint()`.
+ */
+export function fingerprintOf(ruleId: string, filePath: string, message: string): string {
+  const canonical = [ruleId, normalizeFilePath(filePath), message].join("\u0000");
   return createHash("sha1").update(canonical).digest("hex");
 }
 
