@@ -14,6 +14,19 @@ import type { ParsedFile } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
 import type { McpSession } from "./session.ts";
 
+/**
+ * Auto-detected wrapper candidates split by the one-hop AST probe
+ * from {@link classifyWrapperCandidates} (P1-F). `confirmed` wrappers
+ * flow into `activeNativeWrappers` and silently silence findings;
+ * `assumed` wrappers stay opaque (rules fire as if the name were NOT
+ * in the wrapper list) but are still surfaced in the response so the
+ * agent can see the candidate and verify by reading the source.
+ */
+export interface AutoDetectedWrappers {
+  readonly confirmed: readonly string[];
+  readonly assumed: readonly string[];
+}
+
 export interface NativeWrapperSources {
   /** From ra11y.config.ts. */
   readonly fromFile: readonly string[];
@@ -26,17 +39,29 @@ export interface NativeWrapperSources {
    * `sessionOverridesNote`) doesn't mis-attribute them to a stale
    * configure() call. Scan-scoped by contract — never touches
    * session.config.
+   *
+   * Split into `confirmed` vs `assumed` so that only confirmed
+   * wrappers (those whose defining file's JSX root is a native
+   * interactive element) silence findings. Assumed wrappers stay
+   * opaque so rules still fire on them — see
+   * {@link AutoDetectedWrappers} and CLAUDE.md §1.
    */
-  readonly fromAutoDetect?: readonly string[];
+  readonly fromAutoDetect?: AutoDetectedWrappers;
 }
 
 export interface ResolvedWrapperSources {
+  /**
+   * The effective native-wrapper allowlist for this scan — the union
+   * of config, session, and auto-detect *confirmed* names. Assumed
+   * auto-detect names are deliberately NOT included; they stay
+   * opaque.
+   */
   readonly wrappers: readonly string[];
   readonly sessionOnly: readonly string[];
   readonly bySource: {
     readonly fromConfig: readonly string[];
     readonly fromSession: readonly string[];
-    readonly fromAutoDetect: readonly string[];
+    readonly fromAutoDetect: AutoDetectedWrappers;
   };
 }
 
@@ -47,6 +72,12 @@ export interface ResolvedWrapperSources {
  * deliberately excluded from `sessionOnly` — they come from this scan,
  * not a stale configure() call, and flow into their own
  * `autoDetectedWrappers` meta block.
+ *
+ * Auto-detect names are split into `confirmed` vs `assumed` by a
+ * one-hop AST probe before reaching this function. Only `confirmed`
+ * names flow into the active-wrapper allowlist; `assumed` names are
+ * preserved in `bySource.fromAutoDetect.assumed` so the agent sees the
+ * candidate but the scanner does not silently trust it.
  */
 export function resolveWrapperSources(
   wrapperSources: NativeWrapperSources | undefined,
@@ -56,8 +87,17 @@ export function resolveWrapperSources(
     fromFile: [],
     fromSession: session.config.nativeWrappers,
   };
-  const autoDetect = sources.fromAutoDetect ?? [];
-  const wrappers = [...new Set([...sources.fromFile, ...sources.fromSession, ...autoDetect])];
+  const autoDetect: AutoDetectedWrappers = sources.fromAutoDetect ?? {
+    confirmed: [],
+    assumed: [],
+  };
+  // Only CONFIRMED auto-detect names flow into the effective
+  // allowlist. Assumed names are intentionally excluded — their
+  // findings stay live so the agent (and the rest of the scanner)
+  // treats them like any other opaque PascalCase component.
+  const wrappers = [
+    ...new Set([...sources.fromFile, ...sources.fromSession, ...autoDetect.confirmed]),
+  ];
   const sessionOnly = sources.fromSession.filter((w) => !sources.fromFile.includes(w));
   // Surface each source verbatim so the agent can answer "why is X
   // active?" / "can I remove this from ra11y.config.ts?" in one read.
@@ -66,7 +106,10 @@ export function resolveWrapperSources(
   const bySource = {
     fromConfig: [...sources.fromFile].sort(),
     fromSession: [...sources.fromSession].sort(),
-    fromAutoDetect: [...autoDetect].sort(),
+    fromAutoDetect: {
+      confirmed: [...autoDetect.confirmed].sort(),
+      assumed: [...autoDetect.assumed].sort(),
+    },
   };
   return { wrappers, sessionOnly, bySource };
 }
@@ -85,23 +128,16 @@ export function wrappersMetaBlock(args: {
 }): Record<string, unknown> {
   const { wrappers, sessionOnly, unusedWrappers, wrapperProvenance } = args;
   const out: Record<string, unknown> = {};
-  if (wrappers.length > 0) {
-    out["activeNativeWrappers"] = [...wrappers];
-    // Provenance map: the three sources whose union feeds
-    // activeNativeWrappers. Surfaced so "why is X active?" and
-    // "can I remove this from ra11y.config.ts?" are answerable from
-    // one read. Names overlap freely — a wrapper in config AND
-    // session stays active if either source is removed. Empty lists
-    // are omitted.
-    const bySource: Record<string, readonly string[]> = {};
-    if (wrapperProvenance.fromConfig.length > 0)
-      bySource["fromConfig"] = wrapperProvenance.fromConfig;
-    if (wrapperProvenance.fromSession.length > 0)
-      bySource["fromSession"] = wrapperProvenance.fromSession;
-    if (wrapperProvenance.fromAutoDetect.length > 0)
-      bySource["fromAutoDetect"] = wrapperProvenance.fromAutoDetect;
-    out["activeNativeWrappersBySource"] = bySource;
-  }
+  // The surface contract: include `activeNativeWrappers` (and the
+  // provenance block) when ANY wrapper signal is present — effective
+  // allowlist or auto-detect noise (including `assumed` names that
+  // don't reach the allowlist). Without this, a scan that only found
+  // assumed wrappers would look identical to a scan with no wrappers
+  // at all, hiding the "here's what I considered but didn't trust"
+  // signal the agent needs to act on.
+  const bySource = buildWrapperBySource(wrapperProvenance);
+  if (wrappers.length > 0) out["activeNativeWrappers"] = [...wrappers];
+  if (Object.keys(bySource).length > 0) out["activeNativeWrappersBySource"] = bySource;
   if (sessionOnly.length > 0) {
     // Split visibility: agents editing ra11y.config.ts need to see when
     // a session configure() call is layering extras on top of the file.
@@ -120,6 +156,47 @@ export function wrappersMetaBlock(args: {
     out["unusedNativeWrappersNote"] =
       "Components listed in nativeWrappers that weren't found in any scanned or scan-adjacent source file under cwd. Not an error — the component may live in a path the scan never reaches (outside the project root, or under a custom exclude). If the component was renamed or deleted, update or remove the entry in ra11y.config.ts; otherwise ignore.";
   }
+  return out;
+}
+
+/**
+ * Builds the `activeNativeWrappersBySource` provenance object.
+ * Extracted from `wrappersMetaBlock` so each function stays within
+ * Biome's cognitive-complexity cap. Returns `{}` when no source has
+ * any names — the caller decides whether to attach the empty object.
+ *
+ * `fromAutoDetect` is itself a `{ confirmed, assumed }` split (P1-F):
+ * confirmed names flow into `activeNativeWrappers` and silence
+ * findings; assumed names are surfaced here so the agent sees the
+ * candidate but the scanner does NOT silently trust it. Each
+ * sub-list is omitted when empty to keep the shape terse (CLAUDE.md
+ * §1 "Ambiguous field shapes are dishonest").
+ */
+function buildWrapperBySource(
+  provenance: ResolvedWrapperSources["bySource"],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (provenance.fromConfig.length > 0) out["fromConfig"] = provenance.fromConfig;
+  if (provenance.fromSession.length > 0) out["fromSession"] = provenance.fromSession;
+  const autoDetect = buildAutoDetectBlock(provenance.fromAutoDetect);
+  if (autoDetect !== null) out["fromAutoDetect"] = autoDetect;
+  return out;
+}
+
+/**
+ * Builds the `fromAutoDetect` sub-block or returns null when both
+ * sub-lists are empty. Empty sub-lists are omitted individually so
+ * `{}` never ships — a field that's present must carry signal.
+ */
+function buildAutoDetectBlock(
+  autoDetect: AutoDetectedWrappers,
+): Record<string, readonly string[]> | null {
+  const confirmedHas = autoDetect.confirmed.length > 0;
+  const assumedHas = autoDetect.assumed.length > 0;
+  if (!(confirmedHas || assumedHas)) return null;
+  const out: Record<string, readonly string[]> = {};
+  if (confirmedHas) out["confirmed"] = autoDetect.confirmed;
+  if (assumedHas) out["assumed"] = autoDetect.assumed;
   return out;
 }
 

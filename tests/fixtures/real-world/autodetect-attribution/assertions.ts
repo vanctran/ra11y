@@ -45,16 +45,19 @@ export const assertions: FixtureAssertions = {
       predicate: { contains: "Link" },
     },
 
-    // Provenance: both names must land in fromAutoDetect, not fromSession or
-    // fromConfig.
+    // Provenance: both names must land in fromAutoDetect.confirmed
+    // (they render real <button> / <a> roots), not fromSession or
+    // fromConfig. The probe is a one-hop AST check (P1-F): Button.tsx
+    // and Link.tsx whose JSX root is a native interactive element
+    // confirm; anything non-native stays in `assumed`.
     {
       kind: "meta-field",
-      path: ["activeNativeWrappersBySource", "fromAutoDetect"],
+      path: ["activeNativeWrappersBySource", "fromAutoDetect", "confirmed"],
       predicate: { contains: "Button" },
     },
     {
       kind: "meta-field",
-      path: ["activeNativeWrappersBySource", "fromAutoDetect"],
+      path: ["activeNativeWrappersBySource", "fromAutoDetect", "confirmed"],
       predicate: { contains: "Link" },
     },
 

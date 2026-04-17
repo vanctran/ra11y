@@ -359,6 +359,12 @@ describe("MCP tool: scan_project", () => {
       // configure() contributes session names, autoDetect contributes
       // scan-scoped names, and ra11y.config.ts contributes config names.
       // bySource shows all three.
+      //
+      // autoDetect names are split into `{confirmed, assumed}` by the
+      // one-hop AST probe (P1-F). This test adds a defining
+      // `ActionButton.tsx` whose root is a native <button>, so the
+      // detector promotes it to `confirmed` — the path that flows into
+      // the active allowlist.
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
       const { join: joinPath } = await import("node:path");
@@ -376,6 +382,10 @@ describe("MCP tool: scan_project", () => {
           "}",
         ].join("\n"),
       );
+      await writeFile(
+        joinPath(dir, "ActionButton.tsx"),
+        "export function ActionButton(p) { return <button {...p} />; }",
+      );
 
       const tool = findTool("scan_project");
       const session = new McpSession();
@@ -390,7 +400,7 @@ describe("MCP tool: scan_project", () => {
           activeNativeWrappersBySource?: {
             fromConfig?: string[];
             fromSession?: string[];
-            fromAutoDetect?: string[];
+            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
           };
         };
       };
@@ -399,7 +409,114 @@ describe("MCP tool: scan_project", () => {
       );
       expect(data.meta.activeNativeWrappersBySource?.fromConfig).toBeUndefined();
       expect(data.meta.activeNativeWrappersBySource?.fromSession).toEqual(["SessionOnlyWidget"]);
-      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual(["ActionButton"]);
+      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
+        confirmed: ["ActionButton"],
+      });
+    });
+
+    it("splits auto-detected wrappers into confirmed vs assumed via the one-hop AST probe (P1-F)", async () => {
+      // The core P1-F behavior: an auto-detected wrapper whose
+      // defining file renders a native <button> is `confirmed` and
+      // silences findings; one whose defining file renders <div> is
+      // `assumed` and stays opaque (rules fire as if the name were
+      // NOT in the wrapper list). See CLAUDE.md §1 "No heuristic
+      // suppression" — only structural evidence earns confirmation.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-autodetect-split-"));
+      // The real <button> wrapper — confirms.
+      await writeFile(
+        joinPath(dir, "Button.tsx"),
+        "export function Button(p) { return <button {...p} />; }",
+      );
+      // A PascalCase wrapper whose root is a bare <div> — assumed.
+      // This is the canonical silent-silencing risk P1-F closes: if
+      // this wrapper reached `activeNativeWrappers`, findings on it
+      // would disappear even though the <div> underneath might be a
+      // real keyboard-operability bug.
+      await writeFile(
+        joinPath(dir, "BeliefSubmitButton.tsx"),
+        "export function BeliefSubmitButton(p) { return <div {...p}>submit</div>; }",
+      );
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        [
+          "export function App() {",
+          "  return (",
+          "    <>",
+          "      <Button onClick={a} />",
+          "      <BeliefSubmitButton onClick={b} />",
+          "    </>",
+          "  );",
+          "}",
+        ].join("\n"),
+      );
+
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          activeNativeWrappers?: string[];
+          activeNativeWrappersBySource?: {
+            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
+          };
+        };
+      };
+      // Only the confirmed wrapper reaches the active list; the
+      // assumed one is surfaced in the provenance block but NOT
+      // silenced.
+      expect(data.meta.activeNativeWrappers).toEqual(["Button"]);
+      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
+        confirmed: ["Button"],
+        assumed: ["BeliefSubmitButton"],
+      });
+    });
+
+    it("leaves assumed wrappers opaque — findings on them are NOT silenced", async () => {
+      // Acceptance criterion (v) from the P1-F brief, observed at the
+      // MCP filter layer: when a wrapper is assumed (not confirmed),
+      // the scanner's wrapper-noise filter must not drop findings
+      // carrying that component's name.
+      //
+      // The invariant is encoded at the effective-allowlist layer: if
+      // an assumed name is NOT in `activeNativeWrappers`, then
+      // `dropWrapperNoise` (keyed on that list) cannot silence findings
+      // whose message starts with `<AssumedName>`. This test proves
+      // the list exclusion; the downstream filter is transitively
+      // correct.
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-assumed-opaque-"));
+      await writeFile(
+        joinPath(dir, "PerceptionSlider.tsx"),
+        // <div role='slider'> is the P1-F motivating example — looks
+        // like a native wrapper by name, is a real bug underneath.
+        "export function PerceptionSlider(p) { return <div role='slider' {...p} />; }",
+      );
+      await writeFile(
+        joinPath(dir, "app.tsx"),
+        "export const App = () => <PerceptionSlider onClick={x} />;",
+      );
+      const tool = findTool("scan_project");
+      const session = new McpSession();
+      const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
+      const data = JSON.parse(result.content[0].text) as {
+        meta: {
+          activeNativeWrappers?: string[];
+          activeNativeWrappersBySource?: {
+            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
+          };
+        };
+      };
+      expect(data.meta.activeNativeWrappers).toBeUndefined();
+      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
+        assumed: ["PerceptionSlider"],
+      });
     });
 
     it("reports zero-detection plainly when no candidates are found", async () => {

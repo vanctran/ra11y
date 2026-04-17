@@ -6,9 +6,10 @@
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { ParsedFile } from "../engine/scanner.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
-import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
+import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import {
   errorResult,
   type McpTool,
@@ -24,6 +25,7 @@ import {
   textResult,
 } from "./tools-helpers.ts";
 import { warningsField, warningsFieldFromScanMeta } from "./warnings.ts";
+import type { NativeWrapperSources } from "./wrappers-meta.ts";
 
 export const scanProjectTool: McpTool = {
   def: {
@@ -130,26 +132,15 @@ export const scanProjectTool: McpTool = {
     const shouldDetect = autoDetect || configMissing;
     const detected = shouldDetect ? collectWrapperCandidates(files) : [];
     const detectedNames = detected.map((c) => c.component);
+    const classified = classifyIfAutoDetect(autoDetect, files, detectedNames);
     const t1 = performance.now();
-    // Only hand detected names to the scanner when autoDetect is true —
-    // suggestion-only mode (config missing, flag off) must not silently
-    // register anything.
-    const registeredWrappers = autoDetect ? detectedNames : [];
     const { formatted } = await runScanAndFormat(
       files,
       session,
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
-      {
-        fromFile: projectConfig.nativeWrappers,
-        fromSession: session.config.nativeWrappers,
-        // Auto-detected wrappers ride their own channel — the session-
-        // override audit (sessionNativeWrappers) must not mis-attribute
-        // them to a stale configure() call. Still scan-scoped: never
-        // written to session or project config.
-        ...(registeredWrappers.length > 0 ? { fromAutoDetect: registeredWrappers } : {}),
-      },
+      buildWrapperSources(projectConfig.nativeWrappers, session.config.nativeWrappers, classified),
       root,
       params["verboseMeta"] === true,
     );
@@ -194,6 +185,47 @@ export const scanProjectTool: McpTool = {
     });
   },
 };
+
+/**
+ * One-hop AST probe (P1-F): when autoDetect is on, split detected
+ * names into `confirmed` (defining file's JSX root is a native
+ * interactive element) vs `assumed` (can't confirm). Only confirmed
+ * names reach the effective native-wrapper allowlist and silence
+ * findings; assumed names stay opaque so the scanner treats the
+ * component like any other unresolved PascalCase element. Extracted
+ * so the handler stays under Biome's cognitive-complexity cap.
+ */
+function classifyIfAutoDetect(
+  autoDetect: boolean,
+  files: readonly ParsedFile[],
+  detectedNames: readonly string[],
+): { readonly confirmed: readonly string[]; readonly assumed: readonly string[] } {
+  if (!autoDetect) return { confirmed: [], assumed: [] };
+  return classifyWrapperCandidates(files, detectedNames);
+}
+
+/**
+ * Builds the `NativeWrapperSources` payload handed to
+ * `runScanAndFormat`. `fromAutoDetect` rides its own channel — the
+ * session-override audit (sessionNativeWrappers) must not
+ * mis-attribute scan-scoped auto-detected names to a stale
+ * configure() call. Confirmed vs assumed split carries through to
+ * `activeNativeWrappersBySource.fromAutoDetect`. The field is
+ * omitted entirely when autoDetect produced no candidates, so the
+ * shape never ships an empty `{confirmed: [], assumed: []}`.
+ */
+function buildWrapperSources(
+  fromFile: readonly string[],
+  fromSession: readonly string[],
+  classified: { readonly confirmed: readonly string[]; readonly assumed: readonly string[] },
+): NativeWrapperSources {
+  const autoDetectHasAny = classified.confirmed.length > 0 || classified.assumed.length > 0;
+  return {
+    fromFile,
+    fromSession,
+    ...(autoDetectHasAny ? { fromAutoDetect: classified } : {}),
+  };
+}
 
 /**
  * Names the reason this scan picked `root`. Surfaces as `rootSource`

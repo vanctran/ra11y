@@ -34,7 +34,10 @@ import { extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type ParsedFile, runScan } from "../../../src/engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../../../src/input/parsers/index.ts";
-import { collectWrapperCandidates } from "../../../src/mcp/detect-wrappers-core.ts";
+import {
+  classifyWrapperCandidates,
+  collectWrapperCandidates,
+} from "../../../src/mcp/detect-wrappers-core.ts";
 import { McpSession } from "../../../src/mcp/session.ts";
 import { runScanAndFormat, type ScanFormatted } from "../../../src/mcp/tools-helpers.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../../../src/review/index.ts";
@@ -250,19 +253,26 @@ export async function loadAndScanFixture(
 
   const session = new McpSession();
   // Mirror the autoDetectWrappers logic from scan_project: run the
-  // detector on the already-parsed files and pass results as
-  // fromAutoDetect so the session-override audit
-  // (sessionNativeWrappers) is not mis-attributed.
-  const autoDetected =
+  // detector on the already-parsed files, classify via the one-hop
+  // AST probe (P1-F), and pass results as a
+  // `{ confirmed, assumed }` split so the session-override audit
+  // (sessionNativeWrappers) is not mis-attributed and only confirmed
+  // names flow into the effective allowlist.
+  const autoDetectedNames =
     toolInput.autoDetectWrappers === true
       ? collectWrapperCandidates(files).map((c) => c.component)
       : [];
+  const autoDetected =
+    autoDetectedNames.length > 0
+      ? classifyWrapperCandidates(files, autoDetectedNames)
+      : { confirmed: [] as readonly string[], assumed: [] as readonly string[] };
+  const autoDetectHasAny = autoDetected.confirmed.length > 0 || autoDetected.assumed.length > 0;
   const wrapperSources =
-    toolInput.nativeWrappers?.length || autoDetected.length
+    toolInput.nativeWrappers?.length || autoDetectHasAny
       ? {
           fromFile: toolInput.nativeWrappers ?? [],
           fromSession: [],
-          ...(autoDetected.length > 0 ? { fromAutoDetect: autoDetected } : {}),
+          ...(autoDetectHasAny ? { fromAutoDetect: autoDetected } : {}),
         }
       : undefined;
   const { formatted } = await runScanAndFormat(
