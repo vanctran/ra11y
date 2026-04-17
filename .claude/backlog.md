@@ -232,6 +232,55 @@ Owner: main session + general-purpose. Source: a 10-agent parallel eval against 
 - **Server-side typecheck/parse verification** on `suggest_fix` suggestions. Expensive (spins up a parse per suggestion); might be worth it for high-stakes mechanical fixes but not across the board.
 - **SARIF output for GitHub annotations** — already emit SARIF; "::error" annotation mapping is a small transform. Tied to Q2-SARIF-DOCS; promote if demand surfaces.
 
+### v0.2.0 — round 2 retriage (added 2026-04-17)
+
+Source: the 10-agent round-2 eval aggregation (`AGGREGATED.md`). Most items were *not* folded into Track Q (rounds 1-2, closed 2026-04-17) — the round-2 aggregation was produced around the same time but separately. Triage below retriages each item against CLAUDE.md §1 doctrine and existing Q/Q2 shipped work.
+
+#### Accepted (P0 — structural/bug/shape parity)
+
+- [ ] **Q2R2-DIR-NEXT** `scan` (directory mode) missing `nextStep` + `nextStepStructured`. Both are present on `scan_project` and `scan_file`; dir mode is the gap. Straight bug, not a design call. [round 2, agent 5]
+- [ ] **Q2R2-FIX-DEDUPE** When a finding's inline `fix` (now `fixClass`-typed, bbbecf1) already carries primary + alternatives + context, drop the `suggest_fix` suggestion from `nextStep`/`nextStepStructured`. Pairs with Q2-VERIFYCMD — the verify step still applies, but the "now call suggest_fix" handoff is redundant. Saves ~600 tokens per finding in tight fix loops. [round 2, agent 1]
+- [ ] **Q2R2-SCANNED-KEY** Canonicalize the "what was scanned" envelope across scan_project / scan / scan_file. Today: `scannedRoot` vs `scannedPaths` vs `scannedFile` — three keys forcing a branch. Target: `scanned: { mode: "project"|"dir"|"file", root?, paths?, file? }`. Parity with the P1-FILE-ENV alignment (70a9cd7). [round 2, agent 5]
+- [ ] **Q2R2-UNTARGETED-NAME** One canonical field name for the untargeted-criteria count (today: `plan.untargetedCriteria` on scan_project, `untargeted` on checklist, `manualUntargetedCount` on coverage, top-level `untargetedCriteria` on scan_file — four names, same concept). Same canonicalization pattern as P2-R (file/filePath). [round 2, agent 9]
+- [ ] **Q2R2-WRAPPER-SOURCES** Collapse `activeNativeWrappers` + `activeNativeWrappersBySource` + `sessionNativeWrappers` into one tagged list: `activeNativeWrappers: [{name, source: "config"|"autoDetect"|"session", confirmed?}]`. `confirmed` folds in P1-F. [round 2, agent 9]
+- [ ] **Q2R2-COVERAGE-CHECKLIST** `coverage` and `checklist` overlap ~80% (same `automatedCriteriaPassRate`, same 5 manual-with-candidates criteria). Needs a one-page ADR: merge into one tool with `verbosity: "summary"|"candidates"`, OR keep both but document that `coverage` is `checklist` minus file:line snippets (and make the `nextStep` on each point at the other). Three tools agreeing on the same scalar in three places is dishonest in aggregate. [round 2, agent 7]
+- [ ] **Q2R2-META-CACHE** After the first `scan_*` call in an MCP session, subsequent responses emit `meta.sessionRef: "<id>"` + deltas instead of the full meta block. Reduces ~30% bloat in tight file-by-file loops. Requires an MCP session cache keyed on tool-input signature. Opt-in: callers that want the full meta every time pass `verboseMeta: true`. [round 2, agent 1]
+
+#### Accepted (P1 — load-bearing capability)
+
+- [ ] **Q2R2-WRAPPER-INTROSPECT** Parse wrapper component definition; classify rendered root element (`button` / `a` / `input` / `div` / opaque); cache by file hash. One-hop discipline (same as P1-F). Feeds Q2-WRAPMAP + Q2R2-DRIFT. Design question: does this derive `nativeWrappers` entirely (retiring the config field) or stay as an audit signal? ADR required. [round 2, agent 2]
+- [ ] **Q2R2-DRIFT** New rule `wrapper/drift` — component declared in `nativeWrappers` (or auto-detected) whose definition no longer renders the expected native element. Fires at the DEFINITION file. Closes the "fixing a wrapper is silently safe; breaking it is silently catastrophic" asymmetry — the breakage surfaces the moment the wrapper is edited. [round 2, agent 2]
+- [ ] **Q2R2-INHERITED** When a finding fires at a wrapper DEFINITION, synthesize "inherited" findings at every call site with `confidence: "inherited"` + `sourceOfFinding: { file, line }` pointing at the wrapper. Bounded by scanned files; no transitive import-graph crawl. Cap: design call — all call sites vs top-N — defer to the ADR with Q2R2-WRAPPER-INTROSPECT. [round 2, agent 2]
+- [ ] **Q2R2-POLYMORPHIC** Resolve literal `as` / `asChild` prop values and re-dispatch rules against the resolved element. `<Button as="a" href=...>` re-runs `link-no-href`, `link-descriptive-text`. Only literals — dynamic `as={Something}` stays unresolved (honest — agent reads and decides). [round 2, agent 2]
+- [ ] **Q2R2-COMPOUND** Typed compound-component mapping in config: `nativeWrappers: { Card: { Header: "div", Body: "div" }, Composer: { SendButton: "button" } }`. Extends Q2-WRAPMAP object form with nested dotted-path keys. [round 2, agent 2]
+- [ ] **Q2R2-RULE-COV** Per-rule coverage confidence on scan responses: `{ ruleId, filesEvaluated, filesEligible, coverageConfidence: "high"|"low", reason?, remediation? }`. Derivative split: `confidentlyClean: [ruleIds]` vs `lowConfidenceClean: [ruleIds]`. Tailwind-pre-build is the acute case (`contrast/minimum` runs against 2 CSS files, 0 findings ≠ clean). Distinct from Q2-RULEDETAILS (rule *catalog* inline) — this is per-rule *trust* per scan. [round 2, agent 6]
+- [ ] **Q2R2-CWBB** Structured `couldBeWrongBecause: string[]` field on every finding — named reason codes (`replacement_indicator_in_sibling_file`, `tailwind_class_on_consumer`, ...), not prose. Strictly informational; the tool does NOT auto-suppress when the listed escape hatch appears present (per §1 "No heuristic suppression"). `estimatedFpRate` numeric is rejected — see below. [round 2, agent 8]
+- [ ] **Q2R2-STORYBOOK-PRESET** `preset: "storybook"` config option. When active: (a) `*.stories.tsx` scans follow `args` into the underlying `component` import and scan the underlying JSX with story props bound; (b) `Story` / `Meta` / decorators are transparent. This is the "do more correctly" alternative to glob-ignoring stories (rejected below). [round 2, agent 4]
+- [ ] **Q2R2-FORM-REQ** New rule `forms/required-indicator-missing` — component forwards `required` to a native input but renders no visible marker and no `aria-required`. Cites wcag22:3.3.2. Fires at the wrapper DEFINITION. [round 2, agent 3]
+- [ ] **Q2R2-FORM-TIE** Review finder `forms/server-error-untied` under wcag22:3.3.1. `<p role="alert">` / `<div aria-live>` sibling of a field where the field has no `aria-invalid` / `aria-describedby` pointing at the error's id. Finder, not rule — cross-element proof requires inspection agents do better. [round 2, agent 3]
+- [ ] **Q2R2-FORM-TIMING** Review finder `forms/validation-timing` under wcag22:3.3.3 / 3.3.4. Surfaces `onChange` validation handlers that fire per-keystroke. Reason-text enrichment only — agent decides whether `onBlur` is appropriate; no auto-downgrade. [round 2, agent 3]
+
+#### Accepted (P2 — orchestration / DX)
+
+- [ ] **Q2R2-BOOTSTRAP** `bootstrap` MCP tool — composes `detect_native_wrappers` + `propose_config` + `scan_project` + `baseline create` + returns a CI snippet in one call. Interrogation note (§1 "Interrogate the problem"): is this a docs gap or a genuine composition primitive? Round-2 signal from two independent agents suggests the latter; build after Q2R2-PROPOSE-CFG lands. [round 2, agents 7, 10]
+- [ ] **Q2R2-SUPPRESS-TOOL** `suppress` MCP tool — input `{ file, line, ruleId, reason }`. Inserts the appropriate source pragma (block-comment for HTML, JSX-comment for TSX). Required reason (rejects bare — mirrors Q2-REASON source-rule). [round 2, agent 7]
+- [ ] **Q2R2-CFG-SNIPPET** `detect_native_wrappers` response adds `suggestedConfigSnippet: string` as a structured field. Today it's buried in `nextStep`'s English; agents parse prose to extract config. [round 2, agent 9]
+- [ ] **Q2R2-PROPOSE-CFG** `propose_config` MCP tool — synthesizes `ra11y.config.ts` from scan state (wrappers + exclude + commented rules stub). Deterministic; no LLM. [round 2, agent 10]
+- [ ] **Q2R2-PROPOSE-BASE** `propose_baseline` MCP tool — categorizes each would-be entry with a machine-readable reason code (`wrapper-undetected` / `third-party-html` / `legacy-route` / `design-system-internal`). Reviewers triage by category. [round 2, agent 10]
+
+#### Accepted (P3 — polish)
+
+- [ ] **Q2R2-INTENTIONAL** `@ra11y-intentional` JSDoc tag on a component declaration — intentional-failure-demo marker (Storybook "bad example" pattern). Functionally a file-scoped `ra11y-disable *` pragma but syntactically part of docs markup. Required reason. [round 2, agent 4]
+- [ ] **Q2R2-SCAN-MIXED-DOC** Document that `scan` accepts `paths: string[]` of mixed files + dirs. The primitive exists; it's non-obvious. One-line in `tools/list` description + a `docs/mcp/tools.md` note. [round 2, agent 5]
+
+#### Considered and rejected (round 2 retriage)
+
+- **Glob-ignore `*.stories.tsx` as default** → rejected per §1 "Default-exclude globs are suppression too." Story-file zero-findings is an honest signal (structurally unanalyzable). Fix: the `preset: "storybook"` that scans what stories exercise (Q2R2-STORYBOOK-PRESET above), not a filename carve-out. Severity-downgrade variants fail for the same reason.
+- **Auto-suppress when `couldBeWrongBecause` escape hatch is provably present** → rejected per §1 "No heuristic suppression." The structured field is informational (Q2R2-CWBB); the agent reads the file and decides. Baking inference into the tool creates the silent-miss mode the doctrine exists to prevent.
+- **`estimatedFpRate: number` on every finding** → rejected per §1 "Numeric-threshold heuristics are suppression." Any consumer filtering on `fp_rate > X` reintroduces silent-miss. Reason-text + `couldBeWrongBecause` carry the same information without the threshold.
+- **`reportFalsePositive` as a persistent out-of-tree dismissal** → rejected as new surface; **superseded by C-ATTEST-TOOL** (Track C). Attestation ledger is the durable out-of-tree evidence channel with the evidence-slot the doctrine requires. Track here as "duplicates Track C."
+- **Surface `limitations` once at session level** → rejected. `limitations` is a per-scan honest signal; the specific scan's inability to verify runtime criteria is what the agent needs for that specific claim. Session caching creates a "was this scan's limits the session's, or did they change?" gap — silent-miss risk. Keep per-response.
+
 ---
 
 ## Track C — Conformance-claim gaps
