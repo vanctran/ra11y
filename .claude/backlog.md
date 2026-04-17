@@ -254,6 +254,7 @@ Items that turn "it works" into "it's the obvious choice for agentic a11y work."
 - [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
 - [ ] VS Code extension skeleton under `integrations/vscode/` (out-of-tree but linked from README) — wraps the MCP server for IDE-native findings and surfaces sampled verdicts inline
 - [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` vs axe-core + jsx-a11y against a labeled fixture set, published on releases — accuracy, false-positive rate, and *agent-workflow completion rate* which is where we expect to win
+- [ ] **Tailwind focus-ring cross-reference for `focus/outline-visible`.** When a CSS rule with a scoped selector (e.g., `.composer-scrollbar:focus-visible { outline: none }`) currently downgrades to `info`, cross-reference with the JSX class strings already parsed in Phase 5's `src/input/parsers/tailwind.ts`: if any element whose className contains `composer-scrollbar` also carries `focus-visible:ring-*` / `focus-visible:outline-*` / `focus-visible:shadow-*` utilities, auto-resolve the info candidate. Adds *more* analysis, not heuristic suppression — a named class name linking CSS and JSX is the concrete evidence. Not suppression by class-pattern guess — the match is a specific class token. Extends existing parser output; no new architecture. Closes the primary false-positive source on focus/outline-visible in Tailwind codebases.
 
 ## Phase 22 — Review-candidate coverage (unbiased-agent feedback, post-v0.1.0)
 
