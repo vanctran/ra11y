@@ -87,6 +87,19 @@ export const scanProjectTool: McpTool = {
   },
   async handler(params, session) {
     const explicitCwd = strParam(params, "cwd");
+    // Hard-error envelope when the caller passed a `cwd` that doesn't
+    // exist on disk. Without this, `parseFiles` returns 0 silently and
+    // the response shape reads as a clean codebase — the canonical
+    // silent-success failure mode CLAUDE.md §1 warns against.
+    if (explicitCwd !== undefined && !existsSync(explicitCwd)) {
+      return errorResult({
+        code: "cwd-not-found",
+        message: `Requested cwd does not exist on disk: ${explicitCwd}`,
+        details: { cwd: explicitCwd },
+        remediation:
+          "Pass `cwd` as a path to an existing directory. Relative paths resolve against the MCP server's spawn directory.",
+      });
+    }
     // When cwd isn't passed, prefer a host-declared root (MCP
     // `roots` capability) over the spawn directory's git root. The
     // host is the best arbiter of "what project is active right now"

@@ -36,6 +36,7 @@ import {
   type McpTool,
   numParam,
   parseFiles,
+  pathExists,
   resolveStandards,
   runScanAndFormat,
   strArrayParam,
@@ -102,6 +103,23 @@ const scanTool: McpTool = {
     }
 
     const cwd = strParam(params, "cwd") ?? process.cwd();
+    // Hard-error envelope when every caller-supplied path is missing on
+    // disk. Soft-signal (`warnings: ["scanned_zero_files"]`) stays the
+    // right shape for "the paths exist but contain no parseable files."
+    // Without this split, a typo in `paths` reads the same as a clean
+    // codebase — the silent-success failure shape CLAUDE.md §1 warns
+    // against.
+    const existence = await Promise.all(paths.map((p) => pathExists(p, cwd)));
+    const missing = paths.filter((_, i) => !existence[i]);
+    if (missing.length === paths.length) {
+      return errorResult({
+        code: "scan-paths-not-found",
+        message: `None of the requested paths exist on disk: ${paths.join(", ")}`,
+        details: { paths, missing, cwd },
+        remediation:
+          "Pass `paths` entries that exist on disk (files or directories). Relative paths resolve against `cwd` when supplied, otherwise against the MCP server's spawn directory.",
+      });
+    }
     const projectConfig = await session.loadProjectConfig(cwd);
     const standards = resolveStandards(strParam(params, "standard"), session);
     const files = await parseFiles(paths, session, cwd);
@@ -202,7 +220,21 @@ const scanFileTool: McpTool = {
       });
     }
 
-    const parsed = await session.parseFile(filePath, strParam(params, "cwd"));
+    // Pre-check existence so a missing file produces the same tool-level
+    // error envelope as an unsupported extension, instead of ENOENT
+    // escaping `parseFile` and degrading to a JSON-RPC protocol error
+    // that the caller can't `isError`-branch on like the other tools.
+    const scanFileCwd = strParam(params, "cwd");
+    if (!(await pathExists(filePath, scanFileCwd))) {
+      return errorResult({
+        code: "file-unsupported",
+        message: `Unsupported or unreadable file: ${filePath}`,
+        details: { filePath },
+        remediation: "Pass a .tsx/.jsx/.ts/.js, .html/.htm, or .css file that exists on disk.",
+      });
+    }
+
+    const parsed = await session.parseFile(filePath, scanFileCwd);
     if (!parsed) {
       return errorResult({
         code: "file-unsupported",

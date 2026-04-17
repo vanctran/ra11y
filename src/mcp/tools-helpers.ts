@@ -6,6 +6,7 @@
  * on tool schemas and handler logic.
  */
 
+import { stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
@@ -68,6 +69,11 @@ export type StructuredErrorCode =
   | "file-read-failed"
   | "file-write-failed"
   | "path-escapes-cwd"
+  // scan targets that don't exist on disk — distinct from zero-parseable-files,
+  // which is a *successful* scan over an empty-but-real directory (handled via
+  // the `warnings: ["scanned_zero_files"]` soft-signal path).
+  | "cwd-not-found"
+  | "scan-paths-not-found"
   // baseline lifecycle
   | "baseline-not-found"
   | "baseline-load-failed"
@@ -115,6 +121,28 @@ export function numParam(params: Record<string, unknown>, key: string): number |
 export function strArrayParam(params: Record<string, unknown>, key: string): string[] | undefined {
   const v = params[key];
   return Array.isArray(v) ? (v as string[]) : undefined;
+}
+
+// ─── Path existence ─────────────────────────────────────────────────────────
+
+/**
+ * Resolves `p` against `base` (when relative) and returns whether the
+ * target exists on disk. Used by the scan tools before any parse work
+ * to distinguish "scan target doesn't exist" (hard error envelope) from
+ * "scan target exists but has zero parseable files" (soft
+ * `warnings: ["scanned_zero_files"]` signal). Swallows every stat error
+ * the same way — ENOENT, EACCES, and "is a symlink loop" all read as
+ * "can't scan this" from the consumer's perspective, and the error
+ * envelope's `details` names the path so the agent can investigate.
+ */
+export async function pathExists(p: string, base?: string): Promise<boolean> {
+  const abs = isAbsolute(p) ? p : resolve(base ?? process.cwd(), p);
+  try {
+    await stat(abs);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Result builders ────────────────────────────────────────────────────────
