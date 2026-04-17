@@ -212,6 +212,7 @@ function invokeOneProjectRule(
     });
     out.push({
       ruleId: rule.id,
+      fixClass: rule.fixClass,
       criteria,
       criteriaTitles,
       severity: em.severity,
@@ -236,6 +237,11 @@ function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
   });
   return {
     ruleId: "internal/rule-crash",
+    // Synthetic crash reports route into the verify-in-source lane:
+    // the agent reads the stack trace and the failing rule's source
+    // to decide next steps. Mirrors the per-file crash stamp in
+    // rule-runner.ts.
+    fixClass: "verify-in-source",
     criteria: [],
     severity,
     location: { filePath: "", line: 1, column: 1 },

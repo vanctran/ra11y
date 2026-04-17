@@ -42,6 +42,7 @@ export const rule = defineRule({
   satisfies: ["wcag22:2.1.4", "wcag21:2.1.4"],
   severity: "warning",
   scope: "document",
+  fixClass: "guidance",
   appliesTo: {
     fileExtensions: [".tsx", ".jsx", ".ts", ".js"],
   },

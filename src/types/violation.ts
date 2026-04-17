@@ -72,6 +72,19 @@ export interface FixPaths {
 /** A single accessibility finding emitted by a rule. */
 export interface Violation {
   readonly ruleId: string;
+  /**
+   * Remediation lane this finding routes into, stamped from the rule's
+   * `fixClass` metadata at emit time. Values: `"mechanical"`,
+   * `"guidance"`, `"runtime-only"`, `"verify-in-source"`. See
+   * {@link import("./rule.ts").FixClass} and docs/adr/0007-violation-fix-class-metadata.md.
+   *
+   * Inlined on every violation so agents can batch-route findings at
+   * scan time without a per-finding `suggest_fix` round-trip. Distinct
+   * from `suggest_fix`'s response-level `kind: "edit" | "guidance"` —
+   * that describes what the suggest_fix payload *contains*; `fixClass`
+   * describes the *nature* of the fix the rule demands.
+   */
+  readonly fixClass: import("./rule.ts").FixClass;
   /** Criterion IDs this violation counts against, filtered to enabled standards. */
   readonly criteria: readonly string[];
   /**

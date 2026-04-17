@@ -24,6 +24,31 @@ export type RuleScope =
   /** Called once after all files are processed, with aggregate state. */
   | "project";
 
+/**
+ * How the findings from a rule get resolved. Stamped onto every
+ * Violation so agents can batch-route at scan time without round-tripping
+ * through `suggest_fix`. See docs/adr/0007-violation-fix-class-metadata.md.
+ *
+ * - `"mechanical"` — deterministic source transform (missing alt text →
+ *   insert `alt`; missing lang → add `lang`; typo in an aria attribute →
+ *   replace with the correct spelling). Safe to batch-apply via Edit.
+ * - `"guidance"` — the fix requires judgment the scanner can't make
+ *   (contrast ratios, copy rewrites, restructure decisions). Prose only.
+ * - `"runtime-only"` — the scanner flags a pattern but only runtime
+ *   verification (axe-core in Playwright/Vitest, manual QA) can decide.
+ *   Route these to the runtime harness, not to the edit queue.
+ * - `"verify-in-source"` — the agent has to read adjacent code to
+ *   decide what the right fix is (keyboard handler on the parent?
+ *   nested-interactive fixup requires DOM surgery? list-structure
+ *   needs re-nesting?). Point the agent at the file.
+ *
+ * Distinct from `suggest_fix`'s response-level `kind: "edit" |
+ * "guidance"` discriminator — that one describes what the suggest_fix
+ * payload *contains*, while `FixClass` describes the *nature* of the
+ * fix the rule demands.
+ */
+export type FixClass = "mechanical" | "guidance" | "runtime-only" | "verify-in-source";
+
 /** Preconditions the engine uses to cheaply skip rules that can't apply. */
 export interface AppliesTo {
   /** Node-type selectors (e.g., `JSXElement:img`, `HTMLElement:video`). */
@@ -51,6 +76,13 @@ export interface Rule {
   readonly satisfies: readonly string[];
   readonly severity: Severity;
   readonly scope: RuleScope;
+  /**
+   * The remediation lane every finding from this rule routes into.
+   * See {@link FixClass}. Required — the engine stamps this onto every
+   * emitted Violation so agents can batch-route findings without a
+   * per-finding round-trip through `suggest_fix`.
+   */
+  readonly fixClass: FixClass;
   readonly appliesTo?: AppliesTo;
   readonly docs: RuleDocs;
   /** Optional rename/alias path — see semver policy. */
@@ -109,9 +141,11 @@ export interface ProjectContext {
 
 /**
  * What a rule returns via `ctx.emit()`. The engine owns `ruleId`,
- * `criteria`, and `findingId` — rules don't know those. `findingId`
- * is derived from the stamped ruleId + relative filePath + source
- * context window, so it can only be computed after the engine has
- * attached the filePath to the emitted location.
+ * `criteria`, `findingId`, and `fixClass` — rules don't know those.
+ * `findingId` is derived from the stamped ruleId + relative filePath +
+ * source context window, so it can only be computed after the engine
+ * has attached the filePath to the emitted location. `fixClass` is a
+ * Rule-level property (see docs/adr/0007-violation-fix-class-metadata.md),
+ * stamped onto every Violation at emit time.
  */
-export type EmittedViolation = Omit<Violation, "ruleId" | "criteria" | "findingId">;
+export type EmittedViolation = Omit<Violation, "ruleId" | "criteria" | "findingId" | "fixClass">;

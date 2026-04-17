@@ -94,6 +94,7 @@ function shapeViolation(
   });
   return {
     ruleId: rule.id,
+    fixClass: rule.fixClass,
     criteria: [...rule.satisfies],
     // No standards registry in this test helper path — fall back to the
     // criterion ID for every title (matches `titlesForCriteria`'s

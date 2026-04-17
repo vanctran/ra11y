@@ -9,7 +9,7 @@
  * See docs/kb/architecture/rule-engine.md.
  */
 
-import type { EmittedViolation, Language, Rule } from "../types/rule.ts";
+import type { EmittedViolation, FixClass, Language, Rule } from "../types/rule.ts";
 import type { Severity, Violation } from "../types/violation.ts";
 import { computeFindingId } from "../utils/finding-id.ts";
 import { extensionMatches } from "../utils/path.ts";
@@ -64,6 +64,7 @@ function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void 
         rule.id,
         citedCriteria,
         citedCriteriaTitles,
+        rule.fixClass,
         input.filePath,
         input.source,
       ),
@@ -101,12 +102,14 @@ function stampViolation(
   ruleId: string,
   criteria: readonly string[],
   criteriaTitles: readonly string[],
+  fixClass: FixClass,
   filePath: string,
   source: string,
 ): Violation {
   const findingId = computeFindingId({ ruleId, filePath, source, line: emitted.location.line });
   return {
     ruleId,
+    fixClass,
     criteria,
     criteriaTitles,
     severity: emitted.severity,
@@ -147,6 +150,12 @@ function ruleCrashViolation(
   });
   return {
     ruleId: "internal/rule-crash",
+    // Synthetic crash reports route into the verify-in-source lane:
+    // the agent reads the stack trace and the failing rule's source
+    // to decide next steps. There is no deterministic edit, no prose
+    // remediation, and no runtime harness that applies — this is a
+    // ra11y bug, not a user a11y issue.
+    fixClass: "verify-in-source",
     criteria: [],
     severity: errorSeverity,
     location: { filePath, line: 1, column: 1 },

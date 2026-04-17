@@ -75,6 +75,7 @@ export const rule = defineRule({
   satisfies: ["wcag22:2.4.7", "wcag21:2.4.7"],
   severity: "error",
   scope: "project",
+  fixClass: "verify-in-source",
   docs: {
     description:
       "CSS rules on :focus/:focus-visible must not remove the outline without providing a replacement focus indicator.",

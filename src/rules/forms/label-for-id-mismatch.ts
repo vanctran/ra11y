@@ -71,6 +71,7 @@ export const rule = defineRule({
   ],
   severity: "error",
   scope: "document",
+  fixClass: "mechanical",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },

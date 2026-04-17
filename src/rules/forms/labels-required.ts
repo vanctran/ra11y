@@ -57,6 +57,7 @@ export const rule = defineRule({
   ],
   severity: "error",
   scope: "document",
+  fixClass: "verify-in-source",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },

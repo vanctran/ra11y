@@ -52,6 +52,7 @@ export const rule = defineRule({
   satisfies: ["wcag22:1.4.11", "wcag21:1.4.11"],
   severity: "error",
   scope: "document",
+  fixClass: "guidance",
   appliesTo: {
     fileExtensions: [".css"],
   },

@@ -44,6 +44,7 @@ export const rule = defineRule({
   satisfies: ["wcag22:1.4.2", "wcag21:1.4.2"],
   severity: "error",
   scope: "node",
+  fixClass: "verify-in-source",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },

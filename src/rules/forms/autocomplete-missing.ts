@@ -72,6 +72,7 @@ export const rule = defineRule({
   satisfies: ["wcag22:1.3.5", "wcag21:1.3.5"],
   severity: "warning",
   scope: "node",
+  fixClass: "mechanical",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },
