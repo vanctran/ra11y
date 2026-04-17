@@ -42,6 +42,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField, warningsFieldFromScanMeta } from "./warnings.ts";
 
 export type { McpTool, McpToolDef, McpToolResult } from "./tools-helpers.ts";
 
@@ -109,6 +110,16 @@ const scanTool: McpTool = {
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
         meta: { filesScanned: 0, scannedPaths: paths },
+        // `scan` takes paths directly and has no root-resolution step,
+        // so rootSource is null — `root_source_defaulted` cannot fire
+        // here by construction (it's a scan_project-only signal).
+        ...warningsField({
+          filesScanned: 0,
+          rootSource: null,
+          configSource: projectConfig.sourcePath,
+          analysisCoverage: undefined,
+          filesByExtension: undefined,
+        }),
       });
     }
 
@@ -128,6 +139,11 @@ const scanTool: McpTool = {
 
     return textResult({
       ...formatted,
+      ...warningsFieldFromScanMeta({
+        meta: formatted.meta,
+        rootSource: null,
+        configSource: projectConfig.sourcePath,
+      }),
       meta: {
         ...formatted.meta,
         scannedPaths: paths,

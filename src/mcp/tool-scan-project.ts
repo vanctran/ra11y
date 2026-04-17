@@ -21,6 +21,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField, warningsFieldFromScanMeta } from "./warnings.ts";
 
 export const scanProjectTool: McpTool = {
   def: {
@@ -110,6 +111,13 @@ export const scanProjectTool: McpTool = {
         plan: { totalFindings: 0, summary: "No parseable files found." },
         files: [],
         meta: { filesScanned: 0, scannedRoot: root, scanMode: describeMode(params) },
+        ...warningsField({
+          filesScanned: 0,
+          rootSource,
+          configSource: projectConfig.sourcePath,
+          analysisCoverage: undefined,
+          filesByExtension: undefined,
+        }),
       });
     }
     const autoDetect = params["autoDetectWrappers"] === true;
@@ -152,6 +160,11 @@ export const scanProjectTool: McpTool = {
     const nextStep = suggestNextStep(formatted, describeMode(params));
     return textResult({
       ...formatted,
+      ...warningsFieldFromScanMeta({
+        meta: formatted.meta,
+        rootSource,
+        configSource: projectConfig.sourcePath,
+      }),
       meta: {
         ...formatted.meta,
         scannedRoot: root,
