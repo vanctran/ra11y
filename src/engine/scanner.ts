@@ -21,15 +21,25 @@
 
 import type { Ast } from "../types/ast.ts";
 import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
-import type { Rule } from "../types/rule.ts";
+import type {
+  EmittedViolation,
+  Language,
+  ProjectContext,
+  ProjectRuleFile,
+  Rule,
+} from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
-import type { ReportData, ScanResult, Violation } from "../types/violation.ts";
+import type { ReportData, ScanResult, Severity, Violation } from "../types/violation.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
 import { runRulesForFile } from "./rule-runner.ts";
-import { type ConformanceLevel, createStandardFilter } from "./standard-filter.ts";
+import {
+  type ConformanceLevel,
+  createStandardFilter,
+  type StandardFilter,
+} from "./standard-filter.ts";
 
 /** A file that has already been parsed and is ready for rule execution. */
 export interface ParsedFile {
@@ -98,6 +108,9 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     });
     for (const v of perFile) allViolations.push(v);
   }
+  for (const v of runProjectRules(inputs, enabled, filter)) {
+    allViolations.push(v);
+  }
   allViolations.sort(compareViolations);
 
   const allCandidates = collectCandidatesFromFiles(inputs, enabled, standardsRegistry);
@@ -120,6 +133,90 @@ export function runScan(inputs: ScanInputs): ScanProducts {
   );
 
   return { result, report };
+}
+
+/**
+ * Runs every rule's `afterProject` hook with the full parsed-file set.
+ * Used by cross-file rules (e.g. `focus/outline-visible`'s Tailwind
+ * cross-reference). A crashing rule produces an `internal/rule-crash`
+ * violation and the scan continues, mirroring the per-file runner.
+ * Emitted violations carry `location.filePath` directly; the engine
+ * stamps `ruleId` + `criteria` and filters via the owning file's
+ * disableMap.
+ */
+function runProjectRules(
+  inputs: ScanInputs,
+  enabled: ReadonlySet<string>,
+  filter: StandardFilter,
+): readonly Violation[] {
+  const projectFiles: ProjectRuleFile[] = inputs.files.map((f) => ({
+    filePath: f.filePath,
+    source: f.source,
+    ast: f.ast.root,
+    language: f.ast.language as Language,
+    disableMap: f.disableMap ?? new Map<number, ReadonlySet<string>>(),
+  }));
+  const disableMaps = new Map<string, ReadonlyMap<number, ReadonlySet<string>>>();
+  for (const f of projectFiles) disableMaps.set(f.filePath, f.disableMap);
+  const out: Violation[] = [];
+  for (const rule of inputs.rules) {
+    invokeOneProjectRule(rule, projectFiles, enabled, filter, disableMaps, out);
+  }
+  return out;
+}
+
+function invokeOneProjectRule(
+  rule: Rule,
+  projectFiles: readonly ProjectRuleFile[],
+  enabled: ReadonlySet<string>,
+  filter: StandardFilter,
+  disableMaps: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
+  out: Violation[],
+): void {
+  if (!rule.afterProject) return;
+  if (!filter.isRuleActive(rule)) return;
+  const sink: EmittedViolation[] = [];
+  const ctx: ProjectContext = {
+    files: projectFiles,
+    enabledStandards: enabled,
+    emit: (v) => sink.push(v),
+  };
+  try {
+    const maybe = rule.afterProject(ctx);
+    if (Array.isArray(maybe)) for (const v of maybe) sink.push(v);
+  } catch (err) {
+    out.push(projectRuleCrashViolation(rule.id, err));
+    return;
+  }
+  const criteria = filter.citedCriteria(rule);
+  for (const em of sink) {
+    const dm = disableMaps.get(em.location.filePath);
+    const disabled = dm?.get(em.location.line);
+    if (disabled?.has("*") || disabled?.has(rule.id)) continue;
+    out.push({
+      ruleId: rule.id,
+      criteria,
+      severity: em.severity,
+      location: em.location,
+      message: em.message,
+      ...(em.suggestion !== undefined && { suggestion: em.suggestion }),
+      ...(em.fix !== undefined && { fix: em.fix }),
+      ...(em.fixPaths !== undefined && { fixPaths: em.fixPaths }),
+      ...(em.snippet !== undefined && { snippet: em.snippet }),
+    });
+  }
+}
+
+function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
+  const severity: Severity = "error";
+  return {
+    ruleId: "internal/rule-crash",
+    criteria: [],
+    severity,
+    location: { filePath: "", line: 1, column: 1 },
+    message: `Project-scope rule '${ruleId}' crashed: ${err instanceof Error ? err.message : String(err)}`,
+    suggestion: `This is a ra11y bug in rule '${ruleId}', not a problem with your code. Please file an issue with the stack trace if you can reproduce it.`,
+  };
 }
 
 function compareViolations(a: Violation, b: Violation): number {

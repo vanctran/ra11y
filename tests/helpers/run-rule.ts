@@ -11,7 +11,7 @@
 import { buildContext } from "../../src/engine/context-builder.ts";
 import { parseCss, parseHtml, parseTsx } from "../../src/input/parsers/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
-import type { EmittedViolation, Rule } from "../../src/types/rule.ts";
+import type { EmittedViolation, Language, ProjectContext, Rule } from "../../src/types/rule.ts";
 import type { Violation } from "../../src/types/violation.ts";
 
 export interface RunRuleOptions {
@@ -37,36 +37,60 @@ export function runRule(
     },
     sink,
   );
-  // Mirror the rule-runner lifecycle: beforeFile → check → afterFile.
-  // Document-scoped rules put their logic in afterFile, and we'd
-  // silently skip them if we only called check().
+  invokeLifecycle(rule, ctx, ast, filePath, source, sink);
+  return sink.map((v) => shapeViolation(rule, v, filePath));
+}
+
+/** Mirrors the engine's rule-runner lifecycle, plus a single-file afterProject pass. */
+function invokeLifecycle(
+  rule: Rule,
+  ctx: ReturnType<typeof buildContext>,
+  ast: Ast,
+  filePath: string,
+  source: string,
+  sink: EmittedViolation[],
+): void {
   const fileCtx = { ...ctx, nodes: ast.root };
-  if (rule.beforeFile) {
-    rule.beforeFile(fileCtx);
-  }
-  if (rule.check) {
-    const maybe = rule.check(ctx);
-    if (Array.isArray(maybe)) {
-      for (const v of maybe) sink.push(v);
-    }
-  }
-  if (rule.afterFile) {
-    const maybe = rule.afterFile(fileCtx);
-    if (Array.isArray(maybe)) {
-      for (const v of maybe) sink.push(v);
-    }
-  }
-  return sink.map((v) => ({
+  rule.beforeFile?.(fileCtx);
+  collectReturn(rule.check?.(ctx), sink);
+  collectReturn(rule.afterFile?.(fileCtx), sink);
+  if (!rule.afterProject) return;
+  const projectCtx: ProjectContext = {
+    files: [
+      {
+        filePath,
+        source,
+        ast: ast.root,
+        language: ast.language as Language,
+        disableMap: new Map(),
+      },
+    ],
+    enabledStandards: ctx.enabledStandards,
+    emit: (v) => sink.push(v),
+  };
+  collectReturn(rule.afterProject(projectCtx), sink);
+}
+
+function collectReturn(
+  maybe: readonly EmittedViolation[] | undefined,
+  sink: EmittedViolation[],
+): void {
+  if (Array.isArray(maybe)) for (const v of maybe) sink.push(v);
+}
+
+function shapeViolation(rule: Rule, v: EmittedViolation, filePath: string): Violation {
+  return {
     ruleId: rule.id,
-    criteria: rule.satisfies,
+    criteria: [...rule.satisfies],
     severity: v.severity,
-    location: { ...v.location, filePath },
+    // Project-scope emitters set filePath themselves; per-file paths fall through.
+    location: { ...v.location, filePath: v.location.filePath || filePath },
     message: v.message,
     ...(v.suggestion !== undefined && { suggestion: v.suggestion }),
     ...(v.fix !== undefined && { fix: v.fix }),
     ...(v.fixPaths !== undefined && { fixPaths: v.fixPaths }),
     ...(v.snippet !== undefined && { snippet: v.snippet }),
-  }));
+  };
 }
 
 function guessFilePath(source: string): string {

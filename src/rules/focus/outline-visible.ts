@@ -6,26 +6,40 @@
  * > Any keyboard operable user interface has a mode of operation where
  * > the keyboard focus indicator is visible.
  *
- * Source: https://www.w3.org/TR/WCAG22/#focus-visible
+ * Flags CSS rules that set `outline: none`/`0` or `outline-style: none`
+ * on `:focus`/`:focus-visible` without a replacement focus indicator in
+ * the same rule block.
  *
- * Flags CSS rules that set `outline: none`, `outline: 0`, or
- * `outline-style: none` on `:focus` or `:focus-visible` pseudo-classes
- * WITHOUT a replacement focus indicator (box-shadow, border-color
- * change, outline replacement with a non-none value, or background-color
- * change) in the same rule block.
- *
- * This is the #1 focus-visibility antipattern — a "reset" copied from
- * Stack Overflow that strips the browser's default focus ring with no
- * replacement, leaving keyboard users unable to see what element is
- * focused.
- *
- * v0.0.x coverage: in-file CSS rules (standalone .css and <style>
- * blocks). Does NOT yet trace Tailwind classes or inherited styles.
+ * Cross-file Tailwind cross-reference (info-severity only):
+ *   Class-scoped selectors that would downgrade to `info` are auto-
+ *   resolved when the SAME className appears on a JSX/HTML element that
+ *   also carries a `focus-visible:ring-*` / `focus-visible:outline-*` /
+ *   `focus-visible:shadow-*` Tailwind utility. This is a deterministic
+ *   class-token link — NOT heuristic suppression (CLAUDE.md §1). A
+ *   looser match (`focus:ring-*`, `hover:ring-*`, or "visually similar"
+ *   classes) is NOT allowed here: only the literal `focus-visible:`
+ *   variant qualifies, because only that variant is an author-chosen
+ *   statement that this element has a focus-visible indicator. One
+ *   element is sufficient evidence; no numeric / filename thresholds.
  */
 
 import { defineRule } from "../../api/plugin.ts";
-import { findCssDeclaration, walkCssRules } from "../../engine/ast-helpers.ts";
-import type { CssRule, CssStylesheet } from "../../types/ast.ts";
+import {
+  findCssDeclaration,
+  walkCssRules,
+  walkHtmlElements,
+  walkJsxElements,
+} from "../../engine/ast-helpers.ts";
+import { parseTailwind } from "../../input/parsers/tailwind.ts";
+import type {
+  CssRule,
+  CssStylesheet,
+  HtmlDocument,
+  HtmlElement,
+  JsxElement,
+  TsxModule,
+} from "../../types/ast.ts";
+import type { EmittedViolation, Language, ProjectContext } from "../../types/rule.ts";
 
 /** Properties that serve as replacement focus indicators. */
 const REPLACEMENT_INDICATORS: readonly string[] = [
@@ -47,17 +61,20 @@ const REPLACEMENT_INDICATORS: readonly string[] = [
   "ring-color",
 ];
 
-/** Regex matching :focus or :focus-visible pseudo-classes in a selector. */
 const FOCUS_PSEUDO_PATTERN = /:focus(?:-visible)?\b/;
+
+/**
+ * Utility families that compensate for a removed native focus ring.
+ * `focus:` / `hover:` variants do NOT count — different user state, not
+ * an author statement about focus-visible.
+ */
+const FOCUS_UTILITY_FAMILIES: ReadonlySet<string> = new Set(["ring", "outline", "shadow"]);
 
 export const rule = defineRule({
   id: "focus/outline-visible",
   satisfies: ["wcag22:2.4.7", "wcag21:2.4.7"],
   severity: "error",
-  scope: "document",
-  appliesTo: {
-    fileExtensions: [".css"],
-  },
+  scope: "project",
   docs: {
     description:
       "CSS rules on :focus/:focus-visible must not remove the outline without providing a replacement focus indicator.",
@@ -72,40 +89,41 @@ export const rule = defineRule({
       "https://www.w3.org/WAI/WCAG22/Techniques/failures/F78",
     ],
   },
-  afterFile(ctx) {
-    if (ctx.language !== "css") return;
-    const stylesheet = ctx.ast as CssStylesheet;
-    for (const cssRule of walkCssRules(stylesheet)) {
-      checkCssRule(cssRule, (v) => ctx.emit(v));
+  afterProject(ctx) {
+    const usage = collectFocusVisibleClassUsage(ctx);
+    for (const file of ctx.files) {
+      if (file.language !== "css") continue;
+      for (const cssRule of walkCssRules(file.ast as CssStylesheet)) {
+        emitIfMissingIndicator(cssRule, file.filePath, usage, (v) => ctx.emit(v));
+      }
     }
   },
 });
 
-type Emit = (v: {
-  severity: "error" | "warning" | "info";
-  location: { filePath: string; line: number; column: number };
-  message: string;
-  suggestion: string;
-}) => void;
+type ClassSet = ReadonlySet<string>;
+type Emit = (v: EmittedViolation) => void;
 
-function checkCssRule(cssRule: CssRule, emit: Emit): void {
-  if (!hasFocusPseudo(cssRule.selector)) return;
+function emitIfMissingIndicator(
+  cssRule: CssRule,
+  filePath: string,
+  usage: ClassSet,
+  emit: Emit,
+): void {
+  if (!FOCUS_PSEUDO_PATTERN.test(cssRule.selector)) return;
   if (!removesOutline(cssRule)) return;
   if (hasReplacementIndicator(cssRule)) return;
 
-  // Class-scoped selectors (e.g., .composer-scrollbar:focus-visible)
-  // are likely part of a design system that provides replacement focus
-  // indicators via composed utility classes (Tailwind ring-*, etc.)
-  // in a different rule. Downgrade to info since we can't trace
-  // cross-rule composition statically.
-  const severity = isScopedSelector(cssRule.selector) ? "info" : "error";
+  const scoped = isScopedSelector(cssRule.selector);
+  if (scoped) {
+    // Deterministic class-token link, not a heuristic: the exact
+    // className from the CSS selector appears on an element that also
+    // carries a `focus-visible:ring|outline|shadow-*` utility.
+    const className = extractPrimaryClass(cssRule.selector);
+    if (className !== null && usage.has(className)) return;
+  }
   emit({
-    severity,
-    location: {
-      filePath: "",
-      line: cssRule.loc.start.line,
-      column: cssRule.loc.start.column,
-    },
+    severity: scoped ? "info" : "error",
+    location: { filePath, line: cssRule.loc.start.line, column: cssRule.loc.start.column },
     message: buildMessage(cssRule.selector),
     suggestion: buildSuggestion(cssRule.selector),
   });
@@ -113,72 +131,118 @@ function checkCssRule(cssRule: CssRule, emit: Emit): void {
 
 /** True if the selector targets a specific class, id, or attribute — not a bare element. */
 function isScopedSelector(selector: string): boolean {
-  // Strip the :focus/:focus-visible pseudo to examine the base selector.
   const base = selector.replace(/:focus(-visible)?\b/g, "").trim();
   return base.includes(".") || base.includes("#") || base.includes("[");
 }
 
-function hasFocusPseudo(selector: string): boolean {
-  return FOCUS_PSEUDO_PATTERN.test(selector);
+/**
+ * First `.<ident>` token in the selector's subject compound. Compound
+ * selectors like `.card.active:focus-visible` cross-reference on `card`.
+ */
+function extractPrimaryClass(selector: string): string | null {
+  const parts = selector.split(/\s+/);
+  const subject = parts[parts.length - 1] ?? selector;
+  const head = subject.split(/:(?!:)/)[0] ?? subject;
+  return /\.([A-Za-z_][\w-]*)/.exec(head)?.[1] ?? null;
 }
 
-/**
- * Returns true if the CSS rule removes the outline via:
- * - `outline: none`
- * - `outline: 0`
- * - `outline-style: none`
- */
 function removesOutline(cssRule: CssRule): boolean {
-  const outlineDecl = findCssDeclaration(cssRule, "outline");
-  if (outlineDecl) {
-    const normalized = outlineDecl.value.trim().toLowerCase();
-    if (normalized === "none" || normalized === "0" || normalized === "0px") {
-      return true;
-    }
+  const outline = findCssDeclaration(cssRule, "outline");
+  if (outline) {
+    const v = outline.value.trim().toLowerCase();
+    if (v === "none" || v === "0" || v === "0px") return true;
   }
-  const outlineStyleDecl = findCssDeclaration(cssRule, "outline-style");
-  if (outlineStyleDecl) {
-    const normalized = outlineStyleDecl.value.trim().toLowerCase();
-    if (normalized === "none") return true;
-  }
-  return false;
+  const outlineStyle = findCssDeclaration(cssRule, "outline-style");
+  return outlineStyle?.value.trim().toLowerCase() === "none";
 }
 
-/**
- * Checks whether the SAME CSS rule block provides a replacement focus
- * indicator. A non-none outline value later in the rule also counts
- * (e.g., `outline: none; outline: 2px solid blue;` is a reset pattern).
- */
+/** Same rule block provides a visible alternative (box-shadow, border, later outline, …). */
 function hasReplacementIndicator(cssRule: CssRule): boolean {
-  // Check for a non-none outline that appears AFTER the none value.
-  // findCssDeclaration returns the first, but we need the last.
   if (hasNonNoneOutlineLater(cssRule)) return true;
-
   for (const indicator of REPLACEMENT_INDICATORS) {
     if (findCssDeclaration(cssRule, indicator) !== undefined) return true;
   }
   return false;
 }
 
-/**
- * True if there's an outline declaration with a non-none/0 value after the
- * outline:none declaration. This handles the pattern:
- *   outline: none; outline: 2px solid blue;
- */
+/** Handles the `outline: none; outline: 2px solid blue;` reset-then-replace pattern. */
 function hasNonNoneOutlineLater(cssRule: CssRule): boolean {
   let sawNone = false;
   for (const decl of cssRule.declarations) {
-    const prop = decl.property.toLowerCase();
-    if (prop === "outline") {
-      const val = decl.value.trim().toLowerCase();
-      if (val === "none" || val === "0" || val === "0px") {
-        sawNone = true;
-      } else if (sawNone) {
-        return true;
-      }
-    }
+    if (decl.property.toLowerCase() !== "outline") continue;
+    const val = decl.value.trim().toLowerCase();
+    if (val === "none" || val === "0" || val === "0px") sawNone = true;
+    else if (sawNone) return true;
   }
   return false;
+}
+
+/**
+ * Walk every JSX/HTML className in the project; return the set of plain
+ * class names that co-occur on an element with a qualifying
+ * `focus-visible:ring|outline|shadow-*` utility. Uses existing
+ * `parseTailwind` tokenizer output — no new parser pass.
+ */
+function collectFocusVisibleClassUsage(ctx: ProjectContext): ClassSet {
+  const usage = new Set<string>();
+  for (const file of ctx.files) indexFile(file.ast, file.language, usage);
+  return usage;
+}
+
+function indexFile(ast: unknown, language: Language, usage: Set<string>): void {
+  if (language === "tsx" || language === "jsx" || language === "ts" || language === "js") {
+    for (const el of walkJsxElements(ast as TsxModule)) indexClassString(jsxClassString(el), usage);
+    return;
+  }
+  if (language === "html") {
+    for (const el of walkHtmlElements(ast as HtmlDocument))
+      indexClassString(htmlClassString(el), usage);
+  }
+}
+
+function indexClassString(classString: string | null, usage: Set<string>): void {
+  if (!classString) return;
+  const { plainClasses, qualifies } = partitionTokens(parseTailwind(classString));
+  if (!qualifies) return;
+  for (const cls of plainClasses) usage.add(cls);
+}
+
+function partitionTokens(
+  tokens: readonly { variants: readonly string[]; utility: string; malformed: boolean }[],
+): { plainClasses: string[]; qualifies: boolean } {
+  const plainClasses: string[] = [];
+  let qualifies = false;
+  for (const tok of tokens) {
+    if (tok.malformed) continue;
+    if (tok.variants.length === 0) {
+      if (tok.utility.length > 0) plainClasses.push(tok.utility);
+      continue;
+    }
+    if (isFocusVisibleIndicator(tok.variants, tok.utility)) qualifies = true;
+  }
+  return { plainClasses, qualifies };
+}
+
+function isFocusVisibleIndicator(variants: readonly string[], utility: string): boolean {
+  if (!variants.includes("focus-visible")) return false;
+  const family = utility.split("-")[0] ?? utility;
+  return FOCUS_UTILITY_FAMILIES.has(family);
+}
+
+function jsxClassString(element: JsxElement): string | null {
+  for (const attr of element.attributes) {
+    if (attr.name !== "className" && attr.name !== "class") continue;
+    if (!attr.value || attr.value.kind !== "StringLiteral") return null;
+    return attr.value.value;
+  }
+  return null;
+}
+
+function htmlClassString(element: HtmlElement): string | null {
+  for (const attr of element.attributes) {
+    if (attr.name.toLowerCase() === "class") return attr.value ?? null;
+  }
+  return null;
 }
 
 function buildMessage(selector: string): string {

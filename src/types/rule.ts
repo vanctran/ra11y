@@ -83,11 +83,28 @@ export interface FileContext extends RuleContext {
   readonly nodes: unknown; // full file AST
 }
 
-/** The type afterProject sees — aggregate state across all files. */
+/**
+ * The minimal per-file record a project-scoped rule sees. Already-parsed
+ * material from the scanner's per-file pass — project rules MUST NOT
+ * re-parse. Parallel to `ProjectFile` in review.ts.
+ */
+export interface ProjectRuleFile {
+  readonly filePath: string;
+  readonly source: string;
+  readonly ast: unknown;
+  readonly language: Language;
+  readonly disableMap: ReadonlyMap<number, ReadonlySet<string>>;
+}
+
+/**
+ * Context for cross-file rules (e.g. `focus/outline-visible`'s Tailwind
+ * cross-reference). Emitted violations MUST include `location.filePath`
+ * — the engine stamps `ruleId`/`criteria` but can't guess which file.
+ */
 export interface ProjectContext {
-  readonly files: ReadonlyArray<FileContext>;
+  readonly files: ReadonlyArray<ProjectRuleFile>;
   readonly enabledStandards: ReadonlySet<string>;
-  emit(violation: Omit<Violation, never>): void;
+  emit(violation: EmittedViolation): void;
 }
 
 /** What a rule returns via `ctx.emit()` — engine fills in ruleId + criteria. */
