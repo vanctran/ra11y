@@ -23,7 +23,10 @@
 import { describe, expect, it } from "bun:test";
 import type { ParsedFile } from "../../../src/engine/scanner.ts";
 import { parseTsx } from "../../../src/input/parsers/index.ts";
-import { classifyWrapperCandidates } from "../../../src/mcp/detect-wrappers-core.ts";
+import {
+  classifyWrapperCandidates,
+  collectWrapperCandidates,
+} from "../../../src/mcp/detect-wrappers-core.ts";
 
 function fileOf(filePath: string, source: string): ParsedFile {
   const r = parseTsx(source);
@@ -196,5 +199,156 @@ describe("classifyWrapperCandidates: mixed + deterministic shape", () => {
     ];
     const result = classifyWrapperCandidates(files, ["Button"]);
     expect(result.confirmed).toEqual(["Button"]);
+  });
+});
+
+describe("collectWrapperCandidates: definitionFile (Q2-WRAPPATH)", () => {
+  // Q2-WRAPPATH: every candidate carries a `definitionFile` pointer so
+  // agents can jump straight to the wrapper source without a Glob
+  // round-trip. Resolution is one-hop basename match — the same probe
+  // classifyWrapperCandidates uses. We surface the raw file path string
+  // when a match exists, and `null` (never `""`, never omitted) when
+  // the component is imported from outside the scan set (node_modules,
+  // a sibling package, a barrel that renames the export).
+
+  it("resolves definitionFile to the same file when the wrapper is declared inline", () => {
+    // Usage site IS the definition site — the consumer file declares
+    // the component locally. Basename match on `App.tsx` → `App` —
+    // which doesn't match `Button`, so for the "wrapper used inline"
+    // case we need the defining file's basename to equal the wrapper
+    // name. Here, `Button.tsx` defines `Button` and also uses it in
+    // a second render, so the same file is both definition and usage.
+    const files: ParsedFile[] = [
+      fileOf(
+        "src/components/Button.tsx",
+        [
+          "export function Button(props) { return <button {...props} />; }",
+          "export function Toolbar() { return <Button onClick={() => {}}>go</Button>; }",
+        ].join("\n"),
+      ),
+    ];
+    const result = collectWrapperCandidates(files);
+    expect(result).toHaveLength(1);
+    const [button] = result;
+    expect(button?.component).toBe("Button");
+    expect(button?.definitionFile).toBe("src/components/Button.tsx");
+  });
+
+  it("resolves definitionFile to the defining file when the wrapper is imported from a sibling file", () => {
+    // Classic case: usage lives in `app.tsx`, definition lives in
+    // `components/Button.tsx`. The probe indexes every parsed file by
+    // PascalCase basename; `Button` resolves to `Button.tsx` even
+    // though the scanner walked the usage site first.
+    const files: ParsedFile[] = [
+      fileOf(
+        "src/app.tsx",
+        [
+          "import { Button } from './components/Button';",
+          "export function App() { return <Button onClick={() => {}}>save</Button>; }",
+        ].join("\n"),
+      ),
+      fileOf(
+        "src/components/Button.tsx",
+        "export function Button(props) { return <button {...props} />; }",
+      ),
+    ];
+    const result = collectWrapperCandidates(files);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.definitionFile).toBe("src/components/Button.tsx");
+  });
+
+  it("stops at the barrel — one-hop resolution, no transitive following", () => {
+    // Barrel re-exports (`index.ts` forwarding `Button` from
+    // `./Button.tsx`) are a common pattern, but chasing them requires
+    // an import resolver this scanner deliberately does not ship. The
+    // probe matches basename `Button.tsx` against component name
+    // `Button` directly — no hop through the barrel. This mirrors the
+    // P1-F classifier's narrow-by-design discipline.
+    const files: ParsedFile[] = [
+      fileOf(
+        "src/app.tsx",
+        [
+          "import { Button } from './components';",
+          "export function App() { return <Button onClick={() => {}}>save</Button>; }",
+        ].join("\n"),
+      ),
+      fileOf("src/components/index.ts", "export { Button } from './Button';"),
+      fileOf(
+        "src/components/Button.tsx",
+        "export function Button(props) { return <button {...props} />; }",
+      ),
+    ];
+    const result = collectWrapperCandidates(files);
+    expect(result).toHaveLength(1);
+    // Direct basename match wins — Button.tsx resolves without hopping
+    // through the barrel. The `components/index.ts` re-export is
+    // invisible to the probe by design.
+    expect(result[0]?.definitionFile).toBe("src/components/Button.tsx");
+  });
+
+  it("emits definitionFile: null when the wrapper source is not in the parsed set", () => {
+    // Usage site imports from `node_modules` (or any path outside the
+    // scan): no `Button.tsx` in the parsed-file set, so the probe
+    // returns null. The agent branches on null → fall back to Grep /
+    // node_modules inspection. Critically, it is `null`, NOT `""` —
+    // per CLAUDE.md §1 "Ambiguous field shapes are dishonest," the
+    // empty string would look like a valid-but-empty path to downstream
+    // consumers.
+    const files: ParsedFile[] = [
+      fileOf(
+        "src/app.tsx",
+        [
+          "import { Button } from '@vendor/design-system';",
+          "export function App() { return <Button onClick={() => {}}>save</Button>; }",
+        ].join("\n"),
+      ),
+    ];
+    const result = collectWrapperCandidates(files);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.definitionFile).toBeNull();
+  });
+
+  it("resolves each candidate independently in a mixed detection", () => {
+    // Two candidates in the same scan: one in-tree, one out-of-tree.
+    // The in-tree candidate resolves; the out-of-tree candidate is
+    // `null`. Both surface in the primary list per the "surface, don't
+    // suppress" doctrine.
+    const files: ParsedFile[] = [
+      fileOf(
+        "src/app.tsx",
+        [
+          "import { Button } from './Button';",
+          "import { VendorInput } from '@vendor/forms';",
+          "export function App() {",
+          "  return (<div>",
+          "    <Button onClick={() => {}}>save</Button>",
+          "    <VendorInput value={''} onChange={() => {}} />",
+          "  </div>);",
+          "}",
+        ].join("\n"),
+      ),
+      fileOf("src/Button.tsx", "export const Button = (p) => <button {...p} />;"),
+    ];
+    const byName = new Map(collectWrapperCandidates(files).map((c) => [c.component, c]));
+    expect(byName.get("Button")?.definitionFile).toBe("src/Button.tsx");
+    expect(byName.get("VendorInput")?.definitionFile).toBeNull();
+  });
+
+  it('is a deterministic string-or-null — never `""`, never omitted', () => {
+    // Shape-honesty guard. `definitionFile` is always present on every
+    // candidate (never omitted) and is either a non-empty string or
+    // exactly `null`. Empty string would be the canonical "ambiguous
+    // field" bug.
+    const files: ParsedFile[] = [
+      fileOf("Alpha.tsx", "export const Alpha = (p) => <button {...p} />;"),
+      fileOf("usage.tsx", "export const U = () => <MissingWrapper onClick={() => {}} />;"),
+      fileOf("MoreUsage.tsx", "export const X = () => <Alpha onClick={() => {}} />;"),
+    ];
+    const result = collectWrapperCandidates(files);
+    for (const c of result) {
+      expect(c).toHaveProperty("definitionFile");
+      const v = c.definitionFile;
+      expect(v === null || (typeof v === "string" && v.length > 0)).toBe(true);
+    }
   });
 });

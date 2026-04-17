@@ -21,7 +21,7 @@ export const detectNativeWrappersTool: McpTool = {
   def: {
     name: "detect_native_wrappers",
     description:
-      "Scan the project and list unique PascalCase components with onClick — onboarding aid for `nativeWrappers` in ra11y.config.ts. Review the list, confirm which ones actually wrap a native <button>/<a>/<input>, and add those to config in one pass. The tool does not modify files.",
+      "Scan the project and list unique PascalCase components with onClick — onboarding aid for `nativeWrappers` in ra11y.config.ts. Each candidate carries a `definitionFile` pointer (absolute path resolved by one-hop basename match, or `null` when the source lives outside the scanned set) so you can open the wrapper directly to verify it wraps a native <button>/<a>/<input>. The tool does not modify files.",
     inputSchema: {
       type: "object",
       properties: {

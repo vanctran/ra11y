@@ -35,6 +35,31 @@ export interface WrapperCandidate {
   readonly component: string;
   readonly occurrences: number;
   readonly sampleLocations: readonly { readonly path: string; readonly line: number }[];
+  /**
+   * Path of the source file that defines the wrapper component, resolved
+   * via the same one-hop basename probe used by `classifyWrapperCandidates`
+   * (look up `ComponentName.{tsx,jsx,ts,js}` in the parsed-file set; no
+   * import resolution; no transitive following through re-export barrels).
+   *
+   * The field is present on every candidate so the agent can branch on a
+   * single axis ("we know where it's defined" vs "we don't"):
+   *   - `string` — the resolved absolute path of the defining file. The
+   *     agent can open this directly to verify whether the component
+   *     really wraps a native interactive element, without a Glob
+   *     round-trip.
+   *   - `null` — no file in the parsed set has a matching basename. The
+   *     wrapper is imported from outside the scan (node_modules, a
+   *     sibling package the agent didn't include in `cwd`), is aliased
+   *     through a barrel with a different filename, or is declared
+   *     inline in a file whose basename doesn't match the component
+   *     name. The agent should fall back to Grep/Read to locate it.
+   *
+   * Per CLAUDE.md §1 "Ambiguous field shapes are dishonest," the field
+   * is never `""` — `null` carries the meaningful "we looked and didn't
+   * find it" signal, distinct from omission (which would read as "we
+   * didn't compute it").
+   */
+  readonly definitionFile: string | null;
 }
 
 /**
@@ -42,6 +67,12 @@ export interface WrapperCandidate {
  * like native-interactive wrappers (button-shaped or input-shaped) by
  * component name. Sorted by occurrences desc, then name asc so the
  * order is deterministic across runs.
+ *
+ * Each candidate carries a `definitionFile` pointer resolved by one-hop
+ * basename match against the parsed-file set — the same probe
+ * `classifyWrapperCandidates` uses. Saves the agent a Glob round-trip
+ * when the source is in-tree; `null` when it's out-of-tree or aliased
+ * through a barrel.
  */
 export function collectWrapperCandidates(
   files: readonly ParsedFile[],
@@ -61,12 +92,14 @@ export function collectWrapperCandidates(
       groups.set(el.tagName, entry);
     }
   }
+  const definitions = indexFilesByComponentName(files);
   return [...groups.entries()]
     .sort(([a, x], [b, y]) => y.count - x.count || a.localeCompare(b))
     .map(([component, { count, locations }]) => ({
       component,
       occurrences: count,
       sampleLocations: locations,
+      definitionFile: definitions.get(component)?.filePath ?? null,
     }));
 }
 
