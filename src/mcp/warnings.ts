@@ -20,7 +20,8 @@ export type ScanWarningCode =
   | "root_source_defaulted"
   | "no_config_found"
   | "tailwind_detected_css_undercounted"
-  | "template_files_parsed_as_literal";
+  | "template_files_parsed_as_literal"
+  | "scanned_build_artifacts_present";
 
 export interface WarningInputs {
   /** Count of parseable files the scan actually evaluated. */
@@ -52,6 +53,18 @@ export interface WarningInputs {
    * evaluate the Tailwind-vs-CSS-undercount condition without re-parsing.
    */
   readonly filesByExtension: Readonly<Record<string, number>> | undefined;
+  /**
+   * True when `scan_project` detected at least one compiled-CSS /
+   * bundler-output file among the scanned set (see
+   * `collectBuildArtifacts` in `./build-artifacts.ts`). Callers that
+   * don't run the detector (e.g. `scan` against arbitrary paths)
+   * should pass `false`. The corresponding code
+   * `scanned_build_artifacts_present` is a label, not a filter — the
+   * findings on those files are still in `formatted.files`; the code
+   * just tells the agent "at least one of your scanned files came
+   * from the build."
+   */
+  readonly scannedBuildArtifactsPresent?: boolean;
 }
 
 /** Threshold below which a Tailwind-detected codebase is considered CSS-undercounted. */
@@ -81,6 +94,15 @@ export function computeScanWarnings(inputs: WarningInputs): readonly ScanWarning
     // parser treated the directives as literal text — a fact already in
     // `templateDirectiveHandling` but easy to miss in the meta block.
     out.push("template_files_parsed_as_literal");
+  }
+  if (inputs.scannedBuildArtifactsPresent === true) {
+    // The detector uses deterministic signals (escape-bracket Tailwind
+    // selectors, compiled-CSS size threshold, bundler-output path
+    // markers) so the label is safe to surface alongside the findings.
+    // The paths themselves live in `meta.scannedBuildArtifacts`; this
+    // warning code is the top-level presence signal an agent can branch
+    // on without reading into meta.
+    out.push("scanned_build_artifacts_present");
   }
   return out;
 }
@@ -118,6 +140,7 @@ export function warningsFromScanMeta(args: {
   readonly meta: Record<string, unknown>;
   readonly rootSource: WarningInputs["rootSource"];
   readonly configSource: string | null | undefined;
+  readonly scannedBuildArtifactsPresent?: boolean;
 }): readonly ScanWarningCode[] {
   return computeScanWarnings({
     filesScanned: readNumber(args.meta, "filesScanned"),
@@ -125,6 +148,9 @@ export function warningsFromScanMeta(args: {
     configSource: args.configSource,
     analysisCoverage: readRecord(args.meta, "analysisCoverage"),
     filesByExtension: readNumberRecord(args.meta, "filesByExtension"),
+    ...(args.scannedBuildArtifactsPresent === undefined
+      ? {}
+      : { scannedBuildArtifactsPresent: args.scannedBuildArtifactsPresent }),
   });
 }
 
@@ -149,6 +175,7 @@ export function warningsFieldFromScanMeta(args: {
   readonly meta: Record<string, unknown>;
   readonly rootSource: WarningInputs["rootSource"];
   readonly configSource: string | null | undefined;
+  readonly scannedBuildArtifactsPresent?: boolean;
 }): { readonly warnings?: readonly ScanWarningCode[] } {
   const codes = warningsFromScanMeta(args);
   return codes.length > 0 ? { warnings: codes } : {};

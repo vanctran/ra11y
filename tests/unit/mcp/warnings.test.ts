@@ -190,6 +190,41 @@ describe("computeScanWarnings", () => {
     });
     expect([...codes]).toEqual(["scanned_zero_files", "root_source_defaulted", "no_config_found"]);
   });
+
+  it("fires `scanned_build_artifacts_present` when the caller signals that the detector labeled ≥1 file", () => {
+    const codes = computeScanWarnings({
+      filesScanned: 42,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: { ".css": 2 },
+      scannedBuildArtifactsPresent: true,
+    });
+    expect(codes).toContain("scanned_build_artifacts_present");
+  });
+
+  it("does NOT fire `scanned_build_artifacts_present` when the flag is false (hand-written CSS only)", () => {
+    const codes = computeScanWarnings({
+      filesScanned: 42,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: { ".css": 2 },
+      scannedBuildArtifactsPresent: false,
+    });
+    expect(codes).not.toContain("scanned_build_artifacts_present");
+  });
+
+  it("does NOT fire `scanned_build_artifacts_present` when the flag is omitted (tool doesn't run the detector)", () => {
+    const codes = computeScanWarnings({
+      filesScanned: 42,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: { ".css": 2 },
+    });
+    expect(codes).not.toContain("scanned_build_artifacts_present");
+  });
 });
 
 describe("warningsFromScanMeta", () => {

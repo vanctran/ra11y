@@ -56,9 +56,57 @@ export interface PreflightOk {
   readonly ext: Ext;
   readonly original: ParsedFile;
   readonly dryRun: boolean;
+  /**
+   * True when the caller supplied the deprecated `filePath` alias
+   * instead of the canonical `file` parameter. The handler uses this
+   * to add `"deprecated_param_filepath"` to the response's `warnings`
+   * array so migrating agents have a concrete signal; silently
+   * accepting the alias would reproduce the ambiguous-shape failure
+   * mode CLAUDE.md §1 warns against.
+   */
+  readonly usedDeprecatedAlias: boolean;
 }
 
 export type PreflightResult = PreflightOk | { readonly error: McpToolResult };
+
+export interface FilePathParamResult {
+  readonly value: string | undefined;
+  readonly usedDeprecatedAlias: boolean;
+  readonly error: McpToolResult | undefined;
+}
+
+/**
+ * Reads the canonical `file` parameter, falling back to the deprecated
+ * `filePath` alias. Both names cannot be supplied simultaneously —
+ * doing so raises a structured error so the caller picks one shape
+ * instead of relying on silent precedence.
+ */
+export function readFilePathParam(params: Record<string, unknown>): FilePathParamResult {
+  const canonical = strParam(params, "file");
+  const alias = strParam(params, "filePath");
+  const canonicalPresent = canonical !== undefined && canonical.length > 0;
+  const aliasPresent = alias !== undefined && alias.length > 0;
+  if (canonicalPresent && aliasPresent) {
+    return {
+      value: undefined,
+      usedDeprecatedAlias: false,
+      error: errorResult({
+        code: "conflicting-file-params",
+        message:
+          "Pass either `file` (canonical) or `filePath` (deprecated alias) — not both. `filePath` is accepted for one release only; prefer `file`.",
+        details: { file: canonical, filePath: alias },
+        remediation: "Drop `filePath` and send only `file`.",
+      }),
+    };
+  }
+  if (canonicalPresent) {
+    return { value: canonical, usedDeprecatedAlias: false, error: undefined };
+  }
+  if (aliasPresent) {
+    return { value: alias, usedDeprecatedAlias: true, error: undefined };
+  }
+  return { value: undefined, usedDeprecatedAlias: false, error: undefined };
+}
 
 export async function preflightValidate(
   params: Record<string, unknown>,
@@ -74,13 +122,18 @@ export async function preflightValidate(
       }),
     };
   }
-  const filePathParam = strParam(params, "filePath");
+  const filePathParamResult = readFilePathParam(params);
+  if (filePathParamResult.error) {
+    return { error: filePathParamResult.error };
+  }
+  const filePathParam = filePathParamResult.value;
+  const usedDeprecatedAlias = filePathParamResult.usedDeprecatedAlias;
   if (!filePathParam || filePathParam.length === 0) {
     return {
       error: errorResult({
         code: "missing-required-param",
-        message: "filePath is required and must be a non-empty string.",
-        details: { param: "filePath" },
+        message: "file is required and must be a non-empty string.",
+        details: { param: "file" },
       }),
     };
   }
@@ -90,8 +143,8 @@ export async function preflightValidate(
     return {
       error: errorResult({
         code: "path-escapes-cwd",
-        message: `filePath '${filePathParam}' escapes cwd '${cwd}'. Every writable path must resolve inside the scan root.`,
-        details: { filePath: filePathParam, cwd },
+        message: `file '${filePathParam}' escapes cwd '${cwd}'. Every writable path must resolve inside the scan root.`,
+        details: { file: filePathParam, cwd },
       }),
     };
   }
@@ -141,7 +194,7 @@ export async function preflightValidate(
       }),
     };
   }
-  return { resolved, cwd, edit, ext, original: original.parsed, dryRun };
+  return { resolved, cwd, edit, ext, original: original.parsed, dryRun, usedDeprecatedAlias };
 }
 
 async function readOriginal(

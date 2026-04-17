@@ -84,6 +84,11 @@ export type StructuredErrorCode =
   | "edit-no-match"
   | "edit-multiple-matches"
   | "edit-introduces-parse-errors"
+  // suggest_fix / apply_fix parameter aliasing — raised when both the
+  // canonical `file` and the deprecated `filePath` alias are supplied
+  // so the caller picks one shape instead of relying on silent
+  // precedence (CLAUDE.md §1 "Ambiguous field shapes are dishonest").
+  | "conflicting-file-params"
   // meta-tool internal
   | "audit-sub-tool-unparseable";
 

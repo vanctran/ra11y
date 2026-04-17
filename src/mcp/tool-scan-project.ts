@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
+import { collectBuildArtifacts } from "./build-artifacts.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { buildNextStep } from "./next-step.ts";
 import {
@@ -155,12 +156,20 @@ export const scanProjectTool: McpTool = {
           ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
           : "",
     });
+    // Deterministic compiled-CSS / bundler-output label. Findings on
+    // these files STILL appear in `formatted.files` — this is additive
+    // information so an agent knows to investigate whether a given
+    // finding sits on generated code before editing. Per CLAUDE.md §1
+    // "Ambiguous field shapes are dishonest," the field is omitted
+    // entirely when the detector finds no artifacts (never `[]`).
+    const buildArtifacts = buildArtifactsFields(files);
     return textResult({
       ...formatted,
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         rootSource,
         configSource: projectConfig.sourcePath,
+        scannedBuildArtifactsPresent: buildArtifacts.present,
       }),
       meta: {
         ...formatted.meta,
@@ -171,6 +180,7 @@ export const scanProjectTool: McpTool = {
         ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
         configSource: projectConfig.sourcePath,
         configSearchedFrom: root,
+        ...buildArtifacts.metaField,
         ...(projectConfig.sourcePath === null
           ? {
               configNote: `No ra11y.config found at ${root} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
@@ -562,4 +572,22 @@ function checkCwdExists(explicitCwd: string | undefined): ReturnType<typeof erro
     remediation:
       "Pass `cwd` as a path to an existing directory. Relative paths resolve against the MCP server's spawn directory.",
   });
+}
+
+/**
+ * Builds the spreadable build-artifacts field pair: a `metaField` to
+ * mix into the response's `meta` block (omitted when no artifacts) and
+ * a `present` boolean for `warningsFieldFromScanMeta`. Extracted from
+ * the handler so the conditional spread doesn't add to its cognitive
+ * complexity score.
+ */
+function buildArtifactsFields(files: readonly ParsedFile[]): {
+  readonly present: boolean;
+  readonly metaField: { readonly scannedBuildArtifacts?: readonly string[] };
+} {
+  const paths = collectBuildArtifacts(files);
+  return {
+    present: paths.length > 0,
+    metaField: paths.length > 0 ? { scannedBuildArtifacts: paths } : {},
+  };
 }
