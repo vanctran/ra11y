@@ -360,7 +360,7 @@ export async function runScanAndFormat(
       ...(violations.length === 0 && notes.length === 0
         ? {
             limitations: [
-              "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half. Canonical integration: https://www.npmjs.com/package/@axe-core/playwright (mirror for Vitest + jsdom: https://www.npmjs.com/package/@axe-core/react).",
+              "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half.",
               "Static analysis can prove failure but not conformance: a clean scan is necessary, not sufficient. Do not claim WCAG conformance on this result alone.",
             ],
           }
