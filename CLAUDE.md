@@ -168,43 +168,21 @@ At registry init, the engine walks every loaded standard's `equivalentTo` field 
 
 1. Decide the rule ID: `<domain>/<specific-name>`. Domains are the folders under `src/rules/` (contrast, focus, keyboard, aria, semantics, forms, media, motion, pointer, navigation, layout, tooltip, orientation, parsing, document).
 2. Identify every criterion the rule satisfies across all loaded standards. Consult `src/standards/*/criteria.ts`. Add cross-standard equivalents via the registry's reciprocal index.
-3. Create `src/rules/<domain>/<slug>.ts` with this shape:
-   ```ts
-   /**
-    * Rule: <domain>/<slug>
-    * Satisfies: wcag22:X.Y.Z, wcag21:X.Y.Z, section508:…, en301549:…
-    * Spec: https://www.w3.org/TR/WCAG22/#<anchor>
-    *
-    * <Quote the normative text verbatim when helpful.>
-    */
-   import { defineRule } from "@/api/plugin";
-
-   export const rule = defineRule({
-     id: "<domain>/<slug>",
-     satisfies: ["wcag22:X.Y.Z", "wcag21:X.Y.Z"],
-     severity: "error",
-     scope: "node",
-     appliesTo: { nodeTypes: ["JSXElement:img"], fileExtensions: [".tsx", ".jsx", ".html"] },
-     docs: {
-       description: "…",
-       rationale: "…",
-       goodExample: "…",
-       badExample: "…",
-       normativeQuote: "…",
-       references: ["https://www.w3.org/TR/WCAG22/#…"],
-     },
-     check(ctx) {
-       // Use helpers from src/engine/ast-helpers.ts — do not hand-walk ASTs.
-     },
-   });
+3. Scaffold the rule in one shot:
    ```
-4. Create `tests/unit/rules/<domain>/<slug>.test.ts` with ≥3 positive, ≥3 negative, ≥1 edge case. Each test should name *what real or spec-derived failure mode it guards against* in its description — not rehearse the code you just wrote. "flags `<button aria-label="X">` when visible text is not a substring" is load-bearing; "the function returns 3 when given 3 inputs" is not.
-5. Create `tests/fixtures/good/<slug>/` and `tests/fixtures/bad/<slug>/` with minimal reproducers. If the failure mode came from a real codebase (field report, feedback scan), prefer landing a sanitized snippet in `tests/fixtures/real-world/<case>/` (see backlog Phase 23) — that case survives refactors that reshape the unit test.
-6. Register in `src/rules/index.ts`.
-7. Run `bun test tests/unit/rules/<domain>/<slug>.test.ts` until green.
-8. Run `/fix-drift` to regenerate `docs/kb/rules/<slug>.md` from rule metadata.
-9. Run `bun run verify`.
-10. Commit in small chunks (see commit discipline below).
+   bun scripts/scaffold-rule.ts <domain>/<slug> \
+     --satisfies wcag22:X.Y.Z,wcag21:X.Y.Z \
+     [--severity error|warning|info] [--description "..."]
+   ```
+   This writes `src/rules/<domain>/<slug>.ts`, `tests/unit/rules/<domain>/<slug>.test.ts`, `tests/fixtures/{good,bad}/<domain>-<slug>/placeholder.tsx`, and an alphabetically-inserted entry in `src/rules/index.ts`. The generated rule typechecks out of the box (its check body has a `void ctx;` line — remove it when you implement).
+4. Fill in `check()` in the generated rule file. Use `src/engine/ast-helpers.ts`; do not hand-walk ASTs. Emit context-aware suggestion strings via `ctx.emit(...)`.
+5. Replace the TODO placeholders in the rule header (normativeQuote, rationale, goodExample, badExample, description if default). Every rule file header must cite WCAG SC numbers and spec URLs — the scaffolder inserts them; don't remove them.
+6. Replace the test placeholders in `tests/unit/rules/<domain>/<slug>.test.ts` with real bad/good snippets for each `it(...)`. ≥3 positive, ≥3 negative, ≥1 edge case. Each test should name *what real or spec-derived failure mode it guards against* in its description — not rehearse the code you just wrote. "flags `<button aria-label="X">` when visible text is not a substring" is load-bearing; "the function returns 3 when given 3 inputs" is not.
+7. Replace fixture placeholders in `tests/fixtures/good/<domain>-<slug>/` and `tests/fixtures/bad/<domain>-<slug>/` with minimal reproducers. If the failure mode came from a real codebase (field report, feedback scan), prefer landing a sanitized snippet in `tests/fixtures/real-world/<case>/` (see ADR 0006) — that case survives refactors that reshape the unit test.
+8. Run `bun test tests/unit/rules/<domain>/<slug>.test.ts` until green.
+9. Commit the rule: `feat(rules): add <domain>/<slug> for <primary-sc>`. For rules under 400 LOC net diff this is a single commit covering rule + tests + fixtures + registry. For larger rules, fall back to staged commits (skeleton / logic / tests / fixtures).
+10. Run `/fix-drift` to regenerate `docs/kb/rules/<slug>.md` — that emits its own commit.
+11. Run `bun run verify` to confirm everything is green before handing off.
 
 ## 8. How to add a new standard
 
@@ -234,15 +212,16 @@ This repo is designed for autonomous Claude Code sessions. Prefer the workflow b
 
 ### Orchestrator-Workers (main session as orchestrator)
 
-Subagents cannot spawn subagents, so the orchestrator is always the **main** Claude session. The `/continue` skill is the driver:
+Subagents cannot spawn subagents, so the orchestrator is always the **main** Claude session. The `/continue` skill is the driver, now a **parallel-track fanout dispatcher**:
 
 1. Read `.claude/backlog.md`.
-2. Pick the next unchecked item.
-3. Dispatch to the right specialist subagent via the Agent tool.
-4. When the subagent returns, verify the work (`bun run verify`).
-5. Commit.
-6. Check off the backlog item.
-7. Loop. Hard cap: 20 items per `/continue` invocation.
+2. Pick the next unchecked item from each active track (D/M/R/F), skipping tracks with sequencing not yet satisfied. Up to 3 items per turn.
+3. Dispatch all selected items in a single assistant message with parallel Agent tool calls — never serially.
+4. When the specialists return, verify the combined result (`bun run verify`).
+5. Check off the backlog items in one commit (`chore(backlog): check off <n> items`).
+6. Loop. Hard cap: 10 turns per `/continue` invocation (≈ 30 items).
+
+Hard rules: never two agents on the same track in one turn; never more than 3 concurrent agents; main-session inline work counts against the 3-agent budget.
 
 ### Evaluator-Optimizer (rule development)
 
@@ -293,12 +272,11 @@ Never circumvent hooks. If a hook blocks you, fix the underlying problem.
 Every commit — whether you author it or a subagent does — follows these rules. They exist because autonomous runs must be debuggable, reviewable, and interruptible.
 
 1. **One logical change per commit.** One new rule, one new standard criterion batch (≤20 criteria), one formatter, one concept doc, one hook script.
-2. **≤400 lines net diff per commit.** Auto-generated files (kb regeneration) go in their own `chore(kb): regenerate …` commit.
-3. **5–15 minutes of work between commits.** If you've been working longer without a commit, you're batching too much.
-4. **Commit before every verification.** Run `/verify` on committed state.
-5. **Commit before delegating.** When `/add-rule` hands off from generator to reviewer, the generator commits first so the reviewer reviews real git state.
-6. **Never amend a pushed commit.** Never `--no-verify`.
-7. **Conventional commits** (enforced by `scripts/check-commit.ts`):
+2. **≤400 lines net diff per commit.** Auto-generated files (kb regeneration) go in their own `chore(kb): regenerate …` commit. If a single logical unit legitimately exceeds 400 LOC, split it by concern (skeleton / logic / tests / fixtures) not by ritual.
+3. **Commit before every verification.** Run `/verify` on committed state.
+4. **Commit before delegating.** When `/add-rule` hands off from generator to reviewer, the generator commits first so the reviewer reviews real git state.
+5. **Never amend a pushed commit.** Never `--no-verify`.
+6. **Conventional commits** (enforced by `scripts/check-commit.ts`):
    - `feat(rules): add contrast/minimum for wcag22:1.4.3`
    - `test(rules): add contrast/minimum edge cases`
    - `fix(engine): standard-filter missed equivalentTo criteria`
@@ -306,7 +284,7 @@ Every commit — whether you author it or a subagent does — follows these rule
    - `docs(kb): add wcag 1.4.3 knowledge base entry`
    - `refactor(engine): extract standard-filter from rule-runner`
 
-One rule typically produces 5–7 commits: skeleton, logic, unit tests, fixtures, kb entry, final polish. If your work would produce more than 7 commits, split it into phases and report back.
+A typical rule ships in **2 commits** (feat(rules) covering rule + tests + fixtures + registry, plus chore(kb) for the regenerated KB). The scaffolder (`bun scripts/scaffold-rule.ts`) eliminates the value of splitting skeleton/logic/tests/fixtures — they're produced together, verify at once, commit at once. Fall back to staged 4-5 commits only when a rule legitimately exceeds the 400-LOC cap. Standards, parsers, and large refactors stay on staged cadence.
 
 ## 12. Documentation is a deliverable
 
