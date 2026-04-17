@@ -107,5 +107,11 @@ export interface ProjectContext {
   emit(violation: EmittedViolation): void;
 }
 
-/** What a rule returns via `ctx.emit()` — engine fills in ruleId + criteria. */
-export type EmittedViolation = Omit<Violation, "ruleId" | "criteria">;
+/**
+ * What a rule returns via `ctx.emit()`. The engine owns `ruleId`,
+ * `criteria`, and `findingId` — rules don't know those. `findingId`
+ * is derived from the stamped ruleId + relative filePath + source
+ * context window, so it can only be computed after the engine has
+ * attached the filePath to the emitted location.
+ */
+export type EmittedViolation = Omit<Violation, "ruleId" | "criteria" | "findingId">;

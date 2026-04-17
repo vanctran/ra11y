@@ -21,6 +21,7 @@ export const jsonFormatter = defineFormatter({
         filesScanned: result.filesScanned,
         durationMs: Math.round(result.durationMs),
         violations: result.violations.map((v) => ({
+          findingId: v.findingId,
           ruleId: v.ruleId,
           criteria: v.criteria,
           severity: v.severity,

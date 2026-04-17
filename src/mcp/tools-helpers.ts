@@ -655,6 +655,10 @@ function severityToConfidence(severity: string): "high" | "medium" | "low" {
 
 export function formatFinding(v: Violation): Record<string, unknown> {
   return {
+    // Stable identity — lets agents verify "did my edit close finding
+    // X?" by exact ID rather than (file, line, ruleId) fuzzy match
+    // that breaks on line-number drift.
+    findingId: v.findingId,
     ruleId: v.ruleId,
     severity: v.severity,
     confidence: severityToConfidence(v.severity),

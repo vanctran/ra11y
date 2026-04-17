@@ -63,6 +63,19 @@ export interface Violation {
   readonly fix?: Fix;
   readonly fixPaths?: FixPaths;
   readonly snippet?: string;
+  /**
+   * Stable identity for the finding — the same opaque token across
+   * re-runs of the same scan, so an agent can verify "did my edit
+   * close finding X?" by exact identity rather than fuzzy `(file,
+   * line, ruleId)` matching. Survives line-number drift inside the
+   * file when unrelated code is inserted above the violation.
+   *
+   * Computed as `sha256(ruleId, relativeFilePath, lineContextHash)`
+   * truncated to 12 hex chars. See `src/utils/finding-id.ts` for the
+   * exact recipe. Required on every Violation — if a call site needs
+   * to synthesize one, use `computeFindingId`.
+   */
+  readonly findingId: string;
 }
 
 /** Aggregate result of a full scan. */

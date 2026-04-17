@@ -6,9 +6,10 @@ import {
   sarifFormatter,
 } from "../../src/output/formatters/index.ts";
 import type { ReportData, ScanResult } from "../../src/types/violation.ts";
+import { withFindingIds } from "../helpers/make-violation.ts";
 
 const RESULT: ScanResult = {
-  violations: [
+  violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1"],
@@ -33,7 +34,7 @@ const RESULT: ScanResult = {
       message: "<img> 'logo.png' is missing a text alternative.",
       suggestion: "Add alt='Acme Co.' or alt='' if decorative.",
     },
-  ],
+  ]),
   filesScanned: 12,
   durationMs: 42,
   enabledStandards: ["wcag22"],
@@ -131,7 +132,7 @@ describe("formatter: junit", () => {
   it("escapes XML special characters in messages", () => {
     const withSpecials: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "test/rule",
           criteria: ["wcag22:1.1.1"],
@@ -140,7 +141,7 @@ describe("formatter: junit", () => {
           message: "contains <angle> & 'quotes' & \"double\"",
           suggestion: "fix it",
         },
-      ],
+      ]),
     };
     const output = junitFormatter.format(withSpecials, REPORT);
     expect(output).toContain("&lt;angle&gt;");
@@ -178,14 +179,16 @@ describe("formatter: markdown", () => {
   it("uses <details> collapse when over threshold", () => {
     const many: ScanResult = {
       ...RESULT,
-      violations: Array.from({ length: 11 }, (_, i) => ({
-        ruleId: "media/alt-text-missing",
-        criteria: ["wcag22:1.1.1"],
-        severity: "error" as const,
-        location: { filePath: `file${i}.html`, line: 1, column: 1 },
-        message: `violation ${i}`,
-        suggestion: "fix",
-      })),
+      violations: withFindingIds(
+        Array.from({ length: 11 }, (_, i) => ({
+          ruleId: "media/alt-text-missing",
+          criteria: ["wcag22:1.1.1"],
+          severity: "error" as const,
+          location: { filePath: `file${i}.html`, line: 1, column: 1 },
+          message: `violation ${i}`,
+          suggestion: "fix",
+        })),
+      ),
     };
     const output = markdownFormatter.format(many, REPORT);
     expect(output).toContain("<details>");
@@ -195,7 +198,7 @@ describe("formatter: markdown", () => {
   it("escapes pipe characters in file paths and messages", () => {
     const withPipe: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "test/rule",
           criteria: ["wcag22:1.1.1"],
@@ -204,7 +207,7 @@ describe("formatter: markdown", () => {
           message: "message with | pipe",
           suggestion: "fix",
         },
-      ],
+      ]),
     };
     const output = markdownFormatter.format(withPipe, REPORT);
     expect(output).toContain("weird\\|path.html");
@@ -235,7 +238,7 @@ describe("formatter: html", () => {
   it("escapes HTML-sensitive characters in messages", () => {
     const input: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "media/alt-text-missing",
           criteria: ["wcag22:1.1.1"],
@@ -243,7 +246,7 @@ describe("formatter: html", () => {
           location: { filePath: "src/a.tsx", line: 1, column: 1 },
           message: "<script>bad</script>",
         },
-      ],
+      ]),
     };
     const out = htmlFormatter.format(input, REPORT);
     expect(out).not.toContain("<script>bad</script>");

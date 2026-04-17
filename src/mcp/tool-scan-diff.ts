@@ -21,12 +21,7 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import {
-  BASELINE_FILENAME,
-  type BaselineFile,
-  fingerprintOf,
-  loadBaseline,
-} from "../engine/baseline.ts";
+import { BASELINE_FILENAME, type BaselineFile, loadBaseline } from "../engine/baseline.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import {
@@ -232,11 +227,11 @@ function mergeFilesByPath<T extends { readonly filePath: string }>(
 
 /**
  * Walks the formatted `files` output from `runScanAndFormat` and keeps
- * only findings whose fingerprint isn't already in the baseline. The
- * fingerprint uses the same `(ruleId, normalized filePath, message)`
- * recipe as `engine/baseline.ts`, via the shared `fingerprintOf`
- * helper — this is the whole reason the helper exists. Returns the
- * filtered files (path + findings) plus the total new-finding count.
+ * only findings whose `findingId` isn't already in the baseline. Uses
+ * the scanner-stamped `findingId` directly — no reconstruction needed
+ * because `formatFinding` surfaces the same token the baseline file
+ * keyed on when it was written. Returns the filtered files (path +
+ * findings) plus the total new-finding count.
  */
 function filterToNewFindings(
   files: ScanFormatted["files"],
@@ -250,7 +245,7 @@ function filterToNewFindings(
   for (const file of files) {
     const kept: unknown[] = [];
     for (const raw of file.findings) {
-      const hash = hashOfFormattedFinding(file.path, raw);
+      const hash = hashOfFormattedFinding(raw);
       if (hash === null) continue;
       if (baselineHashes.has(hash)) continue;
       kept.push(raw);
@@ -263,13 +258,12 @@ function filterToNewFindings(
   return { newFiles, newCount };
 }
 
-function hashOfFormattedFinding(filePath: string, raw: unknown): string | null {
+function hashOfFormattedFinding(raw: unknown): string | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
-  const ruleId = f["ruleId"];
-  const message = f["message"];
-  if (typeof ruleId !== "string" || typeof message !== "string") return null;
-  return fingerprintOf(ruleId, filePath, message);
+  const findingId = f["findingId"];
+  if (typeof findingId === "string" && findingId.length > 0) return findingId;
+  return null;
 }
 
 interface FirstFinding {

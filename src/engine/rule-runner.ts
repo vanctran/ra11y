@@ -11,6 +11,7 @@
 
 import type { EmittedViolation, Language, Rule } from "../types/rule.ts";
 import type { Severity, Violation } from "../types/violation.ts";
+import { computeFindingId } from "../utils/finding-id.ts";
 import { extensionMatches } from "../utils/path.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 import type { StandardFilter } from "./standard-filter.ts";
@@ -50,13 +51,13 @@ function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void 
   try {
     invokeLifecycle(rule, ctx, input.ast.root, sink);
   } catch (err) {
-    out.push(ruleCrashViolation(rule.id, input.filePath, err));
+    out.push(ruleCrashViolation(rule.id, input.filePath, input.source, err));
     return;
   }
 
   for (const emitted of sink) {
     if (ctx.isDisabled(emitted.location.line, rule.id)) continue;
-    out.push(stampViolation(emitted, rule.id, citedCriteria, input.filePath));
+    out.push(stampViolation(emitted, rule.id, citedCriteria, input.filePath, input.source));
   }
 }
 
@@ -90,13 +91,16 @@ function stampViolation(
   ruleId: string,
   criteria: readonly string[],
   filePath: string,
+  source: string,
 ): Violation {
+  const findingId = computeFindingId({ ruleId, filePath, source, line: emitted.location.line });
   return {
     ruleId,
     criteria,
     severity: emitted.severity,
     location: { ...emitted.location, filePath },
     message: emitted.message,
+    findingId,
     ...(emitted.suggestion !== undefined && { suggestion: emitted.suggestion }),
     ...(emitted.fix !== undefined && { fix: emitted.fix }),
     ...(emitted.fixPaths !== undefined && { fixPaths: emitted.fixPaths }),
@@ -115,9 +119,20 @@ function applies(rule: Rule, fileExt: string, _language: Language): boolean {
   return extensionMatches(fileExt, extensions);
 }
 
-function ruleCrashViolation(ruleId: string, filePath: string, err: unknown): Violation {
+function ruleCrashViolation(
+  ruleId: string,
+  filePath: string,
+  source: string,
+  err: unknown,
+): Violation {
   const message = err instanceof Error ? err.message : String(err);
   const errorSeverity: Severity = "error";
+  const findingId = computeFindingId({
+    ruleId: "internal/rule-crash",
+    filePath,
+    source,
+    line: 1,
+  });
   return {
     ruleId: "internal/rule-crash",
     criteria: [],
@@ -125,5 +140,6 @@ function ruleCrashViolation(ruleId: string, filePath: string, err: unknown): Vio
     location: { filePath, line: 1, column: 1 },
     message: `Rule '${ruleId}' crashed: ${message}`,
     suggestion: `This is a ra11y bug in rule '${ruleId}', not a problem with your code. Please file an issue with the stack trace if you can reproduce it.`,
+    findingId,
   };
 }

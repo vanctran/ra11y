@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { agentFormatter } from "../../src/output/formatters/agent.ts";
 import type { ReportData, ScanResult } from "../../src/types/violation.ts";
+import { withFindingIds } from "../helpers/make-violation.ts";
 
 // Fixed synthetic ScanResult — deterministic across runs. Duration is zeroed.
 const RESULT: ScanResult = {
-  violations: [
+  violations: withFindingIds([
     {
       ruleId: "keyboard/handler-missing",
       criteria: ["wcag22:2.1.1", "wcag21:2.1.1"],
@@ -38,7 +39,7 @@ const RESULT: ScanResult = {
       message: "<img> 'hero.png' is missing a text alternative.",
       suggestion: "Add alt describing the image content.",
     },
-  ],
+  ]),
   filesScanned: 15,
   durationMs: 0,
   enabledStandards: ["wcag22", "wcag21"],
@@ -210,11 +211,12 @@ describe("formatter: agent — files", () => {
     expect(lines).toEqual([...lines].sort((a, b) => a - b));
   });
 
-  it("finding.id has the format ruleId:path:line", () => {
+  it("finding.id is the stable findingId hash (survives line-number drift)", () => {
     const { files } = parse();
     const finding = files[0]?.findings[0];
     expect(finding).toBeDefined();
-    expect(finding!.id).toBe(`${finding!.ruleId}:${files[0]?.path}:${finding!.line}`);
+    // 12 hex chars, matches the Violation.findingId recipe.
+    expect(finding!.id).toMatch(/^[0-9a-f]{12}$/);
   });
 
   it("suppressWith uses JSX block comment syntax for .tsx files", () => {
@@ -241,7 +243,7 @@ describe("formatter: agent — files", () => {
   it("suppressWith uses // syntax for plain .ts files", () => {
     const tsResult: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "parsing/duplicate-id",
           criteria: ["wcag22:4.1.2"],
@@ -250,7 +252,7 @@ describe("formatter: agent — files", () => {
           message: "msg",
           suggestion: "fix",
         },
-      ],
+      ]),
     };
     const parsed = JSON.parse(agentFormatter.format(tsResult, REPORT)) as {
       files: Array<{ findings: Array<{ suppressWith: string }> }>;
@@ -263,7 +265,7 @@ describe("formatter: agent — files", () => {
   it("suppressWith uses CSS comment syntax for .css files", () => {
     const cssResult: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "focus/outline-visible",
           criteria: ["wcag22:2.4.7"],
@@ -272,7 +274,7 @@ describe("formatter: agent — files", () => {
           message: "outline: none removes focus indicator",
           suggestion: "Provide a replacement focus indicator.",
         },
-      ],
+      ]),
     };
     const parsed = JSON.parse(agentFormatter.format(cssResult, REPORT)) as {
       files: Array<{ findings: Array<{ suppressWith: string }> }>;
@@ -285,7 +287,7 @@ describe("formatter: agent — files", () => {
   it("suppressWith uses HTML comment syntax for .html files", () => {
     const htmlResult: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "media/alt-text-missing",
           criteria: ["wcag22:1.1.1"],
@@ -294,7 +296,7 @@ describe("formatter: agent — files", () => {
           message: "<img> missing alt",
           suggestion: "Add alt attribute.",
         },
-      ],
+      ]),
     };
     const parsed = JSON.parse(agentFormatter.format(htmlResult, REPORT)) as {
       files: Array<{ findings: Array<{ suppressWith: string }> }>;

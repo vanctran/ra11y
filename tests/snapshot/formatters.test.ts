@@ -6,11 +6,12 @@ import {
 } from "../../src/output/formatters/index.ts";
 import type { ReportData, ScanResult } from "../../src/types/violation.ts";
 import { setColorEnabled } from "../../src/utils/ansi.ts";
+import { withFindingIds } from "../helpers/make-violation.ts";
 
 // Fixed input so snapshots are deterministic. Duration is zeroed to
 // avoid wall-clock drift.
 const RESULT: ScanResult = {
-  violations: [
+  violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1"],
@@ -35,7 +36,7 @@ const RESULT: ScanResult = {
       message: "<img> 'logo.png' is missing a text alternative.",
       suggestion: "Add alt='Acme Co.' or alt='' if decorative.",
     },
-  ],
+  ]),
   filesScanned: 12,
   durationMs: 0,
   enabledStandards: ["wcag22"],

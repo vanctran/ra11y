@@ -30,6 +30,7 @@ import type {
 } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
 import type { ReportData, ScanResult, Severity, Violation } from "../types/violation.ts";
+import { computeFindingId } from "../utils/finding-id.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
@@ -157,10 +158,14 @@ function runProjectRules(
     disableMap: f.disableMap ?? new Map<number, ReadonlySet<string>>(),
   }));
   const disableMaps = new Map<string, ReadonlyMap<number, ReadonlySet<string>>>();
-  for (const f of projectFiles) disableMaps.set(f.filePath, f.disableMap);
+  const sourcesByPath = new Map<string, string>();
+  for (const f of projectFiles) {
+    disableMaps.set(f.filePath, f.disableMap);
+    sourcesByPath.set(f.filePath, f.source);
+  }
   const out: Violation[] = [];
   for (const rule of inputs.rules) {
-    invokeOneProjectRule(rule, projectFiles, enabled, filter, disableMaps, out);
+    invokeOneProjectRule(rule, projectFiles, enabled, filter, disableMaps, sourcesByPath, out);
   }
   return out;
 }
@@ -171,6 +176,7 @@ function invokeOneProjectRule(
   enabled: ReadonlySet<string>,
   filter: StandardFilter,
   disableMaps: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
+  sourcesByPath: ReadonlyMap<string, string>,
   out: Violation[],
 ): void {
   if (!rule.afterProject) return;
@@ -185,6 +191,9 @@ function invokeOneProjectRule(
     const maybe = rule.afterProject(ctx);
     if (Array.isArray(maybe)) for (const v of maybe) sink.push(v);
   } catch (err) {
+    // Project crashes don't have a specific file — use an empty
+    // source so the findingId still carries (ruleId, "") but the
+    // context-hash is stable regardless of which file triggered.
     out.push(projectRuleCrashViolation(rule.id, err));
     return;
   }
@@ -193,12 +202,20 @@ function invokeOneProjectRule(
     const dm = disableMaps.get(em.location.filePath);
     const disabled = dm?.get(em.location.line);
     if (disabled?.has("*") || disabled?.has(rule.id)) continue;
+    const source = sourcesByPath.get(em.location.filePath) ?? "";
+    const findingId = computeFindingId({
+      ruleId: rule.id,
+      filePath: em.location.filePath,
+      source,
+      line: em.location.line,
+    });
     out.push({
       ruleId: rule.id,
       criteria,
       severity: em.severity,
       location: em.location,
       message: em.message,
+      findingId,
       ...(em.suggestion !== undefined && { suggestion: em.suggestion }),
       ...(em.fix !== undefined && { fix: em.fix }),
       ...(em.fixPaths !== undefined && { fixPaths: em.fixPaths }),
@@ -209,6 +226,12 @@ function invokeOneProjectRule(
 
 function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
   const severity: Severity = "error";
+  const findingId = computeFindingId({
+    ruleId: "internal/rule-crash",
+    filePath: "",
+    source: "",
+    line: 1,
+  });
   return {
     ruleId: "internal/rule-crash",
     criteria: [],
@@ -216,6 +239,7 @@ function projectRuleCrashViolation(ruleId: string, err: unknown): Violation {
     location: { filePath: "", line: 1, column: 1 },
     message: `Project-scope rule '${ruleId}' crashed: ${err instanceof Error ? err.message : String(err)}`,
     suggestion: `This is a ra11y bug in rule '${ruleId}', not a problem with your code. Please file an issue with the stack trace if you can reproduce it.`,
+    findingId,
   };
 }
 

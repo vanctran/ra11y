@@ -163,7 +163,9 @@ function buildFinding(v: Violation): AgentFinding {
     v.severity === "info" ? "review" : hasSuggestion ? "auto-fix" : "review";
 
   const finding: AgentFinding = {
-    id: `${v.ruleId}:${v.location.filePath}:${v.location.line}`,
+    // Stable identity — survives line-number drift in the same file.
+    // See src/utils/finding-id.ts for the hash recipe.
+    id: v.findingId,
     ruleId: v.ruleId,
     criteria: [...v.criteria],
     severity: v.severity,

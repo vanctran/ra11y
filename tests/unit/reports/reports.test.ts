@@ -10,12 +10,13 @@ import {
 } from "../../../src/reports/index.ts";
 import { BUILTIN_STANDARDS } from "../../../src/standards/index.ts";
 import type { ScanResult } from "../../../src/types/violation.ts";
+import { withFindingIds } from "../../helpers/make-violation.ts";
 
 // Fixed synthetic ScanResult so the reports layer can be tested without
 // parsing real files. Two violations targeting wcag22:1.1.1 (from a
 // single rule declaration the alt-text-missing rule could produce).
 const RESULT: ScanResult = {
-  violations: [
+  violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1", "section508:1.1.1", "en301549:9.1.1.1"],
@@ -32,7 +33,7 @@ const RESULT: ScanResult = {
       message: "<img> missing alt.",
       suggestion: "Add alt text.",
     },
-  ],
+  ]),
   filesScanned: 2,
   durationMs: 5,
   enabledStandards: ["wcag22", "wcag21", "section508", "en301549"],
@@ -189,7 +190,7 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
     // the criterion is tagged manual.
     const ruleHit: ScanResult = {
       ...RESULT,
-      violations: [
+      violations: withFindingIds([
         {
           ruleId: "document/meta-refresh",
           criteria: ["wcag22:2.2.1"],
@@ -198,7 +199,7 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
           message: '<meta http-equiv="refresh">',
           suggestion: "Remove.",
         },
-      ],
+      ]),
     };
     const report = buildVpatReport(ruleHit, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z");
     const wcag22 = report.standards.find((s) => s.standardId === "wcag22");

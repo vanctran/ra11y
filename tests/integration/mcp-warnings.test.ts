@@ -85,19 +85,24 @@ function bodyOf(response: JsonRpcResponse): Record<string, unknown> {
 }
 
 describe("scan_project emits top-level `warnings` for silent-failure modes (P0-E)", () => {
-  it("scanned_zero_files: scanning a nonexistent path now hard-errors via the structured envelope (P0-F)", async () => {
-    // P0-F upgraded the scan_project nonexistent-cwd path from a soft
-    // `warnings: ["scanned_zero_files"]` signal to a hard error envelope
-    // (`code: "cwd-not-found"`). The warnings-array path still applies
-    // when `cwd` exists but is empty / has no parseable files.
-    const responses = await mcpSession([
-      initMsg(1),
-      toolCall(2, "scan_project", { cwd: "/tmp/ra11y-nonexistent-xyz" }),
-    ]);
-    const result = responses[1].result as { isError?: boolean; content: Array<{ text: string }> };
-    expect(result.isError).toBe(true);
-    const body = JSON.parse(result.content[0].text) as { code?: string };
-    expect(body.code).toBe("cwd-not-found");
+  it("scanned_zero_files fires when the scan root exists but contains zero parseable files", async () => {
+    // Malformed-input paths (nonexistent cwd) now hard-error with the
+    // `cwd-not-found` envelope under P0-F — that case is guarded by
+    // `mcp-scan-errors.test.ts`. The warnings-path still needs to cover
+    // "valid directory, nothing to parse," which is the empty-but-real
+    // case below. Create a real temp dir with no parseable files so
+    // the discriminator is exercised honestly.
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const empty = mkdtempSync(join(tmpdir(), "ra11y-empty-"));
+    try {
+      const responses = await mcpSession([initMsg(1), toolCall(2, "scan_project", { cwd: empty })]);
+      const body = bodyOf(responses[1]) as { warnings?: readonly string[] };
+      expect(Array.isArray(body.warnings)).toBe(true);
+      expect(body.warnings).toContain("scanned_zero_files");
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 
   it("template_files_parsed_as_literal: a Jinja fixture raises the parsed-as-literal code", async () => {
@@ -135,18 +140,23 @@ describe("scan_project emits top-level `warnings` for silent-failure modes (P0-E
 });
 
 describe("scan emits top-level `warnings` for silent-failure modes (P0-E)", () => {
-  it("paths-all-missing now hard-errors via the structured envelope (P0-F)", async () => {
-    // P0-F: when every requested path is missing on disk, `scan` returns
-    // `code: "scan-paths-not-found"` rather than a silent
-    // `warnings: ["scanned_zero_files"]` success.
-    const responses = await mcpSession([
-      initMsg(1),
-      toolCall(2, "scan", { paths: ["/tmp/ra11y-nonexistent-xyz"] }),
-    ]);
-    const result = responses[1].result as { isError?: boolean; content: Array<{ text: string }> };
-    expect(result.isError).toBe(true);
-    const body = JSON.parse(result.content[0].text) as { code?: string };
-    expect(body.code).toBe("scan-paths-not-found");
+  it("scanned_zero_files fires when the paths exist but resolve to zero parseable files", async () => {
+    // Nonexistent-path inputs now hard-error with `scan-paths-not-found`
+    // under P0-F — that case lives in `mcp-scan-errors.test.ts`. Here we
+    // cover the real-but-empty directory case: a valid dir with no
+    // parseable files produces a successful response with the
+    // `scanned_zero_files` soft signal.
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const empty = mkdtempSync(join(tmpdir(), "ra11y-empty-"));
+    try {
+      const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [empty] })]);
+      const body = bodyOf(responses[1]) as { warnings?: readonly string[] };
+      expect(Array.isArray(body.warnings)).toBe(true);
+      expect(body.warnings).toContain("scanned_zero_files");
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 
   it("does NOT fire root_source_defaulted on `scan` — that tool takes paths directly and has no root-resolution step", async () => {

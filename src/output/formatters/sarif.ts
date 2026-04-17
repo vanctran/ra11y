@@ -160,7 +160,13 @@ function violationToSarifResult(violation: Violation): SarifResult {
       },
     ],
     partialFingerprints: {
-      primary: fingerprintViolation(violation),
+      // Reuse the Violation's stable findingId — GitHub code scanning
+      // uses this to deduplicate the same violation across runs. The
+      // findingId is line-number-drift resilient by design (hashes the
+      // ±3-line source-context window, not the line number itself), so
+      // an unrelated edit above the violation won't invalidate
+      // GitHub's dedup key.
+      primary: violation.findingId,
     },
   };
 }
@@ -169,27 +175,4 @@ function severityToLevel(severity: Severity): SarifLevel {
   if (severity === "error") return "error";
   if (severity === "warning") return "warning";
   return "note";
-}
-
-/**
- * Stable fingerprint so GitHub can track the same violation across
- * runs. Uses (ruleId, normalized file path, line, column, message)
- * and NOT the full file content, so unrelated line-number shifts in
- * the same file don't invalidate the fingerprint.
- *
- * Implementation: djb2 hash over the canonical string. Zero-dep.
- */
-function fingerprintViolation(violation: Violation): string {
-  const canonical = [
-    violation.ruleId,
-    violation.location.filePath,
-    violation.location.line,
-    violation.location.column,
-    violation.message,
-  ].join("\u0000");
-  let hash = 5381;
-  for (let i = 0; i < canonical.length; i += 1) {
-    hash = ((hash << 5) + hash + canonical.charCodeAt(i)) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
 }

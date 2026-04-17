@@ -16,14 +16,20 @@
  *   - update: run a scan, rewrite the file with the current set,
  *             removing violations that have been fixed
  *
- * Violations are identified by a stable fingerprint:
- *   sha1(ruleId + normalized filePath + message)
+ * Cross-run identity: baselines are matched by `Violation.findingId`
+ * — the same opaque token the scanner stamps on every finding. The
+ * findingId is computed from `(ruleId, relativeFilePath,
+ * lineContextHash)` and is resilient to line-number drift within the
+ * file, so unrelated edits above a violation don't invalidate its
+ * baseline entry. See `src/utils/finding-id.ts` for the recipe.
  *
- * Line numbers are intentionally NOT in the fingerprint so that
- * unrelated edits in the same file don't invalidate the baseline.
- * Message is included because the same rule can fire multiple times
- * in the same file on different content (e.g., two different images
- * both missing alt text).
+ * Legacy note: baseline files generated before v0.2.0 used a
+ * `sha1(ruleId + filePath + message)` fingerprint. The `fingerprintOf`
+ * helper below still computes that value so `scan_diff` can consume
+ * pre-existing baselines during the transition, but new writes stamp
+ * `findingId` into the `hash` field. Bumping `BASELINE_VERSION` would
+ * force regeneration; for now we accept the silent identity change
+ * since `hash` is an opaque token and the file still round-trips.
  */
 
 import { createHash } from "node:crypto";
@@ -59,16 +65,22 @@ export interface BaselineDiff {
   readonly resolved: readonly BaselineEntry[];
 }
 
-/** Builds a stable fingerprint for a violation. Line numbers are excluded by design. */
+/**
+ * Returns the stable cross-run identity of a violation. Baselines key
+ * by this value — the same `findingId` the scanner stamps on every
+ * finding. Line-number drift within the file does not change it; see
+ * `src/utils/finding-id.ts`.
+ */
 export function fingerprint(violation: Violation): string {
-  return fingerprintOf(violation.ruleId, violation.location.filePath, violation.message);
+  return violation.findingId;
 }
 
 /**
- * Component-level fingerprint, for callers that already have the
- * fingerprint inputs as separate strings (e.g. MCP response-shape diffs
- * that operate on `{ ruleId, path, message }` rather than full
- * `Violation` objects). Identical hashing to `fingerprint()`.
+ * Legacy component-level fingerprint kept so callers that still
+ * operate on `(ruleId, filePath, message)` tuples (e.g. MCP
+ * scan_diff's formatted-finding path) can compute the same value we
+ * used before the `findingId` switch. New call sites should prefer
+ * `Violation.findingId` directly; this helper exists for back-compat.
  */
 export function fingerprintOf(ruleId: string, filePath: string, message: string): string {
   const canonical = [ruleId, normalizeFilePath(filePath), message].join("\u0000");

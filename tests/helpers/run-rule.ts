@@ -13,6 +13,7 @@ import { parseCss, parseHtml, parseTsx } from "../../src/input/parsers/index.ts"
 import type { Ast } from "../../src/types/ast.ts";
 import type { EmittedViolation, Language, ProjectContext, Rule } from "../../src/types/rule.ts";
 import type { Violation } from "../../src/types/violation.ts";
+import { computeFindingId } from "../../src/utils/finding-id.ts";
 
 export interface RunRuleOptions {
   readonly filePath?: string;
@@ -38,7 +39,7 @@ export function runRule(
     sink,
   );
   invokeLifecycle(rule, ctx, ast, filePath, source, sink);
-  return sink.map((v) => shapeViolation(rule, v, filePath));
+  return sink.map((v) => shapeViolation(rule, v, filePath, source));
 }
 
 /** Mirrors the engine's rule-runner lifecycle, plus a single-file afterProject pass. */
@@ -78,14 +79,27 @@ function collectReturn(
   if (Array.isArray(maybe)) for (const v of maybe) sink.push(v);
 }
 
-function shapeViolation(rule: Rule, v: EmittedViolation, filePath: string): Violation {
+function shapeViolation(
+  rule: Rule,
+  v: EmittedViolation,
+  filePath: string,
+  source: string,
+): Violation {
+  const effectivePath = v.location.filePath || filePath;
+  const findingId = computeFindingId({
+    ruleId: rule.id,
+    filePath: effectivePath,
+    source,
+    line: v.location.line,
+  });
   return {
     ruleId: rule.id,
     criteria: [...rule.satisfies],
     severity: v.severity,
     // Project-scope emitters set filePath themselves; per-file paths fall through.
-    location: { ...v.location, filePath: v.location.filePath || filePath },
+    location: { ...v.location, filePath: effectivePath },
     message: v.message,
+    findingId,
     ...(v.suggestion !== undefined && { suggestion: v.suggestion }),
     ...(v.fix !== undefined && { fix: v.fix }),
     ...(v.fixPaths !== undefined && { fixPaths: v.fixPaths }),
