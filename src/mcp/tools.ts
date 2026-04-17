@@ -13,6 +13,7 @@ import { runScan } from "../engine/scanner.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { applyFixTool } from "./tool-apply-fix.ts";
 import { auditTool } from "./tool-audit.ts";
 import { baselineTool } from "./tool-baseline.ts";
 import { checklistTool } from "./tool-checklist.ts";
@@ -474,6 +475,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   explainRuleTool,
   explainStandardTool,
   suggestFixTool,
+  applyFixTool,
   coverageTool,
   checklistTool,
   reviewCandidatesTool,
