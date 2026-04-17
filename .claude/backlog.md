@@ -103,9 +103,10 @@ Owner: `parser-author` + main session. Promoted from staged 2026-04-17. Foundati
 - [ ] `src/mcp/tool-draft-vpat-narrative.ts` — drafts the VPAT "Remarks and explanations" cell per criterion
 - [ ] `src/mcp/tool-triage-findings.ts` — pure (no sampling) triage that labels each finding — the input for the LLM-backed tools above
 - [ ] Prompt library under `src/mcp/prompts/` as pure strings + variable substitution (checksum registry for version-pinning)
-- [ ] `tests/unit/mcp/sampling.test.ts` with a fake host recording sampling requests
-- [ ] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter
-- [ ] Docs: `docs/kb/architecture/mcp-sampling.md`, `docs/mcp/prompts.md`
+- [x] `tests/unit/mcp/sampling.test.ts` with a fake host recording sampling requests
+- [ ] `tests/integration/mcp-sampling.test.ts` with a scripted host adapter (blocked on first sampling-backed tool)
+- [x] Docs: `docs/kb/architecture/mcp-sampling.md`
+- [ ] Docs: `docs/mcp/prompts.md`
 - [ ] `/audit` MCP prompt template: end-to-end workflow (scan → triage → verdict → VPAT draft) exposed as a host-driven prompt
 
 ---
@@ -120,7 +121,7 @@ Owner: `doc-writer` + main session. Items here expand the agent-host matrix and 
 - [ ] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code
 - [ ] `examples/ra11y-in-cursor/` — Cursor-specific wiring once their MCP host ships sampling
 - [ ] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings
-- [ ] Public benchmark: `benchmarks/a11y-tool-comparison.md` — accuracy, false-positive rate, agent-workflow completion rate against a labeled fixture set, published with each release
+- [~] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold committed (2f5539a); numeric values land in a follow-up before release
 
 ---
 
