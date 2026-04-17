@@ -195,13 +195,14 @@ function buildWrapperMeta(args: {
       autoDetectedWrappersNote:
         detectedNames.length === 0
           ? "autoDetectWrappers ran but found no PascalCase components with onClick to register."
-          : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. Copy the names you confirm to \`nativeWrappers\` in ra11y.config.ts for durable registration; remove any that actually render a <div>/<span> internally — those are real bugs.`,
+          : `autoDetectWrappers registered ${detectedNames.length} component(s) for this scan only. For durable registration, add them to \`nativeWrappers\` in ra11y.config.ts — if the file does not exist, create it with:\n\n  import { defineConfig } from "@ra11y/core";\n\n  export default defineConfig({\n    nativeWrappers: [${detectedNames.map((n) => `"${n}"`).join(", ")}],\n  });\n\nRemove any that actually render a <div>/<span> internally — those are real bugs.`,
     };
   }
   if (configMissing && detectedNames.length > 0) {
+    const nameList = detectedNames.map((n) => `"${n}"`).join(", ");
     return {
       suggestedNativeWrappers: detectedNames,
-      suggestedNativeWrappersNote: `No ra11y.config.ts was found, but the detector spotted ${detectedNames.length} PascalCase component(s) with onClick that look like native-element wrappers. To use them for this scan, re-call scan_project with \`autoDetectWrappers: true\`. To make it durable, add them to \`nativeWrappers\` in a ra11y.config.ts at the project root. Not yet registered for this scan.`,
+      suggestedNativeWrappersNote: `No ra11y.config.ts was found, but the detector spotted ${detectedNames.length} PascalCase component(s) with onClick that look like native-element wrappers. To use them for this scan, re-call scan_project with \`autoDetectWrappers: true\`. To make it durable, create \`ra11y.config.ts\` at the project root with:\n\n  import { defineConfig } from "@ra11y/core";\n\n  export default defineConfig({\n    nativeWrappers: [${nameList}],\n  });\n\nNot yet registered for this scan.`,
     };
   }
   return {};

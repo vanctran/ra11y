@@ -240,7 +240,11 @@ describe("MCP tool: scan_project", () => {
         };
       };
       expect(data.meta.autoDetectedWrappers).toEqual(["ActionButton", "Card"]);
-      expect(data.meta.autoDetectedWrappersNote).toContain("Copy the names you confirm");
+      // Note spells out the concrete defineConfig shape so the agent
+      // can compose the ra11y.config.ts edit in one Read+Edit pass.
+      expect(data.meta.autoDetectedWrappersNote).toContain("defineConfig");
+      expect(data.meta.autoDetectedWrappersNote).toContain('"ActionButton"');
+      expect(data.meta.autoDetectedWrappersNote).toContain('"Card"');
     });
 
     it("omits the meta fields entirely when the flag is off", async () => {
