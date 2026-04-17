@@ -259,6 +259,34 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(["high", "medium", "low"]).toContain(fix.confidence);
   });
 
+  it("suggest_fix carries verifyCommand + verifyCommandStructured pointing at scan_file (Q2-VERIFYCMD)", async () => {
+    // Every suggest_fix response — edit, guidance, or none — should
+    // carry the prose + structured verify pair. The structured form
+    // names scan_file (not scan_project) so the re-check is narrow
+    // and deterministic, with ruleId included so the agent can
+    // post-filter the re-scan's findings to the rule it just fixed.
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "suggest_fix", {
+        ruleId: "media/alt-text-missing",
+        file: BAD_ALT_FILE,
+        line: 1,
+      }),
+    ]);
+    const fix = bodyOf(responses[1]) as {
+      verifyCommand: string;
+      verifyCommandStructured: {
+        tool: string;
+        args: { file: string; ruleId?: string };
+      };
+    };
+    expect(typeof fix.verifyCommand).toBe("string");
+    expect(fix.verifyCommand).toContain("scan_file");
+    expect(fix.verifyCommandStructured.tool).toBe("scan_file");
+    expect(fix.verifyCommandStructured.args.file).toBe(BAD_ALT_FILE);
+    expect(fix.verifyCommandStructured.args.ruleId).toBe("media/alt-text-missing");
+  });
+
   it("suggest_fix with an unknown rule returns a tool-level error envelope with code rule-not-found", async () => {
     const responses = await mcpSession([
       initMsg(1),

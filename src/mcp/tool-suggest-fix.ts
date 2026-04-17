@@ -105,6 +105,7 @@ export const suggestFixTool: McpTool = {
       match,
       sourceContext,
       source: parsed.source,
+      filePath,
     });
     // Conditional-spread the deprecation signal — omitted on canonical
     // `file` (CLAUDE.md §1 "Ambiguous field shapes are dishonest").
