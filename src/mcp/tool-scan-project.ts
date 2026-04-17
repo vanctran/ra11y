@@ -83,6 +83,16 @@ export const scanProjectTool: McpTool = {
           description:
             'Paths to scan in addition to the auto-discovered tree, with `.gitignore` and default build-dir skips (`dist`, `build`, `out`, `.next`, …) bypassed. Use to include post-compile CSS/HTML that Tailwind or the bundler produces — e.g. `["dist/assets"]` — so color-contrast and focus-visible rules have real styles to evaluate. User `exclude` patterns still apply. Relative paths resolve from `cwd`.',
         },
+        limit: {
+          type: "number",
+          description:
+            "Maximum number of files (with findings) to include in the response. Defaults to 200. The scan still runs over every file in scope — the cap only bounds response size to keep large monorepos from overflowing MCP token limits. When more files have findings than fit, the response includes `truncated: true` and `nextOffset: N`; call again with `offset: N` to page.",
+        },
+        offset: {
+          type: "number",
+          description:
+            "Starting index into the full files-with-findings list. Defaults to 0. Use with `limit` + the `nextOffset` from a previous truncated response to iterate.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -171,8 +181,19 @@ export const scanProjectTool: McpTool = {
     // separate `baseline check` round-trip. Omitted when no baseline
     // exists (honest shape per CLAUDE.md §1).
     const baselineStatus = await probeBaselineStatus(root);
+    // P1-OVF: response-size guard. Large monorepo scans can produce
+    // files lists that exceed MCP token caps; the scan itself still
+    // runs over everything (plan.totalFindings stays the full tally),
+    // but the emitted `files` array is capped. When more files with
+    // findings exist than fit, the response carries `truncated: true`
+    // and `nextOffset` so the agent can page. Fields omitted when the
+    // whole result fits (honest shape per CLAUDE.md §1).
+    const pageParams = readPageParams(params);
+    const page = paginateFiles(formatted.files, pageParams);
     return textResult({
-      ...formatted,
+      plan: formatted.plan,
+      files: page.files,
+      ...page.paginationFields,
       ...warningsFieldFromScanMeta({
         meta: formatted.meta,
         rootSource,
@@ -624,5 +645,59 @@ function buildArtifactsFields(files: readonly ParsedFile[]): {
   return {
     present: paths.length > 0,
     metaField: paths.length > 0 ? { scannedBuildArtifacts: paths } : {},
+  };
+}
+
+/** Default files-with-findings cap per scan_project response (P1-OVF). */
+const DEFAULT_PAGE_LIMIT = 200;
+/** Minimum caller-supplied limit. Below this we clamp up. */
+const MIN_PAGE_LIMIT = 1;
+/** Maximum caller-supplied limit. Above this we clamp down. */
+const MAX_PAGE_LIMIT = 2000;
+
+interface PageParams {
+  readonly limit: number;
+  readonly offset: number;
+}
+
+/** Reads limit/offset params with sensible clamping. */
+function readPageParams(params: Record<string, unknown>): PageParams {
+  const rawLimit = typeof params["limit"] === "number" ? params["limit"] : DEFAULT_PAGE_LIMIT;
+  const rawOffset = typeof params["offset"] === "number" ? params["offset"] : 0;
+  const limit = Math.max(MIN_PAGE_LIMIT, Math.min(MAX_PAGE_LIMIT, Math.floor(rawLimit)));
+  const offset = Math.max(0, Math.floor(rawOffset));
+  return { limit, offset };
+}
+
+/**
+ * Slices the per-file findings list by `offset`/`limit` and returns the
+ * page plus the conditional `truncated`/`nextOffset` fields to spread
+ * into the response. Honest-shape: both pagination fields are omitted
+ * together when the whole result fits (CLAUDE.md §1 "Ambiguous field
+ * shapes are dishonest" — `truncated: false` would be dishonest since
+ * it reads as "present but nothing to report").
+ */
+function paginateFiles<T>(
+  files: readonly T[],
+  { limit, offset }: PageParams,
+): {
+  readonly files: readonly T[];
+  readonly paginationFields: {
+    readonly truncated?: true;
+    readonly nextOffset?: number;
+    readonly totalFilesWithFindings?: number;
+  };
+} {
+  const page = files.slice(offset, offset + limit);
+  const hasMore = offset + limit < files.length;
+  if (!hasMore && offset === 0) {
+    return { files: page, paginationFields: {} };
+  }
+  return {
+    files: page,
+    paginationFields: {
+      ...(hasMore ? { truncated: true as const, nextOffset: offset + limit } : {}),
+      totalFilesWithFindings: files.length,
+    },
   };
 }
