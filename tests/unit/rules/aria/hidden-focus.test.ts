@@ -214,5 +214,28 @@ describe("rule aria/hidden-focus", () => {
       expect(v[0]?.fixPaths?.primary.label).toContain("inert");
       expect(v[0]?.fixPaths?.alternatives).toHaveLength(2);
     });
+
+    it("ships a mechanical aria-hidden → inert edit on JSX (double-quote convention)", () => {
+      // JSX string-literal attrs use double quotes by convention, so
+      // `aria-hidden="true"` is a guaranteed source match — we emit
+      // oldText/newText so Edit can apply it without a re-read.
+      const v = runRule(rule, `const X = <button aria-hidden="true">X</button>;`, {
+        filePath: "app.tsx",
+      });
+      expect(v[0]?.fixPaths?.primary.edit).toEqual({
+        oldText: 'aria-hidden="true"',
+        newText: "inert",
+      });
+    });
+
+    it("stays guidance-only on HTML (quote style is not guaranteed)", () => {
+      // HTML permits `aria-hidden='true'` / `aria-hidden=true`; our
+      // oldText string can't be guaranteed to match. Keep the primary
+      // path as label-only.
+      const v = runRule(rule, `<button aria-hidden="true">X</button>`, {
+        filePath: "index.html",
+      });
+      expect(v[0]?.fixPaths?.primary.edit).toBeUndefined();
+    });
   });
 });

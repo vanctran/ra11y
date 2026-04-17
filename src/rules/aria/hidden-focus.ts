@@ -137,7 +137,13 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
       continue;
     }
     const descendant = findHtmlFocusableDescendant(el);
-    if (descendant) emit(buildDescendantViolation(el.tagName, descendant.tagName, el.loc.start));
+    // HTML attribute quoting is polymorphic (`aria-hidden="true"`,
+    // `aria-hidden='true'`, `aria-hidden=true`), so we can't emit a
+    // guaranteed-matching oldText without reading the raw source.
+    // Ship guidance; let the agent do the one-line edit.
+    if (descendant) {
+      emit(buildDescendantViolation(el.tagName, descendant.tagName, el.loc.start, false));
+    }
   }
 }
 
@@ -148,7 +154,7 @@ function isHtmlAriaHiddenTrue(el: HtmlElement): boolean {
 function checkHtmlDirectFocusable(el: HtmlElement): Violation | null {
   const tag = el.tagName.toLowerCase();
   if (isHtmlElementFocusable(el, tag)) {
-    return buildDirectViolation(el.tagName, el.loc.start);
+    return buildDirectViolation(el.tagName, el.loc.start, false);
   }
   return null;
 }
@@ -209,7 +215,12 @@ function checkJsx(module: TsxModule, emit: Emit): void {
       continue;
     }
     const descendant = findJsxFocusableDescendant(el);
-    if (descendant) emit(buildDescendantViolation(el.tagName, descendant.tagName, el.loc.start));
+    // JSX string-literal attributes use double quotes by convention
+    // (and by Prettier default), so `aria-hidden="true"` is a
+    // guaranteed source match — safe to emit a mechanical edit.
+    if (descendant) {
+      emit(buildDescendantViolation(el.tagName, descendant.tagName, el.loc.start, true));
+    }
   }
 }
 
@@ -219,7 +230,7 @@ function isJsxAriaHiddenTrue(el: JsxElement): boolean {
 
 function checkJsxDirectFocusable(el: JsxElement): Violation | null {
   if (isJsxElementFocusable(el)) {
-    return buildDirectViolation(el.tagName, el.loc.start);
+    return buildDirectViolation(el.tagName, el.loc.start, true);
   }
   return null;
 }
@@ -297,7 +308,20 @@ function keepsInTabOrder(raw: string): boolean {
 // Violation builders
 // ---------------------------------------------------------------------------
 
-function buildDirectViolation(tagName: string, loc: { line: number; column: number }): Violation {
+/**
+ * Mechanical oldText/newText for the inert swap. Only safe to emit
+ * when the caller can guarantee the source uses `aria-hidden="true"`
+ * verbatim — JSX string-literal attrs do (Prettier convention), HTML
+ * may use single quotes or unquoted forms. When unsafe, the primary
+ * path ships as guidance and the agent does the one-line edit.
+ */
+const INERT_SWAP = { oldText: 'aria-hidden="true"', newText: "inert" } as const;
+
+function buildDirectViolation(
+  tagName: string,
+  loc: { line: number; column: number },
+  canEdit: boolean,
+): Violation {
   const nonFocusablePath =
     tagName === "a" || tagName === "area"
       ? "make the element non-focusable by removing href (an anchor without href is not in the tab order)"
@@ -307,6 +331,7 @@ function buildDirectViolation(tagName: string, loc: { line: number; column: numb
   const fixPaths: FixPaths = {
     primary: {
       label: `replace aria-hidden="true" with the \`inert\` attribute — inert hides the subtree from the accessibility tree AND removes it from the tab order in one declaration (Baseline widely available since 2024)`,
+      ...(canEdit ? { edit: { ...INERT_SWAP } } : {}),
     },
     alternatives: [
       {
@@ -331,10 +356,12 @@ function buildDescendantViolation(
   parentTag: string,
   childTag: string,
   loc: { line: number; column: number },
+  canEdit: boolean,
 ): Violation {
   const fixPaths: FixPaths = {
     primary: {
       label: `replace aria-hidden="true" on the <${parentTag}> with the \`inert\` attribute — inert makes the whole subtree unfocusable AND hidden from AT in one declaration (Baseline widely available since 2024)`,
+      ...(canEdit ? { edit: { ...INERT_SWAP } } : {}),
     },
     alternatives: [
       {
