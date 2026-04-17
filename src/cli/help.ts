@@ -34,6 +34,12 @@ RULES
 BEHAVIOR
   --fail-on <level>      error (default) | warning | any | never
 
+BASELINE
+  --baseline <mode>      create | check | update (grandfather existing violations)
+  --baseline-file <path> Override baseline path (default: .ra11y-baseline.json)
+  ra11y baseline prune [--dry-run]
+                         Remove baseline entries pointing at deleted files
+
 META
   -h, --help             Show this help
   -v, --version          Print version

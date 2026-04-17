@@ -35,6 +35,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { ScanResult, Violation } from "../types/violation.ts";
 
 export const BASELINE_FILENAME = ".ra11y-baseline.json";
@@ -63,6 +64,22 @@ export interface BaselineDiff {
   readonly newViolations: readonly Violation[];
   /** Entries in the baseline that no longer appear in the scan — good news. */
   readonly resolved: readonly BaselineEntry[];
+}
+
+/**
+ * Result of a baseline prune pass. `removed` is the list of entries
+ * whose file paths no longer exist on disk and were dropped; `kept`
+ * is the count of live entries that remain in the pruned file. The
+ * shape is structural so callers (CLI, future MCP tool) can report
+ * what changed without re-scanning.
+ */
+export interface BaselinePruneResult {
+  /** Entries dropped because their file no longer exists. */
+  readonly removed: readonly BaselineEntry[];
+  /** Entries retained (file still exists). */
+  readonly kept: readonly BaselineEntry[];
+  /** The pruned baseline file, ready to hand to `writeBaseline`. */
+  readonly pruned: BaselineFile;
 }
 
 /**
@@ -143,6 +160,45 @@ export async function loadBaseline(path: string): Promise<BaselineFile | null> {
 /** Writes a baseline file to disk with a canonical indent. */
 export async function writeBaseline(path: string, baseline: BaselineFile): Promise<void> {
   await writeFile(path, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+}
+
+/**
+ * Drops baseline entries whose file paths no longer exist on disk.
+ * Paths resolve against `scanRoot` (entries store paths relative).
+ * Metadata and retained-entry order round-trip unchanged.
+ *
+ * @param baseline - Parsed baseline file.
+ * @param scanRoot - Directory stored entries are relative to.
+ * @param fileExists - Injectable predicate; defaults to `fs.existsSync`.
+ * @returns `{ removed, kept, pruned }` — `pruned` ready for {@link writeBaseline}.
+ *
+ * @example
+ * ```ts
+ * const baseline = await loadBaseline(".ra11y-baseline.json");
+ * const { removed, pruned } = pruneBaseline(baseline!, process.cwd());
+ * if (removed.length > 0) await writeBaseline(".ra11y-baseline.json", pruned);
+ * ```
+ */
+export function pruneBaseline(
+  baseline: BaselineFile,
+  scanRoot: string,
+  fileExists: (path: string) => boolean = existsSync,
+): BaselinePruneResult {
+  const removed: BaselineEntry[] = [];
+  const kept: BaselineEntry[] = [];
+  for (const entry of baseline.violations) {
+    const absolute = resolve(scanRoot, entry.filePath);
+    if (fileExists(absolute)) kept.push(entry);
+    else removed.push(entry);
+  }
+  const pruned: BaselineFile = {
+    version: baseline.version,
+    generatedAt: baseline.generatedAt,
+    ra11yVersion: baseline.ra11yVersion,
+    standards: baseline.standards,
+    violations: kept,
+  };
+  return { removed, kept, pruned };
 }
 
 /**

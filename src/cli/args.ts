@@ -20,6 +20,7 @@ export interface CliOptions {
     | "mcp"
     | "init"
     | "doctor"
+    | "baseline"
     | "help"
     | "version";
   readonly positionals: readonly string[];
@@ -49,6 +50,10 @@ export interface CliOptions {
   readonly baseline: "create" | "check" | "update" | undefined;
   /** Path to the baseline file (default: .ra11y-baseline.json in cwd). */
   readonly baselineFile: string | undefined;
+  /** Action for `ra11y baseline <action>` subcommand (currently only `prune`). */
+  readonly baselineAction: "prune" | undefined;
+  /** `--dry-run` flag for `ra11y baseline prune`. */
+  readonly baselineDryRun: boolean;
 }
 
 /**
@@ -93,6 +98,7 @@ interface RawCliOptions {
   readonly since: string | undefined;
   readonly baseline: string | undefined;
   readonly baselineFile: string | undefined;
+  readonly dryRun: boolean | undefined;
 }
 
 const FLAGS = [
@@ -112,6 +118,7 @@ const FLAGS = [
   "init",
   "doctor",
   "changed",
+  "dry-run",
 ];
 
 const ALIASES: Readonly<Record<string, string>> = {
@@ -141,6 +148,13 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
 
   if (typeof opts.explain === "string") {
     return { ...baseOpts(parsed.positionals, "explain"), ruleId: opts.explain };
+  }
+
+  // `ra11y baseline <action>` — subcommand namespace. Drop the
+  // "baseline" literal from the positionals list so downstream
+  // handlers see only the action + any remaining args.
+  if (parsed.positionals[0] === "baseline") {
+    return baseOpts(parsed.positionals.slice(1), "baseline", opts);
   }
 
   return baseOpts(parsed.positionals, "scan", opts);
@@ -183,6 +197,7 @@ function translate(
     since: stringAt(raw, "since"),
     baseline: stringAt(raw, "baseline"),
     baselineFile: stringAt(raw, "baseline-file"),
+    dryRun: boolAt(raw, "dry-run"),
   };
 }
 
@@ -233,6 +248,8 @@ function baseOpts(
     since: raw?.since,
     baseline: normalizeBaseline(raw?.baseline),
     baselineFile: raw?.baselineFile,
+    baselineAction: command === "baseline" && positionals[0] === "prune" ? "prune" : undefined,
+    baselineDryRun: raw?.dryRun === true,
   };
 }
 
