@@ -122,6 +122,24 @@ function elementIsInteractive(el: {
  */
 const OPAQUE_COMPONENT_TOP_N = 5;
 
+/**
+ * Threshold below which we inline the full `opaqueCustomComponentNames`
+ * list (names only, no per-call-site detail) on every response, without
+ * requiring `verboseMeta: true`. Above the threshold the names field is
+ * omitted and the top-N ranking + count remain the only inline signal;
+ * agents that want the full list flip `verboseMeta`. Per-component
+ * call-site counts still require `verboseMeta` regardless of size so
+ * response weight stays bounded on large codebases.
+ *
+ * The cutoff is a size-budget call: 50 PascalCase names averages ~500
+ * bytes inline (ASCII, average 10 chars per name) — small enough to
+ * fit in a default response without displacing other telemetry, large
+ * enough to cover typical design-system inventories in a single round
+ * trip. Above 50 the full list starts to dominate the response;
+ * agents on monorepo-scale codebases should opt in explicitly.
+ */
+const OPAQUE_COMPONENT_INLINE_NAMES_MAX = 50;
+
 export function buildAnalysisCoverage(
   files: readonly ParsedFile[],
   wrappers: readonly string[],
@@ -148,10 +166,7 @@ export function buildAnalysisCoverage(
     hints?: readonly string[];
   } = {};
   if (acc.opaqueComponents.size > 0) {
-    coverage.opaqueCustomComponents = acc.opaqueComponents.size;
-    const ranked = rankOpaqueByCallSites(acc.opaqueComponents);
-    coverage.opaqueCustomComponentsTop = verbose ? ranked : ranked.slice(0, OPAQUE_COMPONENT_TOP_N);
-    if (verbose) coverage.opaqueCustomComponentNames = [...acc.opaqueComponents.keys()].sort();
+    assembleOpaqueComponentBlock(acc.opaqueComponents, verbose, coverage);
   }
   if (acc.templateEngines.size > 0) {
     coverage.templateDirectivesFound = [...acc.templateEngines].sort();
@@ -203,6 +218,38 @@ function rankOpaqueByCallSites(
     .filter(([, usage]) => usage.interactive)
     .sort(([aName, a], [bName, b]) => b.callSites - a.callSites || aName.localeCompare(bName))
     .map(([name, usage]) => ({ name, callSites: usage.callSites }));
+}
+
+/**
+ * Populates the opaque-components sub-block of analysisCoverage: count,
+ * ranked top list, and — when the inventory is small (P2-P) — the full
+ * names array. Extracted from {@link buildAnalysisCoverage} so the
+ * enclosing function stays under the cognitive-complexity cap.
+ */
+function assembleOpaqueComponentBlock(
+  opaque: ReadonlyMap<string, OpaqueComponentUsage>,
+  verbose: boolean,
+  coverage: {
+    opaqueCustomComponents?: number;
+    opaqueCustomComponentsTop?: readonly { readonly name: string; readonly callSites: number }[];
+    opaqueCustomComponentNames?: readonly string[];
+  },
+): void {
+  coverage.opaqueCustomComponents = opaque.size;
+  const ranked = rankOpaqueByCallSites(opaque);
+  coverage.opaqueCustomComponentsTop = verbose ? ranked : ranked.slice(0, OPAQUE_COMPONENT_TOP_N);
+  // Names field: inlined on every response when the inventory is
+  // small enough to fit (≤ OPAQUE_COMPONENT_INLINE_NAMES_MAX), so the
+  // agent doesn't need a verboseMeta round-trip for small codebases
+  // (P2-P). Above the threshold we only ship the names under
+  // verboseMeta to keep default responses bounded; agents that want
+  // the full list on a large codebase opt in explicitly. Omitted
+  // entirely when neither condition applies — never shipped as a
+  // partial or empty list (CLAUDE.md §1 "Ambiguous field shapes are
+  // dishonest").
+  if (verbose || opaque.size <= OPAQUE_COMPONENT_INLINE_NAMES_MAX) {
+    coverage.opaqueCustomComponentNames = [...opaque.keys()].sort();
+  }
 }
 
 function buildHints(files: readonly ParsedFile[], acc: CoverageAccumulator): readonly string[] {

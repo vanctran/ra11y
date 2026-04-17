@@ -316,6 +316,56 @@ describe("buildAnalysisCoverage — hints", () => {
       const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
       expect(analysisCoverage?.["opaqueCustomComponentsTop"]).toBeUndefined();
     });
+
+    // P2-P: when the opaque inventory is small enough to inline (≤50
+    // names), the full names list ships on every response — no
+    // verboseMeta round-trip. Above the threshold, names stay behind
+    // verboseMeta so the default response stays bounded for monorepos.
+    describe("inline names (P2-P)", () => {
+      it("inlines the full names list when count ≤ 50 and verbose is false", () => {
+        const tags = Array.from({ length: 12 }, (_, i) => `Comp${String(i).padStart(2, "0")}`);
+        const files = [tsxFile("a.tsx", tags, { interactive: true })];
+        const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+        const names = analysisCoverage?.["opaqueCustomComponentNames"] as string[] | undefined;
+        expect(names).toBeDefined();
+        expect(names?.length).toBe(12);
+        expect(names).toEqual([...tags].sort());
+      });
+
+      it("omits the names list when count > 50 and verbose is false", () => {
+        // 51 unique PascalCase components — one past the inline cap.
+        const tags = Array.from({ length: 51 }, (_, i) => `Comp${String(i).padStart(3, "0")}`);
+        const files = [tsxFile("a.tsx", tags, { interactive: true })];
+        const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+        expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(51);
+        expect(analysisCoverage?.["opaqueCustomComponentNames"]).toBeUndefined();
+      });
+
+      it("inlines the names list at the threshold (count = 50, verbose false)", () => {
+        const tags = Array.from({ length: 50 }, (_, i) => `Comp${String(i).padStart(3, "0")}`);
+        const files = [tsxFile("a.tsx", tags, { interactive: true })];
+        const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+        const names = analysisCoverage?.["opaqueCustomComponentNames"] as string[] | undefined;
+        expect(names?.length).toBe(50);
+      });
+
+      it("omits the names list one past the threshold (count = 51, verbose false)", () => {
+        const tags = Array.from({ length: 51 }, (_, i) => `Comp${String(i).padStart(3, "0")}`);
+        const files = [tsxFile("a.tsx", tags, { interactive: true })];
+        const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+        expect(analysisCoverage?.["opaqueCustomComponentNames"]).toBeUndefined();
+      });
+
+      it("still exposes the full names list under verbose when count > 50", () => {
+        // verboseMeta preserves prior behavior — the full names list
+        // is always returned, independent of the inline-threshold gate.
+        const tags = Array.from({ length: 120 }, (_, i) => `Comp${String(i).padStart(3, "0")}`);
+        const files = [tsxFile("a.tsx", tags, { interactive: true })];
+        const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, true);
+        const names = analysisCoverage?.["opaqueCustomComponentNames"] as string[] | undefined;
+        expect(names?.length).toBe(120);
+      });
+    });
   });
 
   describe("thin CSS coverage", () => {
