@@ -37,14 +37,37 @@ interface ChecklistCandidateOut {
 
 type ChecklistPriority = "high" | "medium" | "low";
 
+interface WcagPrinciple {
+  readonly number: 1 | 2 | 3 | 4;
+  readonly name: "Perceivable" | "Operable" | "Understandable" | "Robust";
+}
+
 interface ChecklistItemOut {
   readonly criterionId: string;
   readonly title: string;
   readonly level: string;
   readonly priority: ChecklistPriority;
+  readonly principle?: WcagPrinciple;
   readonly candidates: readonly ChecklistCandidateOut[];
   readonly likelyRelevant?: false;
   readonly relevanceReason?: string;
+}
+
+/**
+ * Derives the top-level WCAG principle (1. Perceivable, 2. Operable,
+ * 3. Understandable, 4. Robust) from a criterion's standard+localId.
+ * Deterministic, spec-defined data — the first digit of a WCAG localId
+ * IS the principle number. Returns null for non-WCAG standards
+ * (Section 508, EN 301 549, etc.) whose IDs don't share the shape.
+ */
+function wcagPrincipleFor(standardId: string, localId: string): WcagPrinciple | null {
+  if (!standardId.startsWith("wcag")) return null;
+  const first = localId.split(".")[0];
+  if (first === "1") return { number: 1, name: "Perceivable" };
+  if (first === "2") return { number: 2, name: "Operable" };
+  if (first === "3") return { number: 3, name: "Understandable" };
+  if (first === "4") return { number: 4, name: "Robust" };
+  return null;
 }
 
 /**
@@ -193,16 +216,18 @@ function mapCandidates(
 }
 
 function buildChecklistItem(
-  criterion: { id: string; title: string; level: string },
+  criterion: { id: string; standardId: string; localId: string; title: string; level: string },
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
 ): { item: ChecklistItemOut; relevant: boolean } {
   const mapped = mapCandidates(criterion.id, candidates);
-  const base = {
+  const principle = wcagPrincipleFor(criterion.standardId, criterion.localId);
+  const base: ChecklistItemOut = {
     criterionId: criterion.id,
     title: criterion.title,
     level: criterion.level,
     priority: priorityFor(criterion.level, mapped.length > 0),
+    ...(principle === null ? {} : { principle }),
     candidates: mapped,
   };
   if (!isLikelyIrrelevant(criterion.id, applicability)) return { item: base, relevant: true };

@@ -253,7 +253,11 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
     ]);
     const body = bodyOf(responses[1]) as {
-      items: Array<{ criterionId: string; candidates: unknown[] }>;
+      items: Array<{
+        criterionId: string;
+        candidates: unknown[];
+        principle?: { number: number; name: string };
+      }>;
       untargeted?: unknown;
       likelyIrrelevant: Array<{ criterionId: string }>;
       summary: {
@@ -272,6 +276,17 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.summary.manualReviewRequired).toBe(
       body.summary.actionable + body.summary.untargeted,
     );
+    // WCAG principle is spec-defined data derived from criterionId;
+    // surfacing it lets the agent sort beyond level without us
+    // inventing a priority ranking.
+    for (const item of body.items) {
+      if (!item.criterionId.startsWith("wcag")) continue;
+      const expectedPrincipleNumber = Number(item.criterionId.split(":")[1]?.split(".")[0]);
+      expect(item.principle?.number).toBe(expectedPrincipleNumber);
+      expect(["Perceivable", "Operable", "Understandable", "Robust"]).toContain(
+        item.principle?.name,
+      );
+    }
   });
 
   it("checklist.summary.automatedCoverage lets a single call replace coverage+checklist", async () => {
