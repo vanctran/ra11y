@@ -31,17 +31,18 @@ export const rule = defineRule({
     ],
   },
   check(ctx) {
-    const violations: Violation[] = [];
     // TODO: walk ctx.ast using helpers from src/engine/ast-helpers.ts.
     // Do NOT hand-walk the AST — extend ast-helpers if you need a new primitive.
     //
-    // For each offending node, ctx.emit({
+    // For each offending node, call ctx.emit({
     //   severity: "{{severity}}",
     //   location: { filePath: ctx.filePath, line, column },
     //   message: "<one-sentence description of the problem>",
     //   suggestion: "<context-aware fix based on surrounding nodes>",
     //   snippet: "<code excerpt>",
     // });
+    void ctx; // remove this line when implementing
+    const violations: Violation[] = [];
     return violations;
   },
 });
