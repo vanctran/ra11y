@@ -488,18 +488,16 @@ export async function runScanAndFormat(
       // one read; keeping them as their own top-level count (not a
       // sub-field of a composite) is the honest shape.
       untargetedCriteria,
-      // Structured out-of-scope checks so an agent scanning the response
-      // for load-bearing signal can't miss what static analysis didn't
-      // cover. Only relevant when the scan is otherwise clean — a noisy
-      // scan already has obvious follow-up work.
-      ...(violations.length === 0 && notes.length === 0
-        ? {
-            limitations: [
-              "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half.",
-              "Static analysis can prove failure but not conformance: a clean scan is necessary, not sufficient. Do not claim WCAG conformance on this result alone.",
-            ],
-          }
-        : {}),
+      // Structured out-of-scope checks. Emitted on EVERY scan (P2-N) —
+      // not just clean ones — so an agent inspecting a mixed-result
+      // response can't overclaim conformance on the strength of a few
+      // findings. Pairing with the MCP server-instructions text is
+      // deliberate: the structured field is the authoritative source
+      // for agents; the prose is for humans.
+      limitations: [
+        "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half.",
+        "Static analysis can prove failure but not conformance: a clean scan is necessary, not sufficient. Do not claim WCAG conformance on this result alone.",
+      ],
       summary: buildPlanSummary({
         violations: violations.length,
         notes: notes.length,

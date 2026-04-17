@@ -328,15 +328,20 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.plan.limitations?.some((l) => /conformance|sufficient/i.test(l))).toBe(true);
   });
 
-  it("scan omits limitations when there are real findings to act on", async () => {
-    // No need to re-emphasize the caveat when the scan already has
-    // work to do — limitations only surfaces on clean results.
+  it("scan emits limitations on every response, including ones with findings (P2-N)", async () => {
+    // P2-N: previously limitations was gated to clean scans only.
+    // That let agents overclaim conformance on mixed-result responses
+    // — "we found a few things but it's otherwise clean" implied the
+    // static scan covered the whole picture. Now every response
+    // carries the field so the runtime-vs-static caveat is always
+    // visible to the agent, not just when the scan was empty.
     const responses = await mcpSession([initMsg(1), toolCall(2, "scan", { paths: [BAD_ALT_DIR] })]);
     const body = bodyOf(responses[1]) as {
-      plan: { violations: number; limitations?: unknown };
+      plan: { violations: number; limitations?: readonly string[] };
     };
     expect(body.plan.violations).toBeGreaterThan(0);
-    expect(body.plan.limitations).toBeUndefined();
+    expect(Array.isArray(body.plan.limitations)).toBe(true);
+    expect(body.plan.limitations?.some((l) => /runtime/i.test(l))).toBe(true);
   });
 
   it("scan_project carries both nextStep (prose) and nextStepStructured with matching tool name (P1-K)", async () => {
