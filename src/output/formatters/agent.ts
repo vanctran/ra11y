@@ -55,6 +55,7 @@ interface AgentFinding {
   readonly effort: Effort;
   readonly category: Category;
   readonly suppressWith: string;
+  readonly suppressPlacement: string;
 }
 
 interface AgentFile {
@@ -176,9 +177,31 @@ function buildFinding(v: Violation): AgentFinding {
     effort: "trivial",
     category,
     suppressWith: buildSuppressPragma(v.location.filePath, v.ruleId),
+    suppressPlacement: buildSuppressPlacement(v.location.filePath),
   };
 
   return finding;
+}
+
+/**
+ * Per-file-type placement guidance so the agent lands the pragma in a
+ * syntactically valid spot on the first edit. JSX is the common
+ * footgun — the JSX-expression pragma form is not an attribute value,
+ * and placing it inside a tag's attribute list is a syntax error.
+ * Other languages get shorter notes.
+ */
+function buildSuppressPlacement(filePath: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
+    return "Place on the line immediately above the opening JSX tag of the flagged element — not inside attributes, and not between adjacent JSX siblings without a wrapping expression. The `{/* … */}` wrapper is valid as a JSX expression or at module scope.";
+  }
+  if (lower.endsWith(".css")) {
+    return "Place on the line immediately above the CSS rule whose declarations are flagged.";
+  }
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return "Place on the line immediately above the opening tag of the flagged element.";
+  }
+  return "Place on the line immediately above the flagged statement.";
 }
 
 function buildSnippet(v: Violation): AgentSnippet {

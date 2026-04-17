@@ -543,6 +543,7 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     ...(v.suggestion ? { fix: v.suggestion } : {}),
     criteria: [...v.criteria],
     suppressWith: suppressPragma(v.location.filePath, v.ruleId),
+    suppressPlacement: suppressPlacement(v.location.filePath),
   };
 }
 
@@ -564,6 +565,27 @@ function suppressPragma(filePath: string, ruleId: string): string {
     return `{/* ra11y-disable-next-line ${ruleId} */}`;
   }
   return `// ra11y-disable-next-line ${ruleId}`;
+}
+
+/**
+ * Per-file-type hint about where the pragma goes. The most common
+ * wasted edit is a JSX comment placed inline as an attribute value or
+ * mixed into a JSX children block — both of which are syntax errors.
+ * The TSX/JSX guidance calls that out explicitly so the first edit
+ * lands.
+ */
+function suppressPlacement(filePath: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
+    return "Place on the line immediately above the opening JSX tag of the flagged element — not inside attributes, and not between adjacent JSX siblings without a wrapping expression. The `{/* … */}` wrapper is valid as a JSX expression or at module scope.";
+  }
+  if (lower.endsWith(".css")) {
+    return "Place on the line immediately above the CSS rule whose declarations are flagged.";
+  }
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return "Place on the line immediately above the opening tag of the flagged element.";
+  }
+  return "Place on the line immediately above the flagged statement.";
 }
 
 export function groupViolationsByFile(violations: readonly Violation[]): Map<string, Violation[]> {

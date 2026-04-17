@@ -226,6 +226,18 @@ describe("formatter: agent — files", () => {
     }
   });
 
+  it("suppressPlacement warns about JSX attribute placement for .tsx/.jsx files", () => {
+    // The #1 wasted edit: pasting `{/* ra11y-disable-next-line ... */}`
+    // as an attribute value. Placement text makes the first edit land.
+    const { files } = parse();
+    for (const file of files) {
+      for (const finding of file.findings) {
+        expect(finding.suppressPlacement).toContain("opening JSX tag");
+        expect(finding.suppressPlacement).toContain("not inside attributes");
+      }
+    }
+  });
+
   it("suppressWith uses // syntax for plain .ts files", () => {
     const tsResult: ScanResult = {
       ...RESULT,
