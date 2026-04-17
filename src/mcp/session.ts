@@ -14,6 +14,7 @@ import type { ParsedFile } from "../engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../input/parsers/index.ts";
 import type { Ast } from "../types/ast.ts";
 import type { LoadedConfig, RuleSetting } from "../types/config.ts";
+import { LoggingState } from "./logging.ts";
 
 /** Cached entry: AST + metadata keyed by absolute path. */
 interface CacheEntry {
@@ -55,6 +56,7 @@ export interface SessionRoot {
 
 export class McpSession {
   readonly config: SessionConfig;
+  readonly logging: LoggingState;
   private readonly cache: Map<string, CacheEntry> = new Map();
   private rootsList: readonly SessionRoot[] = [];
 
@@ -67,6 +69,7 @@ export class McpSession {
       nativeWrappers: [],
       allowWrite: false,
     };
+    this.logging = new LoggingState();
   }
 
   /**

@@ -16,6 +16,13 @@
 
 import { createInterface } from "node:readline";
 import { logger } from "../utils/logger.ts";
+import {
+  LOG_LEVELS,
+  type LogEmitter,
+  type LogLevel,
+  type LogNotification,
+  makeLogEmitter,
+} from "./logging.ts";
 import { BUILTIN_PROMPTS } from "./prompts/index.ts";
 import {
   loadKbResources,
@@ -72,6 +79,7 @@ const INTERNAL_ERROR = -32603;
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "ra11y";
 const SERVER_VERSION = "0.1.0";
+const LOGGER_SCAN = "ra11y.scan";
 
 const SERVER_INSTRUCTIONS = [
   "Workflow:",
@@ -101,6 +109,11 @@ const PROMPT_BY_NAME = new Map(BUILTIN_PROMPTS.map((p) => [p.name, p]));
  */
 export async function startMcpServer(): Promise<void> {
   const session = new McpSession();
+  const emitLog: LogEmitter = makeLogEmitter(
+    session.logging,
+    (n: LogNotification) => writeNotification(n),
+    () => process.cwd(),
+  );
 
   const rl = createInterface({ input: process.stdin, terminal: false });
 
@@ -137,7 +150,7 @@ export async function startMcpServer(): Promise<void> {
       continue;
     }
 
-    const response = await dispatch(request, session);
+    const response = await dispatch(request, session, emitLog);
     writeResponse(response);
   }
 }
@@ -198,6 +211,7 @@ async function handleToolsCall(
   id: string | number | null,
   rawParams: Record<string, unknown>,
   session: McpSession,
+  emitLog: LogEmitter,
 ): Promise<JsonRpcResponse> {
   const callParams = rawParams as unknown as ToolCallParams;
   const toolName = callParams.name;
@@ -216,14 +230,68 @@ async function handleToolsCall(
       error: { code: METHOD_NOT_FOUND, message: `Unknown tool: ${toolName}` },
     };
   }
+  // Scan-family tools get a pair of log-notification bookends so
+  // hosts with `logging` enabled see start/finish telemetry without
+  // us splattering log calls inside each rule. Gated by the session's
+  // current log level — default `warning` keeps the channel silent
+  // until the host explicitly opts in via `logging/setLevel`.
+  const isScan = toolName === "scan" || toolName === "scan_project" || toolName === "scan_file";
+  if (isScan) {
+    emitLog("debug", `${toolName}: starting`, { tool: toolName }, LOGGER_SCAN);
+  }
+  const t0 = performance.now();
   const toolResult = await tool.handler(callParams.arguments ?? {}, session);
+  if (isScan) {
+    const elapsedMs = Math.round(performance.now() - t0);
+    const counts = extractScanCounts(toolResult);
+    emitLog(
+      "info",
+      `${toolName}: complete in ${elapsedMs}ms`,
+      { tool: toolName, elapsedMs, ...counts },
+      LOGGER_SCAN,
+    );
+  }
   return { jsonrpc: "2.0", id, result: toolResult };
 }
 
-async function dispatch(request: JsonRpcRequest, session: McpSession): Promise<JsonRpcResponse> {
+/**
+ * Pull counts out of a tool result's JSON text payload so the `info`
+ * completion log line carries useful scalar telemetry without us
+ * deserializing the whole response shape. Returns an empty object
+ * on any parse failure — logging is telemetry, not correctness.
+ */
+function extractScanCounts(result: unknown): Record<string, unknown> {
+  if (!result || typeof result !== "object") return {};
+  const shape = result as { content?: Array<{ text?: unknown }> };
+  const first = shape.content?.[0];
+  const text = first?.text;
+  if (typeof text !== "string") return {};
+  try {
+    const parsed = JSON.parse(text) as {
+      plan?: { violations?: number; notes?: number; totalFindings?: number };
+      meta?: { filesScanned?: number };
+    };
+    const out: Record<string, unknown> = {};
+    if (typeof parsed.plan?.totalFindings === "number")
+      out["totalFindings"] = parsed.plan.totalFindings;
+    if (typeof parsed.plan?.violations === "number") out["violations"] = parsed.plan.violations;
+    if (typeof parsed.plan?.notes === "number") out["notes"] = parsed.plan.notes;
+    if (typeof parsed.meta?.filesScanned === "number")
+      out["filesScanned"] = parsed.meta.filesScanned;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+async function dispatch(
+  request: JsonRpcRequest,
+  session: McpSession,
+  emitLog: LogEmitter,
+): Promise<JsonRpcResponse> {
   const id = request.id ?? null;
   try {
-    return await route(request, id, session);
+    return await route(request, id, session, emitLog);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`MCP dispatch error: ${message}`);
@@ -239,11 +307,12 @@ function route(
   request: JsonRpcRequest,
   id: string | number | null,
   session: McpSession,
+  emitLog: LogEmitter,
 ): Promise<JsonRpcResponse> | JsonRpcResponse {
   if (request.method === "initialize") return initializeResponse(id, request.params ?? {}, session);
   if (request.method === "tools/list") return toolsListResponse(id);
   if (request.method === "tools/call") {
-    return handleToolsCall(id, request.params ?? {}, session);
+    return handleToolsCall(id, request.params ?? {}, session, emitLog);
   }
   if (request.method === "prompts/list") return promptsListResponse(id);
   if (request.method === "prompts/get") {
@@ -253,11 +322,39 @@ function route(
   if (request.method === "resources/read") {
     return handleResourcesRead(id, request.params ?? {});
   }
+  if (request.method === "logging/setLevel") {
+    return handleLoggingSetLevel(id, request.params ?? {}, session);
+  }
   return {
     jsonrpc: "2.0",
     id,
     error: { code: METHOD_NOT_FOUND, message: `Method not found: ${request.method}` },
   };
+}
+
+/**
+ * `logging/setLevel` — host tunes the threshold. Unknown levels
+ * return JSON-RPC invalid-params (not a tool error).
+ */
+function handleLoggingSetLevel(
+  id: string | number | null,
+  rawParams: Record<string, unknown>,
+  session: McpSession,
+): JsonRpcResponse {
+  const level = rawParams["level"];
+  if (typeof level !== "string" || !LOG_LEVELS.includes(level as LogLevel)) {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code: INVALID_PARAMS,
+        message: `Invalid log level. Expected one of: ${LOG_LEVELS.join(", ")}.`,
+      },
+    };
+  }
+  session.logging.setLevel(level as LogLevel);
+  // Spec: result is an empty object on success.
+  return { jsonrpc: "2.0", id, result: {} };
 }
 
 function initializeResponse(
@@ -288,6 +385,11 @@ function initializeResponse(
         tools: {},
         prompts: { listChanged: false },
         resources: { listChanged: false },
+        // `logging: {}` opts us into `notifications/message` +
+        // `logging/setLevel`. Default threshold is `warning` so hosts
+        // that never tune stay silent; call `logging/setLevel` with
+        // `info` to see scan start/finish telemetry.
+        logging: {},
       },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: SERVER_INSTRUCTIONS,
@@ -430,6 +532,16 @@ function coercePromptArgs(raw: Record<string, unknown>): Readonly<Record<string,
 
 function writeResponse(response: JsonRpcResponse): void {
   const json = JSON.stringify(response);
+  process.stdout.write(`${json}\n`);
+}
+
+/**
+ * Write a notification (id-less JSON-RPC message) to stdout. Shares
+ * the response lane because MCP uses one stream for everything;
+ * ordering relative to replies is controlled by the async loop.
+ */
+function writeNotification(notification: LogNotification): void {
+  const json = JSON.stringify(notification);
   process.stdout.write(`${json}\n`);
 }
 
