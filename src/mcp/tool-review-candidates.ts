@@ -26,7 +26,7 @@ import { runScan } from "../engine/scanner.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
-import { buildSnippet, sourceIndex } from "./source-snippet.ts";
+import { buildSnippetForReason, type SourceEntry, sourceIndex } from "./source-snippet.ts";
 import {
   applyRuleSettings,
   errorResult,
@@ -175,13 +175,18 @@ export const reviewCandidatesTool: McpTool = {
  * conditional-spreads the field away.
  */
 function candidateSnippet(
-  c: { location: { filePath: string; line: number }; snippet?: string },
-  sources: ReadonlyMap<string, string>,
+  c: { location: { filePath: string; line: number }; snippet?: string; reason: string },
+  sources: ReadonlyMap<string, SourceEntry>,
 ): string | undefined {
   if (typeof c.snippet === "string" && c.snippet.length > 0) return c.snippet;
-  const source = sources.get(c.location.filePath);
-  if (source === undefined) return undefined;
-  return buildSnippet(source, c.location.line);
+  const entry = sources.get(c.location.filePath);
+  if (entry === undefined) return undefined;
+  return buildSnippetForReason({
+    source: entry.source,
+    line: c.location.line,
+    reason: c.reason,
+    language: entry.language,
+  });
 }
 
 function indexFindersByCriterion(): Map<string, (typeof BUILTIN_CANDIDATE_FINDERS)[number]> {

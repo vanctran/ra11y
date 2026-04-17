@@ -128,24 +128,27 @@ describe("buildSnippet: dishonest shapes forbidden", () => {
 });
 
 describe("sourceIndex", () => {
-  it("maps ParsedFile.filePath to its source text", () => {
+  it("maps ParsedFile.filePath to its source + language", () => {
     const files = [
       {
         filePath: "/a.tsx",
         source: "hello",
-        // biome-ignore lint/suspicious/noExplicitAny: unit test sees only filePath+source
-        ast: {} as any,
+        // biome-ignore lint/suspicious/noExplicitAny: unit test sees only filePath/source/ast.language
+        ast: { language: "tsx", root: {} as any, errors: [] },
       },
       {
-        filePath: "/b.tsx",
+        filePath: "/b.html",
         source: "world",
-        // biome-ignore lint/suspicious/noExplicitAny: unit test sees only filePath+source
-        ast: {} as any,
+        // biome-ignore lint/suspicious/noExplicitAny: unit test sees only filePath/source/ast.language
+        ast: { language: "html", root: {} as any, errors: [] },
       },
-    ];
-    const idx = sourceIndex(files);
-    expect(idx.get("/a.tsx")).toBe("hello");
-    expect(idx.get("/b.tsx")).toBe("world");
+    ] as const;
+    // biome-ignore lint/suspicious/noExplicitAny: sourceIndex accepts ParsedFile; test subset suffices
+    const idx = sourceIndex(files as any);
+    expect(idx.get("/a.tsx")?.source).toBe("hello");
+    expect(idx.get("/a.tsx")?.language).toBe("tsx");
+    expect(idx.get("/b.html")?.source).toBe("world");
+    expect(idx.get("/b.html")?.language).toBe("html");
     expect(idx.get("/missing.tsx")).toBeUndefined();
   });
 });

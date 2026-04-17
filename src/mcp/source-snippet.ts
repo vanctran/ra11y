@@ -5,6 +5,15 @@
  * in memory (every `ParsedFile.source`); this module reads from that
  * cache rather than re-opening files.
  *
+ * Two widths, one shape. Most findings get a narrow ±3-line window,
+ * which is enough when the evidence is attribute-level ("img missing
+ * alt"). Some findings' `reason` text explicitly cites cross-line
+ * context ("handler defined outside this line") — for those, the
+ * snippet widens to a fixed ±10-line window as an honest fallback.
+ * A follow-up commit replaces the fallback with an AST-enclosing-block
+ * walk for TSX/JSX/TS/JS, where the enclosing function is a more
+ * useful unit of review context than a fixed line count.
+ *
  * Shape invariant: if the snippet can't be produced honestly (file
  * missing from cache, line out of range, no file:line on the input),
  * the caller omits the field entirely. Per CLAUDE.md §1 "Ambiguous
@@ -14,77 +23,163 @@
  */
 
 import type { ParsedFile } from "../engine/scanner.ts";
+import type { Ast } from "../types/ast.ts";
 
-/** Lines of context to include on each side of the target line. */
-const CONTEXT_LINES = 3;
+/** Language tag for the snippet builder — matches {@link Ast}'s discriminant. */
+export type SnippetLanguage = Ast["language"];
+
+/** Lines of context on each side of the target line, narrow mode. */
+const SNIPPET_NARROW_LINES = 3;
+/** Lines of context on each side of the target line, wide fallback mode. */
+const SNIPPET_WIDE_FALLBACK_LINES = 10;
 /**
- * Maximum total characters returned (including newlines). 300 is big
- * enough to cover a JSX element with attribute cluster across ±3 lines
- * after de-indent, but small enough that 30 candidates in one response
- * stay well under the stdio frame budget.
+ * Char cap for narrow mode. 300 is big enough to cover a JSX element
+ * with an attribute cluster across ±3 lines after de-indent, but small
+ * enough that 30 candidates in one response stay well under the stdio
+ * frame budget.
  */
-const MAX_SNIPPET_CHARS = 300;
+const SNIPPET_NARROW_CHAR_CAP = 300;
+/**
+ * Char cap for wide mode. 600 is big enough for a typical handler
+ * body (≈20-30 lines at normal indent) after de-indent — the thing a
+ * cross-line-reason finding actually needs the agent to read — while
+ * staying well under the stdio frame budget even at 10 wide snippets
+ * per response.
+ */
+const SNIPPET_WIDE_CHAR_CAP = 600;
 
 /**
- * Indexes parsed files by their `filePath` for O(1) lookup in the
- * response builder. The scanner holds a single source-of-truth list
- * per scan; this is a per-response view over it. Do not cache across
- * responses — ParsedFile instances are replaced on file mtime changes.
+ * Reason-text patterns that indicate the finding's evidence spans
+ * multiple lines, so the snippet should widen past the narrow ±3-line
+ * default. Deliberately small and grep-able — new finders that emit
+ * cross-line reasons extend this list by adding a phrase to the
+ * reason, not by plumbing a per-finder config flag through the
+ * response pipeline.
  */
-export function sourceIndex(files: readonly ParsedFile[]): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const f of files) out.set(f.filePath, f.source);
+export const CROSS_LINE_REASON_PATTERNS: readonly RegExp[] = [
+  /defined outside this line/i,
+  /handler defined elsewhere/i,
+  /referenced function/i,
+  /named handler defined/i,
+  /defined at line/i,
+  /body spans multiple/i,
+  /handler body/i,
+  /cross-line/i,
+];
+
+/** A ParsedFile view keyed by file path for O(1) lookup in the response builder. */
+export interface SourceEntry {
+  readonly source: string;
+  readonly language: SnippetLanguage;
+}
+
+/**
+ * Indexes parsed files by their `filePath`. The scanner holds a single
+ * source-of-truth list per scan; this is a per-response view over it.
+ * Do not cache across responses — ParsedFile instances are replaced on
+ * file mtime changes. Carries `language` alongside `source` so callers
+ * picking a snippet width don't have to parse file extensions.
+ *
+ * @param files - Parsed files from the current scan.
+ * @returns A path-to-entry map with language tags preserved.
+ */
+export function sourceIndex(files: readonly ParsedFile[]): Map<string, SourceEntry> {
+  const out = new Map<string, SourceEntry>();
+  for (const f of files) out.set(f.filePath, { source: f.source, language: f.ast.language });
   return out;
 }
 
 /**
- * Returns ±{@link CONTEXT_LINES} lines around `line` (1-indexed) from
- * `source`, common leading whitespace stripped, and truncated to the
- * {@link MAX_SNIPPET_CHARS} cap. Returns `undefined` when the source
- * is empty, the line is out of bounds, or the resulting snippet is
- * empty after trimming — callers conditional-spread on the result.
+ * Narrow snippet: ±{@link SNIPPET_NARROW_LINES} lines around `line`
+ * (1-indexed), common leading whitespace stripped, capped at
+ * {@link SNIPPET_NARROW_CHAR_CAP} characters. Returns `undefined` when
+ * the input is unusable (empty source, line out of bounds, non-integer
+ * line) so the caller conditional-spreads the field away.
  *
- * Cap strategy: the target line is load-bearing; prefer keeping it
- * plus as much trailing context as fits, then backfill preceding
- * context. This matches how agents scan — the line the finding
- * pointed at is the anchor, the trailing lines show what the element
- * does next.
+ * @param source - Full file source as held in `ParsedFile.source`.
+ * @param line - 1-based line number of the finding's anchor.
+ * @returns A de-indented ±3-line string, or `undefined` when unusable.
  */
 export function buildSnippet(source: string, line: number): string | undefined {
+  return buildFixedWindow(source, line, SNIPPET_NARROW_LINES, SNIPPET_NARROW_CHAR_CAP);
+}
+
+/** Input to {@link buildSnippetForReason}. */
+export interface SnippetForReasonInput {
+  readonly source: string;
+  readonly line: number;
+  readonly reason: string;
+  readonly language: SnippetLanguage;
+}
+
+/**
+ * Picks a snippet width based on the finding's own `reason` text.
+ * Narrow ±3-line default when the reason does not cite cross-line
+ * context; ±{@link SNIPPET_WIDE_FALLBACK_LINES} lines otherwise.
+ *
+ * A follow-up commit upgrades the TSX/JSX/TS/JS wide path to walk the
+ * enclosing JS block via brace balance — this step ships the trigger
+ * and the fallback so finders can start emitting cross-line reasons.
+ *
+ * @param input - Source, target line, reason text, and language tag.
+ * @returns A de-indented snippet sized to the reason, or `undefined`.
+ */
+export function buildSnippetForReason(input: SnippetForReasonInput): string | undefined {
+  const { source, line, reason } = input;
+  if (!isCrossLineReason(reason)) {
+    return buildFixedWindow(source, line, SNIPPET_NARROW_LINES, SNIPPET_NARROW_CHAR_CAP);
+  }
+  return buildFixedWindow(source, line, SNIPPET_WIDE_FALLBACK_LINES, SNIPPET_WIDE_CHAR_CAP);
+}
+
+/**
+ * True when `reason` matches any entry in
+ * {@link CROSS_LINE_REASON_PATTERNS}. Exported for unit testing and
+ * so callers can branch on the same signal if they ever need to.
+ *
+ * @param reason - Candidate or violation reason text.
+ * @returns `true` when the reason cites cross-line evidence.
+ */
+export function isCrossLineReason(reason: string): boolean {
+  if (typeof reason !== "string" || reason.length === 0) return false;
+  for (const re of CROSS_LINE_REASON_PATTERNS) {
+    if (re.test(reason)) return true;
+  }
+  return false;
+}
+
+function buildFixedWindow(
+  source: string,
+  line: number,
+  radius: number,
+  cap: number,
+): string | undefined {
   if (typeof source !== "string" || source.length === 0) return undefined;
   if (!Number.isInteger(line) || line < 1) return undefined;
 
   const lines = source.split("\n");
   if (line > lines.length) return undefined;
 
-  const start = Math.max(0, line - 1 - CONTEXT_LINES);
-  const end = Math.min(lines.length, line + CONTEXT_LINES);
+  const start = Math.max(0, line - 1 - radius);
+  const end = Math.min(lines.length, line + radius);
   const window = lines.slice(start, end);
   if (window.length === 0) return undefined;
 
   const deindented = stripCommonIndent(window);
-
-  // Fast path: the natural window fits. Nothing to shrink.
   const joined = deindented.join("\n");
-  if (joined.length <= MAX_SNIPPET_CHARS) {
-    return joined.length > 0 ? joined : undefined;
-  }
+  if (joined.length <= cap) return joined.length > 0 ? joined : undefined;
 
-  // Shrink path: keep the target line, then as much trailing context
-  // as fits, then backfill preceding context. Windows are never empty
-  // here (start ≤ line-1 < end), so `anchor` is always within range.
   const anchor = Math.min(line - 1 - start, deindented.length - 1);
-  const shrunk = shrinkAroundAnchor(deindented, anchor, MAX_SNIPPET_CHARS);
+  const shrunk = shrinkAroundAnchor(deindented, anchor, cap);
   return shrunk.length > 0 ? shrunk : undefined;
 }
 
 /**
- * Computes the longest leading-whitespace prefix common to all
- * non-blank lines in `window`, and strips it from every line. Blank
- * lines contribute no indent floor (otherwise a single blank line
- * collapses the strip to zero). Mixed tab/space lines are handled
- * character-wise: the strip only removes as much as literally matches
- * on every line.
+ * Strips the longest leading-whitespace prefix common to every
+ * non-blank line in `window`. Blank lines contribute no indent floor
+ * (a lone blank must not collapse the strip to zero). Mixed tab /
+ * space lines are handled character-wise: the strip only removes as
+ * much as literally matches on every line.
  */
 function stripCommonIndent(window: readonly string[]): string[] {
   let common: string | undefined;
@@ -117,17 +212,16 @@ function sharedPrefix(a: string, b: string): string {
 }
 
 /**
- * Shrinks a line array around `anchor` (0-indexed) to fit under
- * `cap` characters including join newlines. Keeps the anchor first,
- * then extends forward one line at a time, then backward. Returns a
- * string (possibly shorter than the anchor line if the anchor alone
- * exceeds the cap — in that case we truncate and append an ellipsis
- * marker so the agent knows it was cut).
+ * Shrinks a line array around `anchor` (0-indexed) to fit under `cap`
+ * characters including join newlines. Keeps the anchor first, then
+ * extends forward one line at a time, then backward. Returns a string
+ * (possibly shorter than the anchor line if the anchor alone exceeds
+ * the cap — in that case we truncate and append an ellipsis marker so
+ * the agent knows it was cut).
  */
 function shrinkAroundAnchor(lines: readonly string[], anchor: number, cap: number): string {
   const anchorLine = lines[anchor] ?? "";
   if (anchorLine.length > cap) {
-    // Truncate from the right; keep it as one line.
     const marker = "…";
     return `${anchorLine.slice(0, Math.max(0, cap - marker.length))}${marker}`;
   }
@@ -136,7 +230,6 @@ function shrinkAroundAnchor(lines: readonly string[], anchor: number, cap: numbe
   let forward = anchor + 1;
   let backward = anchor - 1;
 
-  // Prefer trailing context first (see buildSnippet docstring).
   while (forward < lines.length) {
     const next = lines[forward] ?? "";
     const projected = out.length + 1 + next.length;

@@ -17,7 +17,7 @@ import {
   irrelevanceReason,
   isLikelyIrrelevant,
 } from "./manual-applicability.ts";
-import { buildSnippet, sourceIndex } from "./source-snippet.ts";
+import { buildSnippetForReason, type SourceEntry, sourceIndex } from "./source-snippet.ts";
 import {
   applyRuleSettings,
   errorResult,
@@ -294,7 +294,7 @@ export const checklistTool: McpTool = {
 function mapCandidates(
   criterionId: string,
   candidates: readonly ReviewCandidate[],
-  sources: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, SourceEntry>,
 ): ChecklistCandidateOut[] {
   return candidates
     .filter((c) => c.criterionId === criterionId)
@@ -319,19 +319,24 @@ function mapCandidates(
 
 function finderOrBuiltSnippet(
   c: ReviewCandidate,
-  sources: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, SourceEntry>,
 ): string | undefined {
   if (typeof c.snippet === "string" && c.snippet.length > 0) return c.snippet;
-  const source = sources.get(c.location.filePath);
-  if (source === undefined) return undefined;
-  return buildSnippet(source, c.location.line);
+  const entry = sources.get(c.location.filePath);
+  if (entry === undefined) return undefined;
+  return buildSnippetForReason({
+    source: entry.source,
+    line: c.location.line,
+    reason: c.reason,
+    language: entry.language,
+  });
 }
 
 function buildChecklistItem(
   criterion: { id: string; standardId: string; localId: string; title: string; level: string },
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
-  sources: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, SourceEntry>,
 ): { item: ChecklistItemOut; relevant: boolean } {
   const mapped = mapCandidates(criterion.id, candidates, sources);
   const principle = wcagPrincipleFor(criterion.standardId, criterion.localId);
@@ -363,7 +368,7 @@ function bucketChecklistItems(
   coverage: readonly PerStandardCoverage[],
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
-  sources: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, SourceEntry>,
 ): { needsReview: ChecklistItemOut[]; likelyIrrelevant: ChecklistItemOut[] } {
   const needsReview: ChecklistItemOut[] = [];
   const likelyIrrelevant: ChecklistItemOut[] = [];
