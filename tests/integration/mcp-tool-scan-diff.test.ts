@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -235,6 +235,73 @@ describe("MCP scan_diff tool: new-findings-only deltas", () => {
         meta: { standards: readonly string[] };
       };
       expect(body.meta.standards).toContain("wcag21");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces resolved baseline entries when a previously-flagged file is fixed", async () => {
+    const dir = await scratchDirWithBadFixture();
+    try {
+      await addSecondBadFile(dir);
+      await mcpSession([initMsg(1), toolCall(2, "baseline", { mode: "create", cwd: dir })]);
+      // Fix one of the two flagged files by removing it entirely.
+      await unlink(join(dir, "page.html"));
+      const responses = await mcpSession([initMsg(1), toolCall(2, "scan_diff", { cwd: dir })]);
+      const body = bodyOf(responses[1]) as {
+        newCount: number;
+        resolvedCount: number;
+        resolved: Array<{ filePath: string; ruleId: string; message: string }>;
+        nextStep: string;
+      };
+      expect(body.newCount).toBe(0);
+      expect(body.resolvedCount).toBeGreaterThan(0);
+      expect(body.resolved.every((r) => r.filePath.endsWith("page.html"))).toBe(true);
+      expect(body.nextStep).toMatch(/resolved/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("emits resolved: [] / resolvedCount: 0 when baseline and scan match", async () => {
+    const dir = await scratchDirWithBadFixture();
+    try {
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "baseline", { mode: "create", cwd: dir }),
+        toolCall(3, "scan_diff", { cwd: dir }),
+      ]);
+      const body = bodyOf(responses[2]) as {
+        newCount: number;
+        resolvedCount: number;
+        resolved: unknown[];
+      };
+      expect(body.newCount).toBe(0);
+      expect(body.resolvedCount).toBe(0);
+      expect(body.resolved).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("omits resolved/resolvedCount entirely in hunksOnly mode", async () => {
+    const dir = await scratchDirWithBadFixture();
+    try {
+      const git = (args: readonly string[]) =>
+        spawnSync("git", [...args], { cwd: dir, stdio: "ignore" });
+      git(["init"]);
+      git(["config", "user.email", "test@example.com"]);
+      git(["config", "user.name", "Test"]);
+      git(["add", "."]);
+      git(["commit", "-m", "initial"]);
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "scan_diff", { cwd: dir, hunksOnly: true, comparisonRef: "HEAD" }),
+      ]);
+      const body = bodyOf(responses[1]) as Record<string, unknown>;
+      // Field absence is a categorical signal — not `resolved: []`.
+      expect("resolved" in body).toBe(false);
+      expect("resolvedCount" in body).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

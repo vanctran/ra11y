@@ -21,7 +21,12 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { BASELINE_FILENAME, type BaselineFile, loadBaseline } from "../engine/baseline.ts";
+import {
+  BASELINE_FILENAME,
+  type BaselineEntry,
+  type BaselineFile,
+  loadBaseline,
+} from "../engine/baseline.ts";
 import {
   filesChangedSince,
   getChangedHunks,
@@ -49,7 +54,7 @@ export const scanDiffTool: McpTool = {
   def: {
     name: "scan_diff",
     description:
-      'Scan the project and return the subset of violations that represents "what changed" — by default, the delta against a baseline snapshot (the regression-focused cousin of `baseline` mode: "check"). Pass `hunksOnly: true` to switch to git-hunk-intersection mode: only findings whose line falls inside a `git diff --unified=0 <comparisonRef>` hunk surface, making this the right primitive for PR-review agents gating on "did this PR introduce a finding?"\n\nBaseline mode (default): the baseline file defaults to `.ra11y-baseline.json` in `cwd`. Override with `baselinePath` (absolute, or cwd-relative). Missing / malformed / version-mismatched files come back as a structured error — generate one with `baseline` (mode: "create") first.\n\nHunks mode (`hunksOnly: true`): baseline loading is skipped; the comparison is against `comparisonRef` (default `HEAD`). Not-a-git-repo and unknown-ref conditions surface as structured error envelopes; a ref that resolves but produces no hunks surfaces as `warnings: ["no_hunks_in_comparison"]` with zero findings (honest: the comparison was a no-op, not a clean scan).\n\nFull scan telemetry (`activeNativeWrappers`, `rulesEvaluated`, `analysisCoverage`, per-extension file counts) rides along so you can judge whether the scan had teeth before acting on the delta. Narrow the scan scope with `changedOnly: true` or `since: "main"`. `additionalPaths` bypasses `.gitignore` / default build-dir skips to include post-compile CSS/HTML.',
+      'Scan the project and return the subset of violations that represents "what changed" — by default, the delta against a baseline snapshot (the regression-focused cousin of `baseline` mode: "check"). Pass `hunksOnly: true` to switch to git-hunk-intersection mode: only findings whose line falls inside a `git diff --unified=0 <comparisonRef>` hunk surface, making this the right primitive for PR-review agents gating on "did this PR introduce a finding?"\n\nBaseline mode (default): the baseline file defaults to `.ra11y-baseline.json` in `cwd`. Override with `baselinePath` (absolute, or cwd-relative). Missing / malformed / version-mismatched files come back as a structured error — generate one with `baseline` (mode: "create") first. The response surfaces `resolved` (baseline entries absent from the current scan — i.e. findings you fixed) alongside `newViolations`, so a PR cleaning up a baselined issue is visible and a re-regression can be distinguished from new debt.\n\nHunks mode (`hunksOnly: true`): baseline loading is skipped; the comparison is against `comparisonRef` (default `HEAD`). Not-a-git-repo and unknown-ref conditions surface as structured error envelopes; a ref that resolves but produces no hunks surfaces as `warnings: ["no_hunks_in_comparison"]` with zero findings (honest: the comparison was a no-op, not a clean scan). The `resolved` field is omitted entirely in this mode — the concept doesn\'t apply without a baseline.\n\nFull scan telemetry (`activeNativeWrappers`, `rulesEvaluated`, `analysisCoverage`, per-extension file counts) rides along so you can judge whether the scan had teeth before acting on the delta. Narrow the scan scope with `changedOnly: true` or `since: "main"`. `additionalPaths` bypasses `.gitignore` / default build-dir skips to include post-compile CSS/HTML.',
     inputSchema: {
       type: "object",
       properties: {
@@ -126,7 +131,8 @@ export const scanDiffTool: McpTool = {
 /**
  * Baseline mode — the original `scan_diff` behavior, preserved as the
  * default. Loads a baseline snapshot and returns findings whose
- * `findingId` isn't in that snapshot.
+ * `findingId` isn't in that snapshot, plus the set of baseline entries
+ * whose `findingId` is no longer present in the scan (resolved).
  */
 async function handleBaselineMode(
   params: Record<string, unknown>,
@@ -200,7 +206,11 @@ async function handleBaselineMode(
   logger.debug(`scan_diff: ${files.length} files in ${ms(t0)}ms`);
 
   const baselineHashes = new Set(baseline.violations.map((v) => v.hash));
-  const { newFiles, newCount } = filterToNewFindings(formatted.files, baselineHashes);
+  const { newFiles, newCount, scannedHashes } = filterToNewFindings(
+    formatted.files,
+    baselineHashes,
+  );
+  const resolved = resolvedFromBaseline(baseline.violations, scannedHashes);
 
   return textResult({
     mode: "diff",
@@ -209,6 +219,15 @@ async function handleBaselineMode(
     baselineGeneratedAt: baseline.generatedAt,
     newCount,
     newViolations: newFiles,
+    // Surface "new" and "resolved" as two independent top-level
+    // counters so an agent can distinguish new debt from regressions
+    // fixed without a composite counter papering over the two
+    // concepts. Both stay emitted even at zero in baseline mode —
+    // "this scan fixed nothing" is a meaningful signal in the baseline
+    // framing. In hunks mode the concept doesn't apply, and the field
+    // is omitted entirely (see handleHunksMode).
+    resolvedCount: resolved.length,
+    resolved,
     meta: {
       ...formatted.meta,
       scannedRoot: cwd,
@@ -216,7 +235,7 @@ async function handleBaselineMode(
       configSource: projectConfig.sourcePath,
       baselineVersion: baseline.version,
     },
-    nextStep: buildNextStep(newCount, newFiles),
+    nextStep: buildNextStep(newCount, newFiles, resolved.length),
   });
 }
 
@@ -420,7 +439,9 @@ function mergeFilesByPath<T extends { readonly filePath: string }>(
  * the scanner-stamped `findingId` directly — no reconstruction needed
  * because `formatFinding` surfaces the same token the baseline file
  * keyed on when it was written. Returns the filtered files (path +
- * findings) plus the total new-finding count.
+ * findings), the total new-finding count, and the set of every
+ * `findingId` the scan produced — the caller intersects that set with
+ * the baseline to compute which baseline entries are now resolved.
  */
 function filterToNewFindings(
   files: ScanFormatted["files"],
@@ -428,14 +449,17 @@ function filterToNewFindings(
 ): {
   readonly newFiles: { readonly path: string; readonly findings: readonly unknown[] }[];
   readonly newCount: number;
+  readonly scannedHashes: ReadonlySet<string>;
 } {
   const newFiles: { readonly path: string; readonly findings: readonly unknown[] }[] = [];
   let newCount = 0;
+  const scannedHashes = new Set<string>();
   for (const file of files) {
     const kept: unknown[] = [];
     for (const raw of file.findings) {
       const hash = hashOfFormattedFinding(raw);
       if (hash === null) continue;
+      scannedHashes.add(hash);
       if (baselineHashes.has(hash)) continue;
       kept.push(raw);
     }
@@ -444,7 +468,45 @@ function filterToNewFindings(
       newCount += kept.length;
     }
   }
-  return { newFiles, newCount };
+  return { newFiles, newCount, scannedHashes };
+}
+
+/**
+ * A baseline entry whose fingerprint hash no longer appears in the
+ * current scan — a violation that was previously grandfathered in but
+ * has since been fixed (or moved out of scope). Surfaced on `scan_diff`
+ * baseline mode so a PR that fixes a baselined issue shows visible
+ * progress and an agent can distinguish "new debt" from "re-regression
+ * of a previously-resolved item."
+ *
+ * Shape mirrors the baseline entry's identifying fields (minus the
+ * opaque `hash`). Line numbers aren't carried by baseline entries —
+ * baselines key on the line-drift-resilient `findingId`, not a raw
+ * line — so `line` is not part of this type. Matches the shape already
+ * surfaced by `baseline` mode: "check" (`resolvedEntries`) so agents
+ * get the same identity fields from either tool.
+ */
+export interface ResolvedFinding {
+  readonly filePath: string;
+  readonly ruleId: string;
+  readonly message: string;
+}
+
+/**
+ * Computes the resolved set: baseline entries whose fingerprint hash
+ * does not appear in the set of `findingId`s produced by the current
+ * scan. Preserves baseline-file order for stable output across runs.
+ */
+function resolvedFromBaseline(
+  baselineEntries: readonly BaselineEntry[],
+  scannedHashes: ReadonlySet<string>,
+): readonly ResolvedFinding[] {
+  const out: ResolvedFinding[] = [];
+  for (const entry of baselineEntries) {
+    if (scannedHashes.has(entry.hash)) continue;
+    out.push({ filePath: entry.filePath, ruleId: entry.ruleId, message: entry.message });
+  }
+  return out;
 }
 
 function hashOfFormattedFinding(raw: unknown): string | null {
@@ -481,16 +543,25 @@ function firstNewFinding(
 function buildNextStep(
   newCount: number,
   newFiles: readonly { readonly path: string; readonly findings: readonly unknown[] }[],
+  resolvedCount: number,
 ): string {
   if (newCount === 0) {
+    if (resolvedCount > 0) {
+      const noun = resolvedCount === 1 ? "entry" : "entries";
+      return `No new violations versus the baseline — and ${resolvedCount} baseline ${noun} no longer appear in the scan (resolved). Run \`baseline\` with mode: "update" to prune the resolved ${noun} from the snapshot, then recommit. Pair with axe-core runtime checks before claiming a11y conformance.`;
+    }
     return 'No new violations versus the baseline. If you expected regressions here, double-check the baseline is current — run `baseline` with mode: "update" after confirmed cleanup. Pair with axe-core runtime checks before claiming a11y conformance.';
   }
   const first = firstNewFinding(newFiles);
   const noun = newCount === 1 ? "violation" : "violations";
+  const resolvedHint =
+    resolvedCount > 0
+      ? ` ${resolvedCount} baseline ${resolvedCount === 1 ? "entry is" : "entries are"} resolved — run \`baseline\` with mode: "update" once the new ${noun} are fixed to prune them.`
+      : "";
   if (first === null) {
-    return `${newCount} new ${noun} not in the baseline.`;
+    return `${newCount} new ${noun} not in the baseline.${resolvedHint}`;
   }
-  return `${newCount} new ${noun} not in the baseline. Start with ${first.path}:${first.line} (rule \`${first.ruleId}\`) — call \`suggest_fix\` for a concrete patch.`;
+  return `${newCount} new ${noun} not in the baseline. Start with ${first.path}:${first.line} (rule \`${first.ruleId}\`) — call \`suggest_fix\` for a concrete patch.${resolvedHint}`;
 }
 
 function buildEmptyFilesResponse(args: {
@@ -507,6 +578,14 @@ function buildEmptyFilesResponse(args: {
     baselineGeneratedAt: baseline.generatedAt,
     newCount: 0,
     newViolations: [],
+    // Zero files scanned → no scan took place. We deliberately report
+    // `resolved: []` / `resolvedCount: 0` rather than the literal
+    // "every baseline entry is resolved" that an unguarded intersection
+    // would produce — nothing was actually resolved because nothing was
+    // scanned. Kept explicit (not conditionally spread) because the
+    // fields remain meaningful in baseline mode even at zero.
+    resolvedCount: 0,
+    resolved: [],
     meta: {
       filesScanned: 0,
       scannedRoot: cwd,
