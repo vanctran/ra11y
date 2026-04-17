@@ -10,13 +10,13 @@
 
 **`ra11y`** (pronounced "rally") is built primarily for an AI coding agent calling its tools — not a human staring at a dashboard. Every response shape, noise-vs-signal decision, and per-finding hint is designed for one-shot agent triage: a scan returns ranked findings with WCAG citations, ready-to-paste suppression comments, primary fix paths, and a `nextStep` pointer so the loop closes in one round-trip.
 
-That doesn't make it agent-only. ra11y ships a CLI with beautiful terminal output, four report formats, and precommit integration. It covers JSX/TSX, HTML, and CSS across four standards out of the box — WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 — and a plugin API for adding more. Coverage reports and a VPAT-ready certification scorecard sit alongside line-level violations, so the same tool your agent runs in Cursor also tells your legal team where you stand on ADA conformance.
+That doesn't make it agent-only. ra11y ships a CLI with beautiful terminal output, multiple report formats, and precommit integration. It covers JSX/TSX, HTML, and CSS across WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 out of the box — and a plugin API for adding more. Coverage reports and a VPAT-ready certification scorecard sit alongside line-level violations, so the same tool your agent runs in Cursor also tells your legal team where you stand on ADA conformance.
 
-> **Status: pre-release (v0.0.x).** The engine, plugin API, 49 rules, four built-in standards, eight output formatters, four report kinds (coverage, checklist, VPAT, certification), and a 12-tool MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
+> **Status: pre-release (v0.0.x).** The engine, plugin API, rule catalog, built-in standards (WCAG 2.2/2.1, Section 508, EN 301 549), output formatters, report kinds (coverage, checklist, VPAT, certification), and the MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
 
 ## Design priorities
 
-- **AI-first MCP server.** A 12-tool surface built for agent workflows — `scan_project`, `checklist`, `suggest_fix`, `detect_native_wrappers` — with responses shaped for one-shot triage (ranked fix paths, per-finding suppression pragmas, `nextStep` hints, scan-confidence telemetry).
+- **AI-first MCP server.** An agent-native tool surface — `scan_project`, `checklist`, `suggest_fix`, `detect_native_wrappers` — with responses shaped for one-shot triage (ranked fix paths, per-finding suppression pragmas, `nextStep` hints, scan-confidence telemetry). Call `tools/list` for the full inventory.
 - **Zero runtime dependencies.** Nothing in `dependencies`. Everything in-house. Tiny install, minimal supply-chain surface — what a compliance tool should look like.
 - **Multi-standard by architecture.** Standards → Criteria → Rules, with cross-standard equivalences. One rule satisfies WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 simultaneously; adding a new standard never touches rule code.
 - **VPAT + certification scorecard.** `--vpat`, `--certification`, and `--checklist` produce the shape legal and compliance teams actually need.

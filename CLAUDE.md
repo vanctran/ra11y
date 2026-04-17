@@ -12,12 +12,12 @@ Name: homophone of "rally" (a call to action for accessibility) with the `a11y` 
 
 Design priorities — the things the project optimizes for, in roughly decreasing importance:
 
-- **AI-first MCP server.** 12 tools designed around agent workflows — `scan_project` with inline `autoDetectWrappers` + `additionalPaths`, `checklist` with ranked review candidates, `suggest_fix` with primary/alternative fix paths, `detect_native_wrappers` for one-shot onboarding. Responses carry scan-confidence telemetry (opaque component counts, template-directive handling, CSS coverage ratios) so the agent knows when the scan had teeth.
+- **AI-first MCP server.** An agent-native tool surface — `scan_project` with inline `autoDetectWrappers` + `additionalPaths`, `checklist` with ranked review candidates, `suggest_fix` with primary/alternative fix paths, `detect_native_wrappers` for one-shot onboarding. Responses carry scan-confidence telemetry (opaque component counts, template-directive handling, CSS coverage ratios) so the agent knows when the scan had teeth. Canonical inventory: `tools/list` on the server.
 - **Zero runtime dependencies.** Nothing in `dependencies`. Everything in-house. Tiny install, tiny supply-chain surface, appealing for a compliance tool.
 - **Multi-standard architecture.** Standards → Criteria → Rules. One rule can satisfy WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 criteria simultaneously. Adding a new standard never touches rule code.
 - **VPAT + certification scorecard.** `--vpat`, `--certification`, and `--checklist` produce VPAT-shaped output and a readiness scorecard — the thing teams actually need when pursuing WCAG certification.
 - **Precommit-speed.** Sub-second on typical commits. Precommit-friendly. Performance budget enforced in CI.
-- **Polish on the human-facing surfaces.** Beautiful terminal output, context-aware fix suggestions, six output formats, plugin API, deep rule metadata. Not the design center, but earned after the AI-first surface is honest.
+- **Polish on the human-facing surfaces.** Beautiful terminal output, context-aware fix suggestions, multiple output formats, plugin API, deep rule metadata. Not the design center, but earned after the AI-first surface is honest.
 
 ### Consumer model: AI-first
 
@@ -341,7 +341,7 @@ v0.x is rapid iteration — treat the plugin API as semi-stable until v1.0.
 
 ## 15. Rule coverage matrix (v0.1.0 target)
 
-The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every row marked "auto" or "partial" under WCAG 2.1 A+AA and WCAG 2.2 A+AA additions ships in v0.1.0. That is ~30 automated rules. Every manual-only criterion gets a checklist entry in `src/reports/checklist.ts`.
+The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every row marked "auto" or "partial" under WCAG 2.1 A+AA and WCAG 2.2 A+AA additions ships in v0.1.0. Every manual-only criterion gets a checklist entry in `src/reports/checklist.ts`.
 
 ## 16. Release process
 
@@ -369,6 +369,7 @@ The full matrix lives in `docs/kb/standards/wcag22.md`. The short version: every
 - Splitting the difference on a field report that asks for less noise. → failure modes are asymmetric (see § 1, "Failure modes are asymmetric"). Over-surfacing costs the agent seconds and is reversible; under-surfacing costs the user an accessibility regression and is silent. When in doubt, surface with better `reason` text; never bucket-then-filter.
 - Adding a numeric-threshold gate ("only flag when duration ≤ 5s", "size ≥ 100px", "≥ N call sites"). → numeric thresholds are suppression in disguise (see § 1, "Numeric-threshold heuristics are suppression"). Pick any cutoff and you silent-miss the finding on the other side. Encode the numeric evidence in the `reason` text as additive context and let the agent read surrounding code to judge.
 - Emitting sentinel-empty values for optional fields (`newText: ""`, `snippet: ""`, `{ items: [] }` on an error path). → ambiguous field shapes are dishonest (see § 1, "Ambiguous field shapes are dishonest"). Conditional-spread the field at the response-assembly site so it is present only when meaningful, and let `undefined`/omission be the "no value" signal. An agent cannot tell empty-as-data from empty-as-absent, and the asymmetric cost of guessing wrong is silent.
+- Hardcoding inventory counts in docs ("12-tool MCP server", "49 rules", "four standards", "six formatters"). → these numbers change every release and the docs silently go stale; readers then lose trust when the count doesn't match reality. Write docs so they stay correct as the inventory grows: name the items that matter (`scan_project`, `checklist`, `suggest_fix`, …) without counting them, or point at the canonical source (`tools/list`, `src/rules/index.ts`, `src/standards/index.ts`). Specific counts are acceptable only in changelog entries, release notes, or generated reports where the date/version anchors the number.
 - Writing behavior-rehearsal unit tests for a real-world bug. → "the ranker orders alphabetically on ties", "the cap returns 5 entries when given 10" — these re-assert the code you just wrote and need to change every time you refactor; they catch typos, not regressions in behavior the user cares about. A test earns its keep when it encodes either (a) an invariant that survives refactors ("every pragma declaration has a line number," "no finder emits a suppression by filename pattern") or (b) a real-world failure mode with a sanitized repro. For (b), prefer landing the snippet under `tests/fixtures/real-world/<case>/` (see backlog Phase 23) over a unit test that reproduces the bug inline — fixtures survive internal rewrites that reshape the unit-test surface.
 
 ## 18. When in doubt
