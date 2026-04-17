@@ -44,6 +44,12 @@ interface AgentFinding {
   readonly id: string;
   readonly ruleId: string;
   readonly criteria: readonly string[];
+  /**
+   * Short human titles aligned index-for-index with `criteria`. Present
+   * when the engine stamped them (every real emitted violation); omitted
+   * when the upstream Violation had no `criteriaTitles` field.
+   */
+  readonly criteriaTitles?: readonly string[];
   readonly severity: Severity;
   readonly line: number;
   readonly column: number;
@@ -168,6 +174,11 @@ function buildFinding(v: Violation): AgentFinding {
     id: v.findingId,
     ruleId: v.ruleId,
     criteria: [...v.criteria],
+    // Aligned index-for-index with `criteria`. Conditional-spread so we
+    // never emit an ambiguous `criteriaTitles: []` sentinel when the
+    // upstream Violation omitted the field (CLAUDE.md §1 "Ambiguous
+    // field shapes are dishonest").
+    ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
     severity: v.severity,
     line: v.location.line,
     column: v.location.column,

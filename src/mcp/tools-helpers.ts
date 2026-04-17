@@ -6,7 +6,6 @@
  * on tool schemas and handler logic.
  */
 
-import { stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
@@ -121,28 +120,6 @@ export function numParam(params: Record<string, unknown>, key: string): number |
 export function strArrayParam(params: Record<string, unknown>, key: string): string[] | undefined {
   const v = params[key];
   return Array.isArray(v) ? (v as string[]) : undefined;
-}
-
-// ─── Path existence ─────────────────────────────────────────────────────────
-
-/**
- * Resolves `p` against `base` (when relative) and returns whether the
- * target exists on disk. Used by the scan tools before any parse work
- * to distinguish "scan target doesn't exist" (hard error envelope) from
- * "scan target exists but has zero parseable files" (soft
- * `warnings: ["scanned_zero_files"]` signal). Swallows every stat error
- * the same way — ENOENT, EACCES, and "is a symlink loop" all read as
- * "can't scan this" from the consumer's perspective, and the error
- * envelope's `details` names the path so the agent can investigate.
- */
-export async function pathExists(p: string, base?: string): Promise<boolean> {
-  const abs = isAbsolute(p) ? p : resolve(base ?? process.cwd(), p);
-  try {
-    await stat(abs);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // ─── Result builders ────────────────────────────────────────────────────────
@@ -405,6 +382,14 @@ export async function runScanAndFormat(
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
   readonly filesScanned: number;
+  /**
+   * Raw review candidates the finders produced, pre-dedup. Exposed so
+   * `scan_file` can dedupe by (filePath, line, column, reason) before
+   * surfacing them on the response — scan_project doesn't need them
+   * individually (it rolls them up into the `actionableManualItems`
+   * count) but a per-file tool does.
+   */
+  readonly reviewCandidates: readonly import("../types/review.ts").ReviewCandidate[];
 }> {
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
@@ -517,7 +502,12 @@ export async function runScanAndFormat(
     },
   };
 
-  return { formatted, durationMs: result.durationMs, filesScanned: result.filesScanned };
+  return {
+    formatted,
+    durationMs: result.durationMs,
+    filesScanned: result.filesScanned,
+    reviewCandidates: report.candidates ?? [],
+  };
 }
 
 function suppressionsMetaBlock(entries: readonly SuppressionAuditEntry[]): Record<string, unknown> {
@@ -667,6 +657,11 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     message: v.message,
     ...(v.suggestion ? { fix: v.suggestion } : {}),
     criteria: [...v.criteria],
+    // Aligned index-for-index with `criteria`. Conditional-spread so
+    // agents can distinguish "titles not supplied" (engine built this
+    // finding without a standards registry — rare; unit-test path)
+    // from "titles are `[]`" (criteria is also `[]`).
+    ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
     suppressWith: suppressPragma(v.location.filePath, v.ruleId),
     suppressPlacement: suppressPlacement(v.location.filePath),
   };

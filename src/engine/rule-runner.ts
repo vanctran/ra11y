@@ -45,6 +45,7 @@ export function runRulesForFile(input: RuleRunnerInput): readonly Violation[] {
  */
 function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void {
   const citedCriteria = input.filter.citedCriteria(rule);
+  const citedCriteriaTitles = input.filter.citedCriteriaTitles(rule);
   const sink: EmittedViolation[] = [];
   const ctx = buildContext(input, sink);
 
@@ -57,7 +58,16 @@ function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void 
 
   for (const emitted of sink) {
     if (ctx.isDisabled(emitted.location.line, rule.id)) continue;
-    out.push(stampViolation(emitted, rule.id, citedCriteria, input.filePath, input.source));
+    out.push(
+      stampViolation(
+        emitted,
+        rule.id,
+        citedCriteria,
+        citedCriteriaTitles,
+        input.filePath,
+        input.source,
+      ),
+    );
   }
 }
 
@@ -90,6 +100,7 @@ function stampViolation(
   emitted: EmittedViolation,
   ruleId: string,
   criteria: readonly string[],
+  criteriaTitles: readonly string[],
   filePath: string,
   source: string,
 ): Violation {
@@ -97,6 +108,7 @@ function stampViolation(
   return {
     ruleId,
     criteria,
+    criteriaTitles,
     severity: emitted.severity,
     location: { ...emitted.location, filePath },
     message: emitted.message,

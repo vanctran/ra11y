@@ -24,6 +24,10 @@ export const jsonFormatter = defineFormatter({
           findingId: v.findingId,
           ruleId: v.ruleId,
           criteria: v.criteria,
+          // Aligned index-for-index with `criteria`. Omitted when the
+          // engine did not stamp titles (e.g. synthetic rule-crash
+          // records with `criteria: []`).
+          ...(v.criteriaTitles !== undefined && { criteriaTitles: v.criteriaTitles }),
           severity: v.severity,
           location: v.location,
           message: v.message,

@@ -198,6 +198,7 @@ function invokeOneProjectRule(
     return;
   }
   const criteria = filter.citedCriteria(rule);
+  const criteriaTitles = filter.citedCriteriaTitles(rule);
   for (const em of sink) {
     const dm = disableMaps.get(em.location.filePath);
     const disabled = dm?.get(em.location.line);
@@ -212,6 +213,7 @@ function invokeOneProjectRule(
     out.push({
       ruleId: rule.id,
       criteria,
+      criteriaTitles,
       severity: em.severity,
       location: em.location,
       message: em.message,

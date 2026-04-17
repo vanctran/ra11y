@@ -95,6 +95,10 @@ function shapeViolation(
   return {
     ruleId: rule.id,
     criteria: [...rule.satisfies],
+    // No standards registry in this test helper path — fall back to the
+    // criterion ID for every title (matches `titlesForCriteria`'s
+    // "unresolved → ID" contract without pulling the registry in here).
+    criteriaTitles: [...rule.satisfies],
     severity: v.severity,
     // Project-scope emitters set filePath themselves; per-file paths fall through.
     location: { ...v.location, filePath: effectivePath },

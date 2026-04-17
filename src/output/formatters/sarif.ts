@@ -52,7 +52,17 @@ interface SarifRule {
   readonly fullDescription: { readonly text: string };
   readonly helpUri?: string;
   readonly defaultConfiguration: { readonly level: SarifLevel };
-  readonly properties: { readonly tags: readonly string[] };
+  readonly properties: {
+    readonly tags: readonly string[];
+    /**
+     * Short human titles for the criterion IDs carried in `tags`,
+     * aligned index-for-index with the criteria subset of `tags`
+     * (every tag after the leading `"accessibility"` sentinel). Lets
+     * GitHub code-scanning consumers and downstream SARIF readers
+     * render "Multiple Ways" without a separate WCAG lookup.
+     */
+    readonly criteriaTitles?: readonly string[];
+  };
 }
 
 interface SarifResult {
@@ -125,7 +135,16 @@ function collectRules(violations: readonly Violation[]): SarifRule[] {
       shortDescription: { text: ruleIdToShortDescription(ruleId) },
       fullDescription: { text: sample.message },
       defaultConfiguration: { level: severityToLevel(sample.severity) },
-      properties: { tags: ["accessibility", ...sample.criteria] },
+      properties: {
+        tags: ["accessibility", ...sample.criteria],
+        // Aligned index-for-index with the criteria subset of `tags`
+        // (i.e. tags[1..]). Omitted when the sample Violation didn't
+        // carry titles — SARIF readers that rely on it can defer to
+        // the criterion IDs in tags.
+        ...(sample.criteriaTitles !== undefined && {
+          criteriaTitles: [...sample.criteriaTitles],
+        }),
+      },
     });
   }
   rules.sort((a, b) => (a.id < b.id ? -1 : 1));

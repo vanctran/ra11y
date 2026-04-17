@@ -56,6 +56,24 @@ export interface Violation {
   readonly ruleId: string;
   /** Criterion IDs this violation counts against, filtered to enabled standards. */
   readonly criteria: readonly string[];
+  /**
+   * Short human titles for {@link Violation.criteria}, aligned index-for-index:
+   * `criteriaTitles[i]` is the title of `criteria[i]`. Lets consumers compose
+   * PR bodies, commit messages, and human-readable reports without a second
+   * `explain_rule` / `explain_standard` round-trip.
+   *
+   * When the criterion ID cannot be resolved against any loaded standard
+   * (should not happen in practice — belt-and-braces), the criterion ID
+   * itself is emitted as its own title rather than an empty string. Per
+   * CLAUDE.md §1 "Ambiguous field shapes are dishonest," empty placeholders
+   * are a silent-miss hazard; the ID as a fallback is deterministic and
+   * always non-empty.
+   *
+   * Optional so that callers building synthetic Violations (e.g. crash
+   * records with `criteria: []`) don't have to populate a parallel empty
+   * array, but the engine stamps it on every emitted finding.
+   */
+  readonly criteriaTitles?: readonly string[];
   readonly severity: Severity;
   readonly location: Location;
   readonly message: string;

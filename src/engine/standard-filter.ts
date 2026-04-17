@@ -23,6 +23,7 @@
  */
 
 import type { Rule } from "../types/rule.ts";
+import { titlesForCriteria } from "../utils/criteria-titles.ts";
 import type { CriteriaRegistry } from "./registry/criteria.ts";
 
 export type ConformanceLevel = "A" | "AA" | "AAA";
@@ -32,6 +33,14 @@ export interface StandardFilter {
   isRuleActive(rule: Rule): boolean;
   /** Criterion IDs the rule should cite, filtered to enabled standards. */
   citedCriteria(rule: Rule): readonly string[];
+  /**
+   * Human titles for {@link StandardFilter.citedCriteria}, aligned
+   * index-for-index. Callers MUST pair the two by the same invocation
+   * (both are deterministic for a given rule + filter state; the
+   * alignment depends on the shared walker order). Unresolved IDs fall
+   * back to the ID itself — never empty string. See `titlesForCriteria`.
+   */
+  citedCriteriaTitles(rule: Rule): readonly string[];
 }
 
 export function createStandardFilter(
@@ -53,6 +62,13 @@ export function createStandardFilter(
       const cited = new Set<string>();
       for (const c of walkCitedCriteria(rule, criteria, enabledStandards)) cited.add(c);
       return [...cited].sort();
+    },
+
+    citedCriteriaTitles(rule: Rule): readonly string[] {
+      const cited = new Set<string>();
+      for (const c of walkCitedCriteria(rule, criteria, enabledStandards)) cited.add(c);
+      const sorted = [...cited].sort();
+      return titlesForCriteria(sorted, (id) => criteria.get(id)?.title);
     },
   };
 }

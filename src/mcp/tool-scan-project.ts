@@ -10,6 +10,7 @@ import type { ParsedFile } from "../engine/scanner.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
+import { buildNextStep } from "./next-step.ts";
 import {
   errorResult,
   type McpTool,
@@ -18,7 +19,6 @@ import {
   parseFiles,
   resolveStandards,
   runScanAndFormat,
-  type ScanFormatted,
   type StructuredErrorCode,
   strArrayParam,
   strParam,
@@ -87,19 +87,8 @@ export const scanProjectTool: McpTool = {
   },
   async handler(params, session) {
     const explicitCwd = strParam(params, "cwd");
-    // Hard-error envelope when the caller passed a `cwd` that doesn't
-    // exist on disk. Without this, `parseFiles` returns 0 silently and
-    // the response shape reads as a clean codebase — the canonical
-    // silent-success failure mode CLAUDE.md §1 warns against.
-    if (explicitCwd !== undefined && !existsSync(explicitCwd)) {
-      return errorResult({
-        code: "cwd-not-found",
-        message: `Requested cwd does not exist on disk: ${explicitCwd}`,
-        details: { cwd: explicitCwd },
-        remediation:
-          "Pass `cwd` as a path to an existing directory. Relative paths resolve against the MCP server's spawn directory.",
-      });
-    }
+    const cwdError = checkCwdExists(explicitCwd);
+    if (cwdError) return cwdError;
     // When cwd isn't passed, prefer a host-declared root (MCP
     // `roots` capability) over the spawn directory's git root. The
     // host is the best arbiter of "what project is active right now"
@@ -160,7 +149,12 @@ export const scanProjectTool: McpTool = {
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
     );
-    const nextStep = suggestNextStep(formatted, actualMode);
+    const nextStep = buildNextStep(formatted, {
+      iterativeTip:
+        actualMode === "full"
+          ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
+          : "",
+    });
     return textResult({
       ...formatted,
       ...warningsFieldFromScanMeta({
@@ -380,110 +374,11 @@ function findNearbyConfig(startDir: string): string | null {
   return null;
 }
 
-/**
- * Points agents at the next tool in the workflow. Static analysis is
- * only half of WCAG; a clean scan should nudge toward manual review
- * rather than implying conformance. When findings or actionable manual
- * items exist, the guidance is directive — names a specific tool and
- * the first file:line worth calling it on — so the agent doesn't have
- * to parse the response twice to figure out where to start.
- */
-interface NextStepInputs {
-  readonly violations: number;
-  readonly fixable: number;
-  readonly actionableManual: number;
-  readonly notes: number;
-  readonly first: FirstFinding | null;
-  readonly iterativeTip: string;
-}
-
-function suggestNextStep(formatted: ScanFormatted, mode: string): string {
-  const inputs: NextStepInputs = {
-    violations: numFromPlan(formatted.plan, "violations"),
-    fixable: numFromPlan(formatted.plan, "fixSuggestionAvailable"),
-    actionableManual: numFromPlan(formatted.plan, "actionableManualItems"),
-    notes: numFromPlan(formatted.plan, "notes"),
-    first: firstCallableFinding(formatted.files),
-    iterativeTip:
-      mode === "full"
-        ? ' For iterative work on a branch, pass `since: "HEAD~1"` or `changedOnly: true` to scan only diffs.'
-        : "",
-  };
-  if (inputs.violations === 0 && inputs.notes === 0) return cleanScanNextStep(inputs);
-  if (inputs.violations > 0 && inputs.first !== null)
-    return violationNextStep(inputs, inputs.first);
-  if (inputs.notes > 0 && inputs.first !== null) return notesNextStep(inputs, inputs.first);
-  return `Use \`explain_rule\` on unclear findings, \`suggest_fix\` for a concrete patch, and \`scan_file\` to verify each file after editing.${inputs.iterativeTip}`;
-}
-
-function cleanScanNextStep(inputs: NextStepInputs): string {
-  if (inputs.actionableManual > 0) {
-    const pl = inputs.actionableManual === 1 ? "on has" : "a have";
-    return `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next.${inputs.iterativeTip}`;
-  }
-  return `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone.`;
-}
-
-function violationNextStep(inputs: NextStepInputs, first: FirstFinding): string {
-  const vPlural = inputs.violations === 1 ? "" : "s";
-  if (inputs.fixable > 0) {
-    const fPlural = inputs.fixable === 1 ? "" : "s";
-    return `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`;
-  }
-  return `${inputs.violations} violation${vPlural} with no machine-generated fix. Call \`explain_rule\` on \`${first.ruleId}\` and apply manually; verify with \`scan_file ${first.path}\` after editing.${inputs.iterativeTip}`;
-}
-
-function notesNextStep(inputs: NextStepInputs, first: FirstFinding): string {
-  const nPlural = inputs.notes === 1 ? "" : "s";
-  return `No errors/warnings, ${inputs.notes} info-level note${nPlural} (scanner flagged things it can't fully verify). Open \`scan_file ${first.path}\` or read the source to resolve.${manualTail(inputs)}${inputs.iterativeTip}`;
-}
-
-function manualTail(inputs: NextStepInputs): string {
-  if (inputs.actionableManual <= 0) return "";
-  const plural = inputs.actionableManual === 1 ? "" : "s";
-  return ` Then \`checklist\` for the ${inputs.actionableManual} grounded manual-review item${plural}.`;
-}
-
-function numFromPlan(plan: Record<string, unknown>, key: string): number {
-  const raw = plan[key];
-  return typeof raw === "number" ? raw : 0;
-}
-
-interface FirstFinding {
-  readonly path: string;
-  readonly line: number;
-  readonly ruleId: string;
-}
-
-/**
- * Pulls the first finding's (file, line, ruleId) from the sorted
- * `files` entries so the next-step hint can name a concrete call site.
- * Falls back to null when the response has no findings or the shape
- * doesn't expose the fields we want — the caller degrades to generic
- * text in that case.
- */
-function firstCallableFinding(
-  files: readonly { readonly path: string; readonly findings: unknown[] }[],
-): FirstFinding | null {
-  for (const file of files) {
-    for (const raw of file.findings) {
-      const extracted = readFindingRuleIdAndLine(raw);
-      if (extracted !== null) return { path: file.path, ...extracted };
-    }
-  }
-  return null;
-}
-
-function readFindingRuleIdAndLine(
-  raw: unknown,
-): { readonly ruleId: string; readonly line: number } | null {
-  if (!raw || typeof raw !== "object") return null;
-  const f = raw as Record<string, unknown>;
-  const ruleId = f["ruleId"];
-  const line = f["line"];
-  if (typeof ruleId !== "string" || typeof line !== "number") return null;
-  return { ruleId, line };
-}
+// Next-step prose is built by the shared `buildNextStep` helper
+// (`src/mcp/next-step.ts`) so scan_project and scan_file stay in
+// lockstep. A prior in-file implementation drifted from scan_file's
+// shape; the extraction is deliberate parity infrastructure, not a
+// refactor for its own sake.
 
 /**
  * The scan scope for a given `scan_project` invocation. Either the
@@ -646,4 +541,25 @@ function mergeFilesByPath<T extends { readonly filePath: string }>(
   const extras = secondary.filter((f) => !seen.has(f.filePath));
   if (extras.length === 0) return primary;
   return [...primary, ...extras];
+}
+
+/**
+ * Hard-error envelope when the caller passed a `cwd` that doesn't
+ * exist on disk. Without this, `parseFiles` returns 0 silently and
+ * the response shape reads as a clean codebase — the silent-success
+ * failure mode CLAUDE.md §1 warns against. Returns `null` when `cwd`
+ * is undefined or exists; returns the error envelope otherwise.
+ * Extracted from the handler to keep its cognitive complexity inside
+ * the lint budget.
+ */
+function checkCwdExists(explicitCwd: string | undefined): ReturnType<typeof errorResult> | null {
+  if (explicitCwd === undefined) return null;
+  if (existsSync(explicitCwd)) return null;
+  return errorResult({
+    code: "cwd-not-found",
+    message: `Requested cwd does not exist on disk: ${explicitCwd}`,
+    details: { cwd: explicitCwd },
+    remediation:
+      "Pass `cwd` as a path to an existing directory. Relative paths resolve against the MCP server's spawn directory.",
+  });
 }
