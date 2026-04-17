@@ -374,6 +374,77 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.level).toBe("AA");
     expect(body.candidateCount).toBe(body.candidates.length);
   });
+
+  it("review_candidates populates snippet with de-indented ±3-line context under the 300-char cap", async () => {
+    // consistent-navigation surfaces wcag22:3.2.3 candidates on
+    // divergent route files — a reliable source of review candidates
+    // grounded in real file:line, which is what the snippet path
+    // needs to populate.
+    const fixtureDir = join(
+      PROJECT_ROOT,
+      "tests",
+      "fixtures",
+      "review",
+      "consistent-navigation",
+      "bad",
+    );
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "review_candidates", { paths: [fixtureDir] }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      candidateCount: number;
+      candidates: Array<{
+        criterionId: string;
+        location: { filePath: string; line: number };
+        snippet?: string;
+      }>;
+    };
+    expect(body.candidateCount).toBeGreaterThan(0);
+    const withFileLine = body.candidates.filter((c) => c.location.filePath && c.location.line > 0);
+    // Every grounded candidate should now carry a snippet.
+    expect(withFileLine.length).toBeGreaterThan(0);
+    for (const c of withFileLine) {
+      expect(typeof c.snippet).toBe("string");
+      expect((c.snippet ?? "").length).toBeGreaterThan(0);
+      // Hard cap — 300 chars total including any newlines.
+      expect((c.snippet ?? "").length).toBeLessThanOrEqual(300);
+      // Dishonest shapes forbidden — a candidate with a real file:line
+      // must not have snippet === "" (that would be indistinguishable
+      // from "file was blank there").
+      expect(c.snippet).not.toBe("");
+    }
+  });
+
+  it("checklist candidate entries carry snippet with the same shape", async () => {
+    const fixtureDir = join(
+      PROJECT_ROOT,
+      "tests",
+      "fixtures",
+      "review",
+      "consistent-navigation",
+      "bad",
+    );
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { paths: [fixtureDir] }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      items: Array<{
+        criterionId: string;
+        candidates: Array<{ path: string; line: number; snippet?: string }>;
+      }>;
+    };
+    const allCandidates = body.items.flatMap((i) => i.candidates);
+    expect(allCandidates.length).toBeGreaterThan(0);
+    for (const c of allCandidates) {
+      if (c.path && c.line > 0) {
+        expect(typeof c.snippet).toBe("string");
+        expect((c.snippet ?? "").length).toBeGreaterThan(0);
+        expect((c.snippet ?? "").length).toBeLessThanOrEqual(300);
+      }
+    }
+  });
 });
 
 describe("MCP tools/call: missing-required-param error envelopes", () => {

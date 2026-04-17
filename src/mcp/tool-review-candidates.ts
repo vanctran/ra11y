@@ -20,6 +20,7 @@ import { runScan } from "../engine/scanner.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { buildSnippet, sourceIndex } from "./source-snippet.ts";
 import {
   applyRuleSettings,
   errorResult,
@@ -106,6 +107,7 @@ export const reviewCandidatesTool: McpTool = {
 
     const findersByCriterion = indexFindersByCriterion();
     const standardsById = new Map(BUILTIN_STANDARDS.map((s) => [s.id, s]));
+    const sources = sourceIndex(files);
 
     return textResult({
       level,
@@ -117,13 +119,14 @@ export const reviewCandidatesTool: McpTool = {
         const standard = standardsById.get(standardId);
         const criterion = standard?.criteria.find((ck) => ck.id === criterionKey);
         const finder = findersByCriterion.get(criterionKey);
+        const snippet = candidateSnippet(c, sources);
         return {
           criterionId: c.criterionId,
           title: criterion?.title ?? null,
           level: criterion?.level ?? null,
           location: c.location,
           reason: c.reason,
-          snippet: c.snippet ?? null,
+          ...(snippet === undefined ? {} : { snippet }),
           reviewPrompt: finder?.docs.reviewPrompt ?? null,
           finderId: finder?.id ?? null,
         };
@@ -131,6 +134,24 @@ export const reviewCandidatesTool: McpTool = {
     });
   },
 };
+
+/**
+ * Produces the `snippet` field for a single candidate: prefers the
+ * finder-supplied `snippet` when present (finders sometimes know the
+ * right window better than ±3 lines — e.g. a cross-file reasoner),
+ * falls back to a cache-only lookup on `(filePath, line)`. Returns
+ * `undefined` when no honest snippet can be built so the caller
+ * conditional-spreads the field away.
+ */
+function candidateSnippet(
+  c: { location: { filePath: string; line: number }; snippet?: string },
+  sources: ReadonlyMap<string, string>,
+): string | undefined {
+  if (typeof c.snippet === "string" && c.snippet.length > 0) return c.snippet;
+  const source = sources.get(c.location.filePath);
+  if (source === undefined) return undefined;
+  return buildSnippet(source, c.location.line);
+}
 
 function indexFindersByCriterion(): Map<string, (typeof BUILTIN_CANDIDATE_FINDERS)[number]> {
   const out = new Map<string, (typeof BUILTIN_CANDIDATE_FINDERS)[number]>();

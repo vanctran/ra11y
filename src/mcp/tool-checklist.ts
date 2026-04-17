@@ -17,6 +17,7 @@ import {
   irrelevanceReason,
   isLikelyIrrelevant,
 } from "./manual-applicability.ts";
+import { buildSnippet, sourceIndex } from "./source-snippet.ts";
 import {
   applyRuleSettings,
   errorResult,
@@ -35,6 +36,7 @@ interface ChecklistCandidateOut {
   readonly path: string;
   readonly line: number;
   readonly reason: string;
+  readonly snippet?: string;
 }
 
 type ChecklistPriority = "high" | "medium" | "low";
@@ -147,10 +149,12 @@ export const checklistTool: McpTool = {
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
     const applicability = detectApplicability(files);
 
+    const sources = sourceIndex(files);
     const { needsReview, likelyIrrelevant } = bucketChecklistItems(
       coverage,
       report.candidates ?? [],
       applicability,
+      sources,
     );
     // Actionable items (concrete candidates) stay in `items`; criteria
     // the finders couldn't ground in code move to `untargeted`. Keeping
@@ -222,18 +226,42 @@ export const checklistTool: McpTool = {
 function mapCandidates(
   criterionId: string,
   candidates: readonly ReviewCandidate[],
+  sources: ReadonlyMap<string, string>,
 ): ChecklistCandidateOut[] {
   return candidates
     .filter((c) => c.criterionId === criterionId)
-    .map((c) => ({ path: c.location.filePath, line: c.location.line, reason: c.reason }));
+    .map((c) => {
+      // Prefer a finder-supplied snippet (cross-file finders sometimes
+      // know the right window better than ±3 lines), else fall back to
+      // a cache-only lookup. Omit the field when neither is available
+      // — empty-string is a dishonest shape per CLAUDE.md §1.
+      const snippet = finderOrBuiltSnippet(c, sources);
+      return {
+        path: c.location.filePath,
+        line: c.location.line,
+        reason: c.reason,
+        ...(snippet === undefined ? {} : { snippet }),
+      };
+    });
+}
+
+function finderOrBuiltSnippet(
+  c: ReviewCandidate,
+  sources: ReadonlyMap<string, string>,
+): string | undefined {
+  if (typeof c.snippet === "string" && c.snippet.length > 0) return c.snippet;
+  const source = sources.get(c.location.filePath);
+  if (source === undefined) return undefined;
+  return buildSnippet(source, c.location.line);
 }
 
 function buildChecklistItem(
   criterion: { id: string; standardId: string; localId: string; title: string; level: string },
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
+  sources: ReadonlyMap<string, string>,
 ): { item: ChecklistItemOut; relevant: boolean } {
-  const mapped = mapCandidates(criterion.id, candidates);
+  const mapped = mapCandidates(criterion.id, candidates, sources);
   const principle = wcagPrincipleFor(criterion.standardId, criterion.localId);
   const base: ChecklistItemOut = {
     criterionId: criterion.id,
@@ -255,6 +283,7 @@ function bucketChecklistItems(
   coverage: readonly PerStandardCoverage[],
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
+  sources: ReadonlyMap<string, string>,
 ): { needsReview: ChecklistItemOut[]; likelyIrrelevant: ChecklistItemOut[] } {
   const needsReview: ChecklistItemOut[] = [];
   const likelyIrrelevant: ChecklistItemOut[] = [];
@@ -264,7 +293,7 @@ function bucketChecklistItems(
     for (const criterionId of entry.manualCriteria) {
       const criterion = standard.criteria.find((c) => c.id === criterionId);
       if (!criterion) continue;
-      const { item, relevant } = buildChecklistItem(criterion, candidates, applicability);
+      const { item, relevant } = buildChecklistItem(criterion, candidates, applicability, sources);
       (relevant ? needsReview : likelyIrrelevant).push(item);
     }
   }
