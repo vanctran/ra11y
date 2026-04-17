@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Default Title{% endblock %}</title>
+</head>
+<body>
+{% extends "layout.jinja.html" %}
+{% block content %}
+<main>
+  <h1>Welcome, {{ user.name }}</h1>
+  <p>Your account status: {% if user.active %}active{% else %}inactive{% endif %}</p>
+  <ul>
+    {% for item in user.notifications %}
+    <li>{{ item.message }}</li>
+    {% endfor %}
+  </ul>
+</main>
+{% endblock %}
+</body>
+</html>
