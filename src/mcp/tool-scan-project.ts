@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
+import { probeBaselineStatus } from "./baseline-status.ts";
 import { collectBuildArtifacts } from "./build-artifacts.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { buildNextStep } from "./next-step.ts";
@@ -164,6 +165,12 @@ export const scanProjectTool: McpTool = {
     // "Ambiguous field shapes are dishonest," the field is omitted
     // entirely when the detector finds no artifacts (never `[]`).
     const buildArtifacts = buildArtifactsFields(files);
+    // P2-BASE: probe the canonical baseline path so agents see whether
+    // a baseline is in play alongside the scan result — prevents
+    // re-proposing fixes for grandfathered violations without the
+    // separate `baseline check` round-trip. Omitted when no baseline
+    // exists (honest shape per CLAUDE.md §1).
+    const baselineStatus = await probeBaselineStatus(root);
     return textResult({
       ...formatted,
       ...warningsFieldFromScanMeta({
@@ -181,6 +188,7 @@ export const scanProjectTool: McpTool = {
         ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
         configSource: projectConfig.sourcePath,
         configSearchedFrom: root,
+        ...baselineStatusField(baselineStatus),
         ...buildArtifacts.metaField,
         ...(projectConfig.sourcePath === null
           ? {
@@ -594,6 +602,18 @@ function structuredField(nextStep: { readonly structured?: unknown }): {
 } {
   if (nextStep.structured === undefined) return {};
   return { nextStepStructured: nextStep.structured };
+}
+
+/**
+ * Conditional-spread the `baselineStatus` meta field — present only
+ * when a `.ra11y-baseline.json` exists at the scan root. Extracted so
+ * the handler's cognitive complexity stays inside the lint budget.
+ */
+function baselineStatusField(status: Awaited<ReturnType<typeof probeBaselineStatus>>): {
+  readonly baselineStatus?: NonNullable<typeof status>;
+} {
+  if (status === null) return {};
+  return { baselineStatus: status };
 }
 
 function buildArtifactsFields(files: readonly ParsedFile[]): {

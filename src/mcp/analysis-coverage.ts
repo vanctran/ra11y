@@ -145,6 +145,7 @@ export function buildAnalysisCoverage(
   wrappers: readonly string[],
   activeRules: readonly Rule[],
   verbose: boolean,
+  autoDetectConfirmedCount = 0,
 ): { analysisCoverage?: Record<string, unknown> } {
   const acc: CoverageAccumulator = {
     opaqueComponents: new Map(),
@@ -158,6 +159,7 @@ export function buildAnalysisCoverage(
     opaqueCustomComponents?: number;
     opaqueCustomComponentsTop?: readonly { readonly name: string; readonly callSites: number }[];
     opaqueCustomComponentNames?: readonly string[];
+    opaqueCustomComponentsExcludedByAutoDetect?: number;
     templateDirectivesFound?: readonly string[];
     templateDirectiveHandling?: string;
     parseErrorFileCount?: number;
@@ -167,6 +169,17 @@ export function buildAnalysisCoverage(
   } = {};
   if (acc.opaqueComponents.size > 0) {
     assembleOpaqueComponentBlock(acc.opaqueComponents, verbose, coverage);
+    // P1-ACCT: when autoDetectWrappers: true promotes N PascalCase
+    // components to the scan-scoped wrapper list, those N are
+    // subtracted from the opaque count — agents comparing scans
+    // with-flag vs without-flag see a mysterious difference (43 vs 51
+    // on the same codebase). Surfacing the subtraction count makes
+    // the scan-scope of the flag visible in the same number field it
+    // affects, so an agent can compute the flagless count itself:
+    // `opaqueCustomComponents + opaqueCustomComponentsExcludedByAutoDetect`.
+    if (autoDetectConfirmedCount > 0) {
+      coverage.opaqueCustomComponentsExcludedByAutoDetect = autoDetectConfirmedCount;
+    }
   }
   if (acc.templateEngines.size > 0) {
     coverage.templateDirectivesFound = [...acc.templateEngines].sort();

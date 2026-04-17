@@ -526,7 +526,13 @@ export async function runScanAndFormat(
       // agent can calibrate confidence in "automated clean." Each entry
       // is a structural gap, not a heuristic guess — the fields are
       // empty/omitted when there's nothing to report.
-      ...buildAnalysisCoverage(files, wrappers, activeRules, verboseMeta),
+      ...buildAnalysisCoverage(
+        files,
+        wrappers,
+        activeRules,
+        verboseMeta,
+        wrapperProvenance.fromAutoDetect.confirmed.length,
+      ),
       // Audit trail for every in-source `ra11y-disable` pragma the scan
       // encountered, with the captured reason text when supplied. Keeps
       // suppressions visible and accountable — an agent reviewing a
