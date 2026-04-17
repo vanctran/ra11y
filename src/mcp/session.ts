@@ -41,9 +41,22 @@ export interface SessionConfig {
   allowWrite: boolean;
 }
 
+/**
+ * One host-declared project root. The MCP `roots` capability flows
+ * from client → server — hosts list directories they consider the
+ * active project, and we fall back onto the first root when the
+ * caller omits `cwd` on scan-scoped tools. The `name` field is
+ * advisory (some hosts don't populate it).
+ */
+export interface SessionRoot {
+  readonly uri: string;
+  readonly name?: string;
+}
+
 export class McpSession {
   readonly config: SessionConfig;
   private readonly cache: Map<string, CacheEntry> = new Map();
+  private rootsList: readonly SessionRoot[] = [];
 
   constructor() {
     this.config = {
@@ -54,6 +67,39 @@ export class McpSession {
       nativeWrappers: [],
       allowWrite: false,
     };
+  }
+
+  /**
+   * Replace the known set of host-declared roots. Called once from
+   * `initialize` (we read `params.roots` defensively) and again on
+   * `notifications/roots/list_changed`. Pure mutation — no scans
+   * re-trigger; the next tool call picks them up.
+   */
+  setRoots(roots: readonly SessionRoot[]): void {
+    this.rootsList = [...roots];
+  }
+
+  /**
+   * Read-only view of currently declared roots. Empty when the host
+   * did not advertise the `roots` capability or returned an empty
+   * list. Tools degrade gracefully in that case.
+   */
+  get roots(): readonly SessionRoot[] {
+    return this.rootsList;
+  }
+
+  /**
+   * Absolute filesystem path of the first declared root, if any.
+   * `scan_project` uses this as a default scan scope when the caller
+   * has not passed `cwd` explicitly. URIs that aren't `file://` are
+   * ignored (we can't scan a URL-only root).
+   */
+  firstRootPath(): string | null {
+    for (const root of this.rootsList) {
+      const p = fileUriToPath(root.uri);
+      if (p !== null) return p;
+    }
+    return null;
   }
 
   /**
@@ -144,6 +190,24 @@ export class McpSession {
   get cacheSize(): number {
     return this.cache.size;
   }
+}
+
+/**
+ * Convert an MCP root URI (`file://...`) to an absolute filesystem
+ * path. Non-`file` schemes return null — we can't scan an HTTP URL.
+ * Also tolerates hosts that drop the scheme and send bare absolute
+ * paths, since that's the most common real-world mistake.
+ */
+function fileUriToPath(uri: string): string | null {
+  if (uri.length === 0) return null;
+  if (uri.startsWith("file://")) {
+    const rest = uri.slice("file://".length);
+    // file:///abs/path → /abs/path; file://host/path → reject (remote)
+    if (rest.startsWith("/")) return decodeURIComponent(rest);
+    return null;
+  }
+  if (isAbsolute(uri)) return uri;
+  return null;
 }
 
 function parseForExtension(filePath: string, source: string): Ast | null {

@@ -82,12 +82,17 @@ export const scanProjectTool: McpTool = {
   },
   async handler(params, session) {
     const explicitCwd = strParam(params, "cwd");
-    // When cwd isn't passed, prefer the git root over the MCP server's
-    // spawn directory — that's almost always the project the user means.
-    // Falls through to process.cwd() for non-git scans (tmp fixtures, etc.).
+    // When cwd isn't passed, prefer a host-declared root (MCP
+    // `roots` capability) over the spawn directory's git root. The
+    // host is the best arbiter of "what project is active right now"
+    // — an agent-side IDE will have a declared root even when the
+    // server was spawned elsewhere. Fall through to git-root, then
+    // process.cwd() for non-root, non-git scans.
     const spawnCwd = process.cwd();
-    const root = explicitCwd ?? gitRoot(spawnCwd) ?? spawnCwd;
+    const hostRoot = explicitCwd === undefined ? session.firstRootPath() : null;
+    const root = explicitCwd ?? hostRoot ?? gitRoot(spawnCwd) ?? spawnCwd;
     const autoPromoted = explicitCwd === undefined && root !== spawnCwd;
+    const rootSource = resolveRootSource({ explicitCwd, hostRoot, root, spawnCwd });
     const projectConfig = await session.loadProjectConfig(root);
     const configHint = buildConfigHint(projectConfig.sourcePath, explicitCwd, root, autoPromoted);
     const standards = resolveStandards(strParam(params, "standard"), session);
@@ -151,6 +156,8 @@ export const scanProjectTool: McpTool = {
         ...formatted.meta,
         scannedRoot: root,
         scanMode: describeMode(params),
+        rootSource,
+        ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
         configSource: projectConfig.sourcePath,
         configSearchedFrom: root,
         ...(projectConfig.sourcePath === null
@@ -174,6 +181,51 @@ export const scanProjectTool: McpTool = {
     });
   },
 };
+
+/**
+ * Names the reason this scan picked `root`. Surfaces as `rootSource`
+ * in `meta` so agents can tell whether they're scanning what the host
+ * expected — `explicit` / `host-root` / `git` / `spawn-cwd` — without
+ * reading server logs.
+ */
+function resolveRootSource(args: {
+  explicitCwd: string | undefined;
+  hostRoot: string | null;
+  root: string;
+  spawnCwd: string;
+}): "explicit" | "host-root" | "git" | "spawn-cwd" {
+  if (args.explicitCwd !== undefined) return "explicit";
+  if (args.hostRoot !== null && args.root === args.hostRoot) return "host-root";
+  if (args.root !== args.spawnCwd) return "git";
+  return "spawn-cwd";
+}
+
+/**
+ * Surface overlap when the caller *and* the host both had an opinion
+ * about the scan scope. Explicit cwd wins (see precedence in the
+ * handler), but we note that the host's first root differs so the
+ * agent can decide whether to flip to the host's preference next call.
+ */
+interface RootsOverlapArgs {
+  explicitCwd: string | undefined;
+  hostRoot: string | null;
+  root: string;
+  session: import("./session.ts").McpSession;
+}
+
+function buildRootsOverlapMeta(args: RootsOverlapArgs): Record<string, unknown> {
+  const { explicitCwd, root, session } = args;
+  const roots = session.roots;
+  if (roots.length === 0) return {};
+  const firstPath = session.firstRootPath();
+  if (explicitCwd !== undefined && firstPath !== null && explicitCwd !== firstPath) {
+    return {
+      hostDeclaredRoots: roots.map((r) => r.uri),
+      rootsOverlapNote: `Host declared ${roots.length} root(s); explicit cwd \`${explicitCwd}\` overrides. First host root is \`${firstPath}\`. Scanning \`${root}\`.`,
+    };
+  }
+  return { hostDeclaredRoots: roots.map((r) => r.uri) };
+}
 
 /**
  * Builds the wrapper-related meta fields. Two distinct shapes:

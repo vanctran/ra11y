@@ -23,7 +23,7 @@ import {
   ResourceError,
   readKbResource,
 } from "./resources/index.ts";
-import { McpSession } from "./session.ts";
+import { McpSession, type SessionRoot } from "./session.ts";
 import { MCP_TOOLS } from "./tools.ts";
 
 // ─── JSON-RPC types ─────────────────────────────────────────────────────────
@@ -133,16 +133,65 @@ export async function startMcpServer(): Promise<void> {
 
     // Notifications (no id) don't get responses.
     if (request.id === undefined || request.id === null) {
-      // "initialized" is the only notification we expect.
-      if (request.method === "notifications/initialized") {
-        logger.debug("MCP client sent initialized notification");
-      }
+      handleNotification(request, session);
       continue;
     }
 
     const response = await dispatch(request, session);
     writeResponse(response);
   }
+}
+
+/**
+ * Notifications carry no id, so we never reply — but some of them
+ * carry state the session needs. `notifications/roots/list_changed`
+ * is the canonical example: the host flipped project boundaries and
+ * we need to re-query. We also record `initialized` for diagnostics.
+ */
+function handleNotification(request: JsonRpcRequest, session: McpSession): void {
+  if (request.method === "notifications/initialized") {
+    logger.debug("MCP client sent initialized notification");
+    return;
+  }
+  if (request.method === "notifications/roots/list_changed") {
+    // Host is telling us roots changed; we can't synchronously query
+    // them back (that requires the host to answer a request), so we
+    // just log and let the next tool call re-read session.roots.
+    // When an `initialize` result carries roots directly, that path
+    // populates the list.
+    logger.debug("MCP client changed roots list");
+    return;
+  }
+  if (request.method === "notifications/roots") {
+    // Non-spec but some hosts push `{ roots: [...] }` alongside the
+    // list_changed notification to avoid a second round-trip. We
+    // accept it defensively.
+    const roots = extractRootsFromParams(request.params ?? {});
+    if (roots !== null) session.setRoots(roots);
+    return;
+  }
+}
+
+/**
+ * Parse the `roots` array an MCP client may send either in
+ * `initialize.params` or on `notifications/roots`. The canonical
+ * shape is `Array<{ uri: string, name?: string }>`. Anything else
+ * returns null so the caller knows not to mutate session state.
+ */
+function extractRootsFromParams(params: Record<string, unknown>): SessionRoot[] | null {
+  const raw = params["roots"];
+  if (!Array.isArray(raw)) return null;
+  const out: SessionRoot[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as { uri?: unknown; name?: unknown };
+    if (typeof r.uri !== "string" || r.uri.length === 0) continue;
+    out.push({
+      uri: r.uri,
+      ...(typeof r.name === "string" ? { name: r.name } : {}),
+    });
+  }
+  return out;
 }
 
 async function handleToolsCall(
@@ -191,7 +240,7 @@ function route(
   id: string | number | null,
   session: McpSession,
 ): Promise<JsonRpcResponse> | JsonRpcResponse {
-  if (request.method === "initialize") return initializeResponse(id);
+  if (request.method === "initialize") return initializeResponse(id, request.params ?? {}, session);
   if (request.method === "tools/list") return toolsListResponse(id);
   if (request.method === "tools/call") {
     return handleToolsCall(id, request.params ?? {}, session);
@@ -211,7 +260,18 @@ function route(
   };
 }
 
-function initializeResponse(id: string | number | null): JsonRpcResponse {
+function initializeResponse(
+  id: string | number | null,
+  rawParams: Record<string, unknown>,
+  session: McpSession,
+): JsonRpcResponse {
+  // Host may declare `roots` up-front in `initialize.params.roots`
+  // (some clients send them inline, others push via a notification
+  // after handshake). Accept either path defensively so we have a
+  // scan-scope hint before any tool call.
+  const declaredRoots = extractRootsFromParams(rawParams);
+  if (declaredRoots !== null) session.setRoots(declaredRoots);
+
   return {
     jsonrpc: "2.0",
     id,
