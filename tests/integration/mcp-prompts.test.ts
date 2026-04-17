@@ -74,6 +74,7 @@ interface PromptListEntry {
   readonly name: string;
   readonly description: string;
   readonly arguments: readonly { name: string; description: string; required: boolean }[];
+  readonly _meta?: { checksum?: string };
 }
 
 interface PromptGetResult {
@@ -82,6 +83,7 @@ interface PromptGetResult {
     role: string;
     content: { type: string; text: string };
   }[];
+  readonly _meta?: { checksum?: string };
 }
 
 describe("MCP prompts capability advertisement", () => {
@@ -132,6 +134,23 @@ describe("MCP prompts/list: inventory shape", () => {
     const tone = vpat?.arguments.find((a) => a.name === "tone");
     expect(criterion?.required).toBe(true);
     expect(tone?.required).toBe(false);
+  });
+
+  it("advertises a `_meta.checksum` stamp on every prompt so hosts can pin behavior", async () => {
+    // A host that caches a "tested-against" checksum for a workflow
+    // relies on this annotation to detect template drift between
+    // server versions. Losing it silently breaks version-pinning.
+    const responses = await mcpSession([initMsg(1), promptsList(2)]);
+    const prompts = (responses[1].result as { prompts: PromptListEntry[] }).prompts;
+    const hexPattern = /^[0-9a-f]{16}$/;
+    for (const prompt of prompts) {
+      expect(prompt._meta?.checksum).toBeDefined();
+      expect(prompt._meta?.checksum).toMatch(hexPattern);
+    }
+    // Distinct checksums across the inventory — collisions would
+    // let a host pin to the wrong template.
+    const checksums = prompts.map((p) => p._meta?.checksum);
+    expect(new Set(checksums).size).toBe(prompts.length);
   });
 });
 
@@ -209,6 +228,17 @@ describe("MCP prompts/get: rendering", () => {
     // of the fix workflow, not a rendered substitution.
     expect(noArgText).toContain("allowWrite");
     expect(withArgText).toContain("allowWrite");
+  });
+
+  it("mirrors the `_meta.checksum` from prompts/list on a prompts/get response", async () => {
+    // A host that skipped `prompts/list` and called `prompts/get`
+    // directly still needs the checksum for pinning.
+    const responses = await mcpSession([initMsg(1), promptsList(2), promptsGet(3, "ra11y/triage")]);
+    const prompts = (responses[1].result as { prompts: PromptListEntry[] }).prompts;
+    const getResult = responses[2].result as PromptGetResult;
+    const listed = prompts.find((p) => p.name === "ra11y/triage");
+    expect(getResult._meta?.checksum).toBeDefined();
+    expect(getResult._meta?.checksum).toBe(listed?._meta?.checksum);
   });
 });
 

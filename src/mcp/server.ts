@@ -30,7 +30,9 @@ import {
   makeLogEmitter,
 } from "./logging.ts";
 import { createOutbound } from "./outbound.ts";
+import { checksumForPrompt } from "./prompts/checksums.ts";
 import { BUILTIN_PROMPTS } from "./prompts/index.ts";
+import type { Prompt } from "./prompts/types.ts";
 import {
   loadKbResources,
   RESOURCE_NOT_FOUND,
@@ -495,21 +497,34 @@ function toolsListResponse(id: string | number | null): JsonRpcResponse {
   };
 }
 
+/**
+ * `_meta` is MCP's reserved namespace for server annotations. We
+ * stamp each prompt with a stable short SHA so hosts that pin
+ * behavior to a specific template version can detect drift without
+ * rehashing the rendered text themselves.
+ */
+function promptListEntry(prompt: Prompt): Record<string, unknown> {
+  const checksum = checksumForPrompt(prompt.name);
+  const base: Record<string, unknown> = {
+    name: prompt.name,
+    description: prompt.description,
+    arguments: prompt.arguments.map((a) => ({
+      name: a.name,
+      description: a.description,
+      required: a.required,
+    })),
+  };
+  if (checksum === undefined) return base;
+  // biome-ignore lint/style/useNamingConvention: `_meta` is MCP's reserved namespace for server annotations.
+  base["_meta"] = { checksum };
+  return base;
+}
+
 function promptsListResponse(id: string | number | null): JsonRpcResponse {
   return {
     jsonrpc: "2.0",
     id,
-    result: {
-      prompts: BUILTIN_PROMPTS.map((p) => ({
-        name: p.name,
-        description: p.description,
-        arguments: p.arguments.map((a) => ({
-          name: a.name,
-          description: a.description,
-          required: a.required,
-        })),
-      })),
-    },
+    result: { prompts: BUILTIN_PROMPTS.map(promptListEntry) },
   };
 }
 
@@ -539,14 +554,18 @@ function handlePromptsGet(
   }
   const stringArgs = coercePromptArgs(params.arguments ?? {});
   const messages = prompt.render(stringArgs);
-  return {
-    jsonrpc: "2.0",
-    id,
-    result: {
-      description: prompt.description,
-      messages,
-    },
+  const checksum = checksumForPrompt(prompt.name);
+  const result: Record<string, unknown> = {
+    description: prompt.description,
+    messages,
   };
+  // Mirror the `_meta.checksum` annotation from `prompts/list` so a
+  // host that calls `prompts/get` directly can still pin.
+  if (checksum !== undefined) {
+    // biome-ignore lint/style/useNamingConvention: `_meta` is MCP's reserved namespace for server annotations.
+    result["_meta"] = { checksum };
+  }
+  return { jsonrpc: "2.0", id, result };
 }
 
 async function handleResourcesList(id: string | number | null): Promise<JsonRpcResponse> {
