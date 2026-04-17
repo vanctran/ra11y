@@ -34,6 +34,7 @@ import { extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type ParsedFile, runScan } from "../../../src/engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../../../src/input/parsers/index.ts";
+import { collectWrapperCandidates } from "../../../src/mcp/detect-wrappers-core.ts";
 import { McpSession } from "../../../src/mcp/session.ts";
 import { runScanAndFormat, type ScanFormatted } from "../../../src/mcp/tools-helpers.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../../../src/review/index.ts";
@@ -248,9 +249,22 @@ export async function loadAndScanFixture(
   });
 
   const session = new McpSession();
-  const wrapperSources = toolInput.nativeWrappers?.length
-    ? { fromFile: toolInput.nativeWrappers }
-    : undefined;
+  // Mirror the autoDetectWrappers logic from scan_project: run the
+  // detector on the already-parsed files and pass results as
+  // fromAutoDetect so the session-override audit
+  // (sessionNativeWrappers) is not mis-attributed.
+  const autoDetected =
+    toolInput.autoDetectWrappers === true
+      ? collectWrapperCandidates(files).map((c) => c.component)
+      : [];
+  const wrapperSources =
+    toolInput.nativeWrappers?.length || autoDetected.length
+      ? {
+          fromFile: toolInput.nativeWrappers ?? [],
+          fromSession: [],
+          ...(autoDetected.length > 0 ? { fromAutoDetect: autoDetected } : {}),
+        }
+      : undefined;
   const { formatted } = await runScanAndFormat(
     files,
     session,
