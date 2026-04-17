@@ -147,7 +147,7 @@ Owner: main session + general-purpose. Source: 10 independent agent runs against
 
 - [x] **P2-V** `criteriaTitles: string[]` aligned index-for-index with `criteria` (70a9cd7). Standard-filter looks up titles from the criterion registry; scanner stamps both at violation construction; formatters and MCP `formatFinding` forward.
 - [ ] **P2-N** Always emit `limitations: string[]` (runtime-only checks not performed: live regions, focus traps, ARIA state, post-render contrast), not only on clean scans. Currently advertised by server instructions but missing on mixed-result responses.
-- [ ] **P2-P** `opaqueCustomComponents` fully enumerable when count ≤ 50 (names only inline; locations still gated by `verboseMeta`). Above 50 keep current top-5 + count + `verboseMeta` pattern.
+- [x] **P2-P** `opaqueCustomComponents.names` inlined on every response when count ≤ 50 (c1f7e6b). Above 50 keep the current top-5 + `verboseMeta` pattern. Named constant `OPAQUE_COMPONENT_INLINE_NAMES_MAX = 50` with size-budget rationale.
 - [x] **P2-R** `file` is canonical across suggest_fix + apply_fix; `filePath` accepted as deprecated alias (c2ea3b5). Using the alias fires `warnings: ["deprecated_param_filepath"]`; passing both raises a structured error.
 
 ### v0.2.0 — accepted (from 20-run combined brief, 2026-04-17)
