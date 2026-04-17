@@ -144,6 +144,21 @@ export const checklistTool: McpTool = {
           description:
             "Include the full list of manual criteria without candidates (pure WCAG prompts). Default false; the summary still reports the count.",
         },
+        limit: {
+          type: "number",
+          description:
+            "Maximum number of *candidates* (across all items) to include in the response. Defaults to 200, clamped to [1, 2000]. Caps response size for noisy criteria without silencing them — the scan still evaluates everything, and `totalCandidates` reports the pre-paging tally. When the cap truncates, the response carries `truncated: true` and `nextOffset: N`; call again with `offset: N` to page.",
+        },
+        offset: {
+          type: "number",
+          description:
+            "Starting index into the flat candidates stream (items are walked in priority order; candidates concatenate across items). Defaults to 0. Pair with `limit` and the `nextOffset` from a previous truncated response.",
+        },
+        maxCandidatesPerCriterion: {
+          type: "number",
+          description:
+            "Caps candidates per criterion within the returned page — orthogonal to `limit`. Defaults to 10, clamped to [1, 100]. Prevents one noisy criterion from consuming the whole page without hiding it. When any criterion is clipped, the response carries `perCriterionClipped: true`; `totalCandidates` still reports the pre-clip tally so the agent can see what was elided.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -194,6 +209,27 @@ export const checklistTool: McpTool = {
     // [...items, ...untargeted].
     const actionable = needsReview.filter((i) => i.candidates.length > 0);
     const untargeted = needsReview.filter((i) => i.candidates.length === 0);
+    // Q2-CHECKLIST-LIMIT: pagination over the candidate stream. The
+    // scan still evaluates every criterion — this caps response size
+    // so a noisy finder (say, 200 ambiguous focus-order candidates in
+    // a big React tree) can't dominate the agent's token budget. Two
+    // orthogonal axes:
+    //   - maxCandidatesPerCriterion clips per-criterion, so one loud
+    //     criterion can't crowd out quieter ones in the same page.
+    //   - limit/offset paginate the flattened candidates stream across
+    //     all items.
+    // Honest-shape (CLAUDE.md §1 "Ambiguous field shapes are
+    // dishonest"): `truncated`/`nextOffset` are spread only when the
+    // global limit actually clips; `perCriterionClipped` is spread
+    // only when per-criterion clipping actually happened. Consumers
+    // branch on presence, not on a sentinel false/0.
+    const pageParams = readChecklistPageParams(params);
+    const page = paginateChecklistItems(actionable, pageParams);
+    // `byPriority` counts the full actionable inventory (not just the
+    // current page) so the summary stays a stable project-level
+    // number across paging calls. Page-scoped counts would force the
+    // agent to sum them manually, which is the dishonest-composite
+    // failure mode (CLAUDE.md §1).
     const byPriority = { high: 0, medium: 0, low: 0 };
     for (const item of actionable) byPriority[item.priority] += 1;
     // `manualReviewRequired` is the single canonical count agents can
@@ -246,7 +282,9 @@ export const checklistTool: McpTool = {
     const showUntargeted = params["showUntargeted"] === true;
     return textResult({
       summary,
-      items: actionable,
+      items: page.items,
+      totalCandidates: page.totalCandidates,
+      ...page.paginationFields,
       ...(showUntargeted ? { untargeted } : {}),
       likelyIrrelevant,
     });
@@ -342,4 +380,156 @@ function bucketChecklistItems(
   const rank: Readonly<Record<ChecklistPriority, number>> = { high: 0, medium: 1, low: 2 };
   needsReview.sort((a, b) => rank[a.priority] - rank[b.priority]);
   return { needsReview, likelyIrrelevant };
+}
+
+/**
+ * Default candidates-per-response cap for the `checklist` tool
+ * (Q2-CHECKLIST-LIMIT). Chosen to mirror scan_project's default so
+ * both tools paginate at the same ballpark.
+ */
+const CHECKLIST_DEFAULT_LIMIT = 200;
+/** Minimum caller-supplied `limit`. Below this we clamp up. */
+const CHECKLIST_MIN_LIMIT = 1;
+/** Maximum caller-supplied `limit`. Above this we clamp down. */
+const CHECKLIST_MAX_LIMIT = 2000;
+/**
+ * Default per-criterion candidate cap. Keeps one noisy finder from
+ * dominating a single page without silencing it — the agent still
+ * sees the criterion appear and `perCriterionClipped: true` flagging
+ * that more evidence exists for follow-up.
+ */
+const CHECKLIST_DEFAULT_MAX_PER_CRITERION = 10;
+/** Minimum caller-supplied `maxCandidatesPerCriterion`. */
+const CHECKLIST_MIN_MAX_PER_CRITERION = 1;
+/** Maximum caller-supplied `maxCandidatesPerCriterion`. */
+const CHECKLIST_MAX_MAX_PER_CRITERION = 100;
+
+/**
+ * Resolved pagination inputs for the `checklist` tool. All three
+ * fields are clamped to their documented bounds; callers never see
+ * un-clamped values.
+ */
+export interface ChecklistPageParams {
+  /** Max candidates across the whole response, clamped to [1, 2000]. */
+  readonly limit: number;
+  /** Starting index into the flat candidates stream, clamped to >=0. */
+  readonly offset: number;
+  /** Max candidates per criterion in the page, clamped to [1, 100]. */
+  readonly maxCandidatesPerCriterion: number;
+}
+
+/**
+ * Reads `limit` / `offset` / `maxCandidatesPerCriterion` from the MCP
+ * params with silent clamping to documented bounds. Non-numeric /
+ * missing values fall back to the named defaults.
+ */
+export function readChecklistPageParams(params: Record<string, unknown>): ChecklistPageParams {
+  const rawLimit = typeof params["limit"] === "number" ? params["limit"] : CHECKLIST_DEFAULT_LIMIT;
+  const rawOffset = typeof params["offset"] === "number" ? params["offset"] : 0;
+  const rawPerCriterion =
+    typeof params["maxCandidatesPerCriterion"] === "number"
+      ? params["maxCandidatesPerCriterion"]
+      : CHECKLIST_DEFAULT_MAX_PER_CRITERION;
+  const limit = Math.max(CHECKLIST_MIN_LIMIT, Math.min(CHECKLIST_MAX_LIMIT, Math.floor(rawLimit)));
+  const offset = Math.max(0, Math.floor(rawOffset));
+  const maxCandidatesPerCriterion = Math.max(
+    CHECKLIST_MIN_MAX_PER_CRITERION,
+    Math.min(CHECKLIST_MAX_MAX_PER_CRITERION, Math.floor(rawPerCriterion)),
+  );
+  return { limit, offset, maxCandidatesPerCriterion };
+}
+
+/**
+ * Paginated checklist output: the clipped + sliced items that fit in
+ * the page, the pre-paging / pre-per-criterion-clip total (so the
+ * agent sees the full inventory size), and conditionally-spread
+ * truncation flags.
+ */
+export interface PaginatedChecklist {
+  /** Items in page order — candidates on each item already clipped and sliced. */
+  readonly items: readonly ChecklistItemOut[];
+  /**
+   * Pre-paging, pre-per-criterion-clip total candidate count across
+   * all actionable items. Always present so the agent knows the full
+   * inventory even on page 1.
+   */
+  readonly totalCandidates: number;
+  /**
+   * Honest-shape pagination fields. `truncated: true` + `nextOffset`
+   * appear together iff the global `limit` clipped the flat stream;
+   * `perCriterionClipped: true` appears iff at least one criterion
+   * was clipped by `maxCandidatesPerCriterion`. Orthogonal signals —
+   * either, both, or neither may be present.
+   */
+  readonly paginationFields: {
+    readonly truncated?: true;
+    readonly nextOffset?: number;
+    readonly perCriterionClipped?: true;
+  };
+}
+
+/**
+ * Applies the per-criterion cap, then slices the flattened candidate
+ * stream by `offset` + `limit`. Items that end up with zero
+ * candidates in the page are dropped — the agent sees only the
+ * criteria with live evidence in this slice.
+ *
+ * Honest-shape: `truncated`/`nextOffset` are spread only when the
+ * global cap actually clips the list (CLAUDE.md §1). Per-criterion
+ * clipping is an orthogonal signal (`perCriterionClipped: true`),
+ * so a page can be truncated without any criterion being clipped,
+ * clipped without being truncated, both, or neither.
+ */
+export function paginateChecklistItems(
+  items: readonly ChecklistItemOut[],
+  { limit, offset, maxCandidatesPerCriterion }: ChecklistPageParams,
+): PaginatedChecklist {
+  let totalCandidates = 0;
+  let perCriterionClipped = false;
+  // Phase 1 — per-criterion clip. Walk items in order; for each,
+  // accumulate the raw total (pre-clip) and build a clipped copy.
+  const clipped: ChecklistItemOut[] = [];
+  for (const item of items) {
+    totalCandidates += item.candidates.length;
+    if (item.candidates.length > maxCandidatesPerCriterion) {
+      perCriterionClipped = true;
+      clipped.push({
+        ...item,
+        candidates: item.candidates.slice(0, maxCandidatesPerCriterion),
+      });
+    } else {
+      clipped.push(item);
+    }
+  }
+  // Phase 2 — flat-stream pagination across clipped items. Walk with
+  // a running global index; each item emits the candidate slice that
+  // falls inside [offset, offset + limit). Items entirely outside
+  // that window are dropped.
+  const rangeEnd = offset + limit;
+  const pageItems: ChecklistItemOut[] = [];
+  let globalIdx = 0;
+  let postClipTotal = 0;
+  for (const item of clipped) {
+    postClipTotal += item.candidates.length;
+    const itemStart = globalIdx;
+    const itemEnd = globalIdx + item.candidates.length;
+    globalIdx = itemEnd;
+    if (itemEnd <= offset) continue; // entirely before the window
+    if (itemStart >= rangeEnd) continue; // entirely after the window
+    const sliceStart = Math.max(0, offset - itemStart);
+    const sliceEnd = Math.min(item.candidates.length, rangeEnd - itemStart);
+    pageItems.push({
+      ...item,
+      candidates: item.candidates.slice(sliceStart, sliceEnd),
+    });
+  }
+  const truncated = rangeEnd < postClipTotal;
+  return {
+    items: pageItems,
+    totalCandidates,
+    paginationFields: {
+      ...(truncated ? { truncated: true as const, nextOffset: rangeEnd } : {}),
+      ...(perCriterionClipped ? { perCriterionClipped: true as const } : {}),
+    },
+  };
 }
