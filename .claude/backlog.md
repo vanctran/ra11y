@@ -33,8 +33,8 @@ Owner: `release-captain` + `doc-writer`. Blocks nothing; can ship independently.
 
 ### v0.2.0
 
-- [ ] Release notes for 0.2.0 (M + R + F deltas)
-- [ ] Migration notes if any track introduces a breaking MCP shape (expected: none)
+- [x] Release notes for 0.2.0 — drafted under `## [Unreleased]` in CHANGELOG.md (1eabf39). Covers M/R/F/S/E deltas; dated header waits for release.
+- [ ] Migration notes if any track introduces a breaking MCP shape (expected: none; `suggest_fix` shape change called out in CHANGELOG Changed section — draft migration note if needed at release time)
 
 ---
 
@@ -121,7 +121,7 @@ Owner: `doc-writer` + main session. Promoted from staged 2026-04-17. Items expan
 - [!] `examples/ra11y-in-claude-code/` — reference `.mcp.json` + sample `CLAUDE.md` section showing triage → verdict → draft-VPAT inside Claude Code. Blocked on the Track S speculative tools landing (the workflow references them).
 - [!] `examples/ra11y-in-cursor/` — blocked externally on Cursor's MCP host shipping sampling.
 - [x] VS Code extension skeleton under `integrations/vscode/` — wraps the MCP server for IDE-native findings (f0508dd). Sibling project with isolated toolchain; no runtime deps leak into @ra11y/core. Explicit non-goals (marketplace, EDH smoke test, CodeActionProvider, per-file scan-on-save, streaming, multi-root, reconnection) listed in README for follow-up.
-- [~] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold committed (2f5539a); numeric values land in a follow-up before release
+- [x] Public benchmark: `benchmarks/a11y-tool-comparison.md` — scaffold (2f5539a) + ra11y-side numbers via `scripts/benchmark-run.ts` (f3878e3). Cold start 41.3ms, 10/100/1000 files 3.4/28.3/235.9ms, real-world corpus 72.4ms for 9 fixtures. Competitor columns remain "pending" until those tools are added as isolated dev deps.
 
 ---
 
