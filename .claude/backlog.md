@@ -14,7 +14,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 
 Tracks below are independent. `/continue` picks the next open item from each of up to 3 active tracks per turn and dispatches them in parallel (details in `.claude/skills/continue/SKILL.md`). Within a track, items run in order — some tracks have sequencing; cross-track work is always parallelizable.
 
-Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals) · **Q** (agent-consumer feedback).
+Active tracks: **D** (docs/release) · **M** (MCP hardening) · **R** (rules + review candidates) · **F** (real-world fixtures) · **S** (MCP sampling) · **E** (ecosystem/evals) · **Q2** (agent-consumer feedback round 3). Track Q (rounds 1-2) closed 2026-04-17.
 
 Staged tracks: (none). Tracks S and E were promoted on 2026-04-17 after the user directed "go all the way without releasing until finalized" — M/R/F are complete, so the remaining pre-release work spans S and E. ADR 0005 §Follow-up work still applies to the speculative tool choices inside S; foundation items (sampling.ts, capability, prompt library, KB docs) are safe to build.
 
@@ -182,6 +182,53 @@ Net-new items from round 2 of the consumer eval (round 2 explicitly probed edge 
 - **P2-S** `plan.candidateCountsByCriterion: { ... }` histogram. Cheap, but no agent in the brief said they were blocked on it. Park.
 - **P2-T** Gate `unusedNativeWrappers` on full-scan only. Single-observer (run #8 only); the existing `unusedNativeWrappersNote` already disclaims. Low ROI.
 - **P2-U** Promote `absentDeclaredWrappers` to `meta.configHealth.staleWrappers` on `scan_project`. Single-observer; nice but not urgent.
+
+---
+
+## Track Q2 — Agent-consumer feedback (round 3, 10-agent eval)
+
+Owner: main session + general-purpose. Source: a 10-agent parallel eval against an external React/Vite/TS/Tailwind codebase — each agent exercised a different MCP slice in a "you-find, I-fix" workflow. Round 3 ran after Q (rounds 1-2) closed, on the post-Q shape. All accepted items are shape-honesty, batch-primitive, or workflow-gap fixes — none are heuristic suppression.
+
+### v0.2.0 — accepted (P0)
+
+- [ ] **Q2-PROSE** Hoist repeated per-finding prose (`suppressPlacement`, `suppressWith` templates, `analysisCoverage.rulesByExtension`) to a single top-level `referenceGuide` keyed by rule or syntax. Findings reference by ID. Same pattern as the P1-DUP `prompts` dedupe on `review_candidates` — lossless transform, strips ~1 paragraph per finding on large responses.
+- [ ] **Q2-FIXKIND** Per-finding `fix.kind` discriminator inline on every violation — values: `"mechanical"` (ready-to-apply edit on the finding itself), `"guidance"` (prose direction), `"runtime-only"` (needs the runtime harness like axe-core), `"verify-in-source"` (agent has to read adjacent code to decide). Agents currently have to call `suggest_fix` just to learn the kind; inlining removes a round-trip and lets agents batch-route at scan time.
+- [ ] **Q2-REASON** Require `reason:` text on `ra11y-disable` pragmas. A bare pragma (no reason) is itself a review-candidate emitted under `suppression/no-reason` — this keeps suppressions accountable without forbidding them. Existing pragma shape (`{/* ra11y-disable keyboard/handler-missing: wraps native <button> internally */}`) stays; the enhancement is flagging pragmas that skipped the reason slot.
+- [ ] **Q2-RULEDETAILS** `includeRuleDetails: "unique" | "all" | "none"` param on `scan` / `scan_project`. When `"unique"`, inline `rationale`/`examples`/`references` once per unique `ruleId` at the top level of the response (agents skip the `explain_rule` round-trip entirely). Default `"none"` to keep baseline shape. Pairs naturally with **Q2-PROSE** — both are "inline once, reference from findings."
+
+### v0.2.0 — accepted (P1)
+
+- [ ] **Q2-HUNK** Hunk-intersection mode on `scan_diff` — when `hunksOnly: true` (or an analogous flag), only report findings whose `line` falls inside a `git diff --unified=0` hunk for the comparison ref. Today `scan_diff` is a baseline-diff, not a git-hunk-diff — a PR that fixes a baselined issue is silent, a stale baseline flags old issues as "new." The baseline path stays the default; the hunk path becomes the right primitive for PR-review agents.
+- [ ] **Q2-RESOLVED** Surface `resolved: [...]` on `scan_diff` — findings present in the baseline but absent from the current scan. Already computed internally; just needs to surface so a PR fixing a baselined issue is visible and a re-regression can be distinguished from new debt.
+- [ ] **Q2-GROUPKEY** Stable `groupKey: string` on every finding — `hash(ruleId + normalized-AST-shape-of-target-node)`. Same rule firing with the same AST shape on 40 sites gets the same `groupKey`. Lets agents write "fix every finding with groupKey X the same way" scripts without re-deriving the pattern.
+- [ ] **Q2-CHECKLIST-LIMIT** Pagination on `checklist` — `limit`/`offset`/`maxCandidatesPerCriterion` params analogous to scan_project's P1-OVF pagination. Same shape: `truncated: true` + `nextOffset` when applicable. Lets agents on a token budget bound a noisy criterion without silencing it.
+- [ ] **Q2-SKIPCRIT** `skipCriterion: string[]` param on `checklist` / `scan_project` — explicit caller opt-out for already-audited criteria. Not suppression by the tool; filtering by the caller.
+- [ ] **Q2-LISTSUPP** `list_suppressions` MCP tool — returns `{ file, line, ruleId, reason? }` for every active pragma in the scanned tree. Enables audit discovery, annual-review workflows, and finding bare-reason suppressions (pairs with Q2-REASON).
+
+### v0.2.0 — accepted (P2)
+
+- [ ] **Q2-WRAPMAP** Native-wrapper element-type mapping in config — accept `{ Button: "button", Link: "a", Image: "img" }` (object form) alongside the existing `string[]` form. Rules that need the underlying element (link-purpose, alt-text) can run on wrappers when the mapping is present; current `string[]` list only tells the scanner "skip this, it's a wrapper."
+- [ ] **Q2-WRAPGLOB** Glob-suffix support on the wrapper list — `*Button`, `*Input`, `Icon*`. Current flat names force re-detecting every design-system variant.
+- [ ] **Q2-WRAPPATH** `detect_native_wrappers` includes each candidate's definition-file path in the response. Agent can jump straight to the wrapper source to verify — no Glob round-trip. Single-observer but trivial.
+- [ ] **Q2-SNIPPET-KIND** Scale `snippet` width with finding kind — when the finding's `reason` cites cross-line context ("handler defined outside this line"), ship the referenced function body or a wider window instead of the fixed ±3 lines. Extension of P0-C (snippet) that handles the ~40% of findings where ±3 isn't enough.
+- [ ] **Q2-SESSIONCFG** Rename `configure` → `sessionConfigure` (accept `configure` as backward-compat alias for one release, same pattern as P2-R's file/filePath). The current name hides the session-only persistence semantics — an agent scanning clean may forget to commit the wrappers list to ra11y.config.ts. New name makes the ephemerality explicit; tool description nudges toward file edits for committed changes.
+- [ ] **Q2-PRUNE** `baseline prune` subcommand — removes entries pointing at deleted files. Today dead baseline entries linger forever.
+- [ ] **Q2-VERIFYCMD** `verifyCommand: string` on every `suggest_fix` response — the canonical re-check the agent should run after applying the fix (e.g. `scan_file` on the same path + same ruleId). Saves a round of "what was I supposed to re-verify?"
+- [ ] **Q2-SARIF-DOCS** Document existing SARIF formatter + exit codes in `docs/cli.md` and `docs/ci.md`. The formatter exists; CI-integration docs don't. GitHub `::error` annotation path optional.
+
+### Considered and rejected (per CLAUDE.md §1)
+
+- **Promote `editCandidate` to `kind: "edit"`** when the synthesis looks concrete (e.g. label-in-name's heuristic rewrite). → rejected per **§1 "Ambiguous field shapes are dishonest"**. `kind: "edit"` is a contract that the oldText/newText pair is a mechanical swap — the rule emitted it with certainty. `editCandidate` at `kind: "guidance"` is an LLM-synthesized guess from visible text + aria-label tokens (per P1-L). Promoting the guess to `kind: "edit"` would make the contract lie; the agent would batch-apply candidates that aren't verified. Current shape is correct.
+- **Heuristic auto-dismissal** for "obvious debounces" (timer duration < 1s, pure-value-bubbleup onChange). → rejected per **§1 "Numeric-threshold heuristics are suppression"** + **"No heuristic suppression"**. Same reasoning as the original Q P0-A rejection. A 800ms animation and a 800ms auth-retry back-off are indistinguishable from static analysis; the agent reading the surrounding code is the only correct arbiter. Enrich `reason` text further if needed; do not filter the candidate list.
+- **Weight cross-line signals** (`pointer-events-none`, `disabled`, `focus-visible:ring-*`) in `suggest_fix` ranking. → rejected per **§1 "Don't duplicate capability the agent already has"**. The agent reading the file sees those signals in one pass; a heuristic weighting in-tool produces output the agent can't tell to mistrust. The `focus-visible:ring-*` cross-reference IS already shipped for the `focus/outline-visible` rule (Track R) where the evidence is a concrete class-token link — but fix-ranking heuristics are the fuzzier form and belong to the agent.
+- **Framework-version awareness in `suggest_fix`** (detect React 18 vs 19 from `package.json`, etc.). → rejected per **§1 "Don't duplicate capability"**. Agents read `package.json` trivially; building a detector in-tool is the kind of in-process inference that can be confidently wrong (monorepos, overrides, multiple React versions). Better: the agent reads the config and compose the fix itself.
+- **Flatten `files[].findings[]` to `findings[]` with `file` inlined** when total < 10. → deferred (not rejected). Token-saving but introduces a shape branch on response-size — consumers that iterate by-file now have to handle both shapes. The current nested shape is fine; optimize only with a measured token budget goal.
+
+### Deferred (worth doing eventually, not in this batch)
+
+- **Rule-catalog reorganization** — resolve `parsing/duplicate-id` + `parsing/html-has-lang` vs `document/lang-attribute`; clarify `semantics/label-in-name` vs `forms/labels-required` vs `forms/non-empty-label`. Renames need a deprecation path (alias old IDs for one major release). Costs a semver major.
+- **Server-side typecheck/parse verification** on `suggest_fix` suggestions. Expensive (spins up a parse per suggestion); might be worth it for high-stakes mechanical fixes but not across the board.
+- **SARIF output for GitHub annotations** — already emit SARIF; "::error" annotation mapping is a small transform. Tied to Q2-SARIF-DOCS; promote if demand surfaces.
 
 ---
 
