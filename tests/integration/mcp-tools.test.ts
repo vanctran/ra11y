@@ -165,10 +165,29 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       standardId: string;
       criteriaTotal: number;
       automatedCriteriaPassRate: number;
+      manualUntargetedCount: number;
+      manualUntargeted?: unknown;
     };
     expect(body.standardId).toBe("wcag22");
     expect(body.criteriaTotal).toBeGreaterThan(0);
     expect(typeof body.automatedCriteriaPassRate).toBe("number");
+    // Count always present; list gated behind showUntargeted (mirrors
+    // checklist tool so default responses stay compact).
+    expect(typeof body.manualUntargetedCount).toBe("number");
+    expect(body.manualUntargeted).toBeUndefined();
+  });
+
+  it("coverage emits manualUntargeted list only when showUntargeted is true", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "coverage", { cwd: BAD_ALT_DIR, showUntargeted: true }),
+    ]);
+    const body = bodyOf(responses[1]) as {
+      manualUntargeted?: readonly unknown[];
+      manualUntargetedCount: number;
+    };
+    expect(Array.isArray(body.manualUntargeted)).toBe(true);
+    expect(body.manualUntargeted?.length).toBe(body.manualUntargetedCount);
   });
 
   it("clean scan surfaces limitations as a structured field (not buried in prose)", async () => {

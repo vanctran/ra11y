@@ -43,6 +43,11 @@ export const coverageTool: McpTool = {
           description:
             "Base directory. Used as the scan root when `paths` is omitted, and for resolving relative `paths` when given.",
         },
+        showUntargeted: {
+          type: "boolean",
+          description:
+            "Include the full `manualUntargeted` list (bare WCAG titles for criteria no finder grounded in code). Default false; `manualUntargetedCount` is always returned. Mirrors the `checklist` tool so both surfaces behave consistently.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -67,6 +72,7 @@ export const coverageTool: McpTool = {
     const candidateCriteria = new Set((report.candidates ?? []).map((c) => c.criterionId));
     const applicability = detectApplicability(files);
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);
+    const showUntargeted = params["showUntargeted"] === true;
     const entries = coverage.map((c) => {
       // Split by applicability first so the counts align with scan_project
       // and checklist — media-only criteria move to likelyIrrelevant
@@ -91,7 +97,12 @@ export const coverageTool: McpTool = {
         // criteria have concrete candidates worth reviewing vs pure
         // WCAG prompts the finders couldn't ground in code.
         manualWithCandidates: withTitles(withCandidates),
-        manualUntargeted: withTitles(untargeted),
+        // Count is always informative ("how big is the untargeted tail");
+        // the list is gated behind showUntargeted so the default response
+        // doesn't ship 16 entries of bare WCAG titles that mirror the
+        // checklist tool's showUntargeted default.
+        manualUntargetedCount: untargeted.length,
+        ...(showUntargeted ? { manualUntargeted: withTitles(untargeted) } : {}),
         likelyIrrelevantCriteria: withTitles(likelyIrrelevant),
         // Renamed from "automatedGaps" — agents consistently misread
         // that as "criteria automation can't cover" when it actually
