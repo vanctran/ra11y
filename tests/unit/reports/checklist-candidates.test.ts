@@ -81,6 +81,7 @@ function makeCandidate(
     criterionId,
     location: { filePath, line, column: 1 },
     reason,
+    confidence: "medium",
   };
 }
 

@@ -19,6 +19,7 @@ const RESULT: ScanResult = {
   violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1", "section508:1.1.1", "en301549:9.1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Card.tsx", line: 12, column: 5 },
@@ -27,6 +28,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1", "section508:1.1.1", "en301549:9.1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Header.tsx", line: 4, column: 3 },
@@ -38,6 +40,7 @@ const RESULT: ScanResult = {
   durationMs: 5,
   enabledStandards: ["wcag22", "wcag21", "section508", "en301549"],
   isTTY: false,
+  perRuleCoverage: [],
 };
 
 describe("buildCoverageReport", () => {
@@ -155,11 +158,13 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
         criterionId: "wcag22:1.2.1",
         location: { filePath: "src/ui/Player.tsx", line: 42, column: 3 },
         reason: "video without transcript link",
+        confidence: "medium" as const,
       },
       {
         criterionId: "wcag22:1.2.1",
         location: { filePath: "src/ui/Intro.tsx", line: 7, column: 1 },
         reason: "audio element detected",
+        confidence: "medium" as const,
       },
     ];
     const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
@@ -175,6 +180,7 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
       criterionId: "wcag22:1.2.1",
       location: { filePath: `src/f${i}.tsx`, line: i + 1, column: 1 },
       reason: "x",
+      confidence: "medium" as const,
     }));
     const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
     const wcag22 = report.standards.find((s) => s.standardId === "wcag22");
@@ -193,6 +199,7 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
       violations: withFindingIds([
         {
           ruleId: "document/meta-refresh",
+          fixClass: "mechanical",
           criteria: ["wcag22:2.2.1"],
           severity: "error",
           location: { filePath: "src/page.html", line: 1, column: 1 },
@@ -218,6 +225,7 @@ describe("buildVpatReport + renderVpatMarkdown", () => {
         criterionId: "wcag22:1.1.1",
         location: { filePath: "src/weird.tsx", line: 1, column: 1 },
         reason: "should not appear",
+        confidence: "medium" as const,
       },
     ];
     const report = buildVpatReport(RESULT, BUILTIN_STANDARDS, "2026-04-11T00:00:00Z", candidates);
