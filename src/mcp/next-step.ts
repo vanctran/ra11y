@@ -89,6 +89,21 @@ interface NextStepInputs {
   readonly first: FirstFinding | null;
   readonly iterativeTip: string;
   readonly singleFilePath: string | null;
+  /**
+   * True when every violation-severity finding in `files` already
+   * carries an inline `fixClass === "mechanical"` discriminator — i.e.
+   * the rule emitted a mechanical primary rewrite with alternatives
+   * and ambient snippet context at scan time. Under that condition,
+   * re-nudging the agent to call `suggest_fix` is a redundant
+   * round-trip (Q2R2-FIX-DEDUPE): the inline fix already has what
+   * `suggest_fix` would return, so the violation branch drops the
+   * `suggest_fix` tail from both `prose` and `structured`. Does NOT
+   * fire when any violation's `fixClass` is `"guidance"`,
+   * `"runtime-only"`, or `"verify-in-source"` — those still need the
+   * round-trip. False when there are no violations at all (the flag
+   * is irrelevant outside the violation branch).
+   */
+  readonly allViolationsMechanical: boolean;
 }
 
 interface FirstFinding {
@@ -130,6 +145,7 @@ export function buildNextStep(
     first: firstCallableFinding(formatted.files),
     iterativeTip: options.iterativeTip ?? "",
     singleFilePath: options.singleFilePath ?? null,
+    allViolationsMechanical: allViolationsMechanical(formatted.files),
   };
   if (inputs.violations === 0 && inputs.notes === 0) return cleanScanNextStep(inputs);
   if (inputs.violations > 0 && inputs.first !== null)
@@ -164,6 +180,24 @@ function violationNextStep(inputs: NextStepInputs, first: FirstFinding): NextSte
   const vPlural = inputs.violations === 1 ? "" : "s";
   if (inputs.fixable > 0) {
     const fPlural = inputs.fixable === 1 ? "" : "s";
+    // Q2R2-FIX-DEDUPE: when EVERY violation already carries
+    // `fixClass === "mechanical"`, the inline fix on each finding has
+    // the same payload `suggest_fix` would return (primary +
+    // alternatives + source context). Re-nudging the agent to call
+    // `suggest_fix` costs ~600 tokens per finding on tight fix loops
+    // for no new signal. Trim both the prose and the structured hint
+    // consistently — the pair is load-bearing (P1-K), so a
+    // one-sided trim would re-create the exact drift P1-K closed.
+    // The verify-after-fix surface (Q2-VERIFYCMD) is a separate
+    // emission and stays. Mixed lanes (any non-mechanical violation)
+    // keep the `suggest_fix` nudge — it's still useful for guidance /
+    // verify-in-source / runtime-only findings that need the round-
+    // trip.
+    if (inputs.allViolationsMechanical) {
+      return {
+        prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}); every finding carries an inline mechanical fix — apply \`primary.edit\` directly from the finding.${manualTail(inputs)}${inputs.iterativeTip}`,
+      };
+    }
     return {
       prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`,
       structured: {
@@ -225,4 +259,43 @@ function readFindingRuleIdAndLine(
   const line = f["line"];
   if (typeof ruleId !== "string" || typeof line !== "number") return null;
   return { ruleId, line };
+}
+
+/**
+ * Predicate for the Q2R2-FIX-DEDUPE trim: returns true when every
+ * violation-severity finding (`severity === "error"` or `"warning"` —
+ * info-level notes are excluded because they flow through a different
+ * nextStep branch and `fixClass` isn't meaningful for them) already
+ * carries `fixClass === "mechanical"`. Under that condition the inline
+ * fix on every finding already has what `suggest_fix` would return
+ * (primary + alternatives + ambient source context), so the "now call
+ * `suggest_fix`" handoff in `nextStep`/`nextStepStructured` is a
+ * redundant round-trip.
+ *
+ * Returns false when:
+ *   - there are no violation-severity findings at all (the flag is
+ *     irrelevant outside the violation branch — callers that reach it
+ *     shouldn't act on the value);
+ *   - ANY violation has a non-mechanical `fixClass` (`"guidance"`,
+ *     `"runtime-only"`, `"verify-in-source"`) — those still need the
+ *     `suggest_fix` round-trip, so the mixed case keeps the nudge;
+ *   - a violation is missing `fixClass` entirely (synthetic / legacy
+ *     shapes) — fail-closed so we never silently drop the nudge on a
+ *     finding whose lane we can't confirm.
+ */
+function allViolationsMechanical(
+  files: readonly { readonly path: string; readonly findings: unknown[] }[],
+): boolean {
+  let sawViolation = false;
+  for (const file of files) {
+    for (const raw of file.findings) {
+      if (!raw || typeof raw !== "object") continue;
+      const f = raw as Record<string, unknown>;
+      const severity = f["severity"];
+      if (severity !== "error" && severity !== "warning") continue;
+      sawViolation = true;
+      if (f["fixClass"] !== "mechanical") return false;
+    }
+  }
+  return sawViolation;
 }

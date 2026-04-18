@@ -376,7 +376,14 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     // Agents branching on the machine form should not have to parse
     // English — `nextStepStructured.tool` names the same call the
     // prose recommends, and `args` uses canonical parameter names
-    // (`file`, `ruleId`, `line`) per P2-R.
+    // (`file`, `ruleId`, `line`) per P2-R. Q2R2-FIX-DEDUPE carves
+    // out the all-mechanical case: when every violation already
+    // carries an inline mechanical fix, both `nextStep` and
+    // `nextStepStructured` drop the `suggest_fix` nudge (pair is
+    // load-bearing — a one-sided trim would re-introduce P1-K
+    // drift). The test accepts either the structured-present parity
+    // case or the paired-trim case, and asserts the pair stays in
+    // lockstep.
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
@@ -388,21 +395,28 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       };
     };
     expect(typeof body.meta.nextStep).toBe("string");
-    expect(body.meta.nextStepStructured).toBeDefined();
     const structured = body.meta.nextStepStructured;
-    if (!structured) throw new Error("nextStepStructured missing");
-    // Fixture has alt-text violations — first hop is either
-    // suggest_fix (when the rule emits a fix suggestion) or
-    // explain_rule (when it doesn't). Both are concrete, canonical
-    // recommendations the prose also names.
-    expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
-    expect(body.meta.nextStep).toContain(structured.tool);
-    expect(typeof structured.args.ruleId).toBe("string");
-    if (structured.tool === "suggest_fix") {
-      expect(typeof structured.args.file).toBe("string");
-      expect(typeof structured.args.line).toBe("number");
-      // Canonical param name: `file`, not `filePath`.
-      expect(structured.args).not.toHaveProperty("filePath");
+    if (structured === undefined) {
+      // Q2R2-FIX-DEDUPE trim: prose must name the inline mechanical
+      // fix path rather than still nudging at `suggest_fix` /
+      // `explain_rule` (that would be the old pre-trim shape leaking
+      // through).
+      expect(body.meta.nextStep).toContain("primary.edit");
+      expect(body.meta.nextStep).not.toContain("suggest_fix");
+    } else {
+      // Fixture has violations — first hop is either suggest_fix
+      // (when the rule emits a fix suggestion) or explain_rule (when
+      // it doesn't). Both are concrete, canonical recommendations
+      // the prose also names.
+      expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
+      expect(body.meta.nextStep).toContain(structured.tool);
+      expect(typeof structured.args.ruleId).toBe("string");
+      if (structured.tool === "suggest_fix") {
+        expect(typeof structured.args.file).toBe("string");
+        expect(typeof structured.args.line).toBe("number");
+        // Canonical param name: `file`, not `filePath`.
+        expect(structured.args).not.toHaveProperty("filePath");
+      }
     }
   });
 
@@ -418,8 +432,15 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       };
     };
     expect(typeof body.meta.nextStep).toBe("string");
-    expect(body.meta.nextStepStructured).toBeDefined();
-    expect(body.meta.nextStepStructured?.tool).toMatch(/^(suggest_fix|explain_rule|scan_file)$/);
+    const structured = body.meta.nextStepStructured;
+    if (structured === undefined) {
+      // Q2R2-FIX-DEDUPE trim — see scan_project test above for the
+      // paired-emission rationale. BAD_ALT fixture is all-mechanical.
+      expect(body.meta.nextStep).toContain("primary.edit");
+      expect(body.meta.nextStep).not.toContain("suggest_fix");
+    } else {
+      expect(structured.tool).toMatch(/^(suggest_fix|explain_rule|scan_file)$/);
+    }
   });
 
   it("scan (directory mode) emits nextStep + nextStepStructured at parity with scan_project and scan_file", async () => {
@@ -431,16 +452,22 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       };
     };
     expect(typeof body.meta.nextStep).toBe("string");
-    expect(body.meta.nextStepStructured).toBeDefined();
     const structured = body.meta.nextStepStructured;
-    if (!structured) throw new Error("nextStepStructured missing");
-    expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
-    expect(body.meta.nextStep).toContain(structured.tool);
-    expect(typeof structured.args.ruleId).toBe("string");
-    if (structured.tool === "suggest_fix") {
-      expect(typeof structured.args.file).toBe("string");
-      expect(typeof structured.args.line).toBe("number");
-      expect(structured.args).not.toHaveProperty("filePath");
+    if (structured === undefined) {
+      // Q2R2-FIX-DEDUPE trim: prose carries the inline-mechanical
+      // wording; structured is omitted (paired emission) rather than
+      // still naming `suggest_fix`.
+      expect(body.meta.nextStep).toContain("primary.edit");
+      expect(body.meta.nextStep).not.toContain("suggest_fix");
+    } else {
+      expect(["suggest_fix", "explain_rule"]).toContain(structured.tool);
+      expect(body.meta.nextStep).toContain(structured.tool);
+      expect(typeof structured.args.ruleId).toBe("string");
+      if (structured.tool === "suggest_fix") {
+        expect(typeof structured.args.file).toBe("string");
+        expect(typeof structured.args.line).toBe("number");
+        expect(structured.args).not.toHaveProperty("filePath");
+      }
     }
   });
 

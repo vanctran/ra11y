@@ -191,9 +191,21 @@ describe("MCP tool: scan_project", () => {
       };
       // The fixture at tests/fixtures/bad/alt-text-missing/ has violations.
       expect(data.plan.violations).toBeGreaterThan(0);
-      // Directive guidance: calls out suggest_fix or explain_rule, names a file:line.
-      expect(data.meta.nextStep).toMatch(/suggest_fix|explain_rule/);
-      expect(data.meta.nextStep).toMatch(/\.html:\d+|\.tsx:\d+|\.jsx:\d+/);
+      // Directive guidance: names either a `suggest_fix` / `explain_rule`
+      // hop (mixed or guidance-lane fixture) or, under the Q2R2-FIX-DEDUPE
+      // trim, the inline mechanical `primary.edit` path (fixture is
+      // all-mechanical — alt-text-missing is fixClass: "mechanical"). The
+      // match covers both shapes so the test keeps asserting "the
+      // response points somewhere concrete" without locking in one
+      // specific lane. When the round-trip nudge is present, we keep
+      // the stricter file:line assertion; when the dedupe trims it, the
+      // inline-fix prose doesn't name a file:line (the agent reads the
+      // finding instead).
+      if (/suggest_fix|explain_rule/.test(data.meta.nextStep)) {
+        expect(data.meta.nextStep).toMatch(/\.html:\d+|\.tsx:\d+|\.jsx:\d+/);
+      } else {
+        expect(data.meta.nextStep).toContain("primary.edit");
+      }
     });
 
     it("on a clean directory, points at checklist for the manual-review half", async () => {

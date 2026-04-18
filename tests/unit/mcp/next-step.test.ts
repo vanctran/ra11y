@@ -121,6 +121,136 @@ describe("buildNextStep", () => {
     expect(result.structured).toBeUndefined();
   });
 
+  it("drops the suggest_fix nudge when every violation carries fixClass=mechanical", () => {
+    // Q2R2-FIX-DEDUPE: when every violation-severity finding already
+    // carries an inline mechanical fix (primary + alternatives +
+    // context), re-nudging the agent to call suggest_fix is a
+    // redundant round-trip. Both prose and structured must be
+    // trimmed consistently (P1-K paired emission) — a one-sided trim
+    // would re-create the exact drift we ship both forms to prevent.
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 2, mechanicalEditsAvailable: 2 },
+        files: [
+          {
+            path: "App.tsx",
+            findings: [
+              { ...sampleFinding, severity: "error", fixClass: "mechanical" },
+              {
+                ruleId: "aria/valid-attr",
+                line: 44,
+                column: 2,
+                severity: "warning",
+                fixClass: "mechanical",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.prose).not.toContain("suggest_fix");
+    expect(result.prose).toContain("apply `primary.edit` directly");
+    expect(result.structured).toBeUndefined();
+  });
+
+  it("keeps the suggest_fix nudge when some violations are mechanical and others are guidance", () => {
+    // Mixed-lane case: the guidance / verify-in-source / runtime-only
+    // findings still need the round-trip, so the shared nudge stays.
+    // This is the guardrail that prevents the dedupe from turning
+    // into under-surfacing: when even one violation would benefit
+    // from suggest_fix, we keep it for all of them.
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 2, mechanicalEditsAvailable: 1, guidanceFixesAvailable: 1 },
+        files: [
+          {
+            path: "App.tsx",
+            findings: [
+              { ...sampleFinding, severity: "error", fixClass: "mechanical" },
+              {
+                ruleId: "label/in-name",
+                line: 88,
+                column: 6,
+                severity: "warning",
+                fixClass: "guidance",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.prose).toContain("suggest_fix");
+    expect(result.structured).toEqual({
+      tool: "suggest_fix",
+      args: { ruleId: "aria/hidden-focus", file: "App.tsx", line: 21 },
+    });
+  });
+
+  it("keeps the suggest_fix nudge when every violation is guidance-class", () => {
+    // All-guidance: no mechanical fixes exist, so the nudge is still
+    // the canonical next step. Fail-closed predicate — we only drop
+    // the nudge when 100% of violations are mechanical.
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 1, guidanceFixesAvailable: 1 },
+        files: [
+          {
+            path: "App.tsx",
+            findings: [{ ...sampleFinding, severity: "error", fixClass: "guidance" }],
+          },
+        ],
+      }),
+    );
+
+    expect(result.prose).toContain("suggest_fix");
+    expect(result.structured).toEqual({
+      tool: "suggest_fix",
+      args: { ruleId: "aria/hidden-focus", file: "App.tsx", line: 21 },
+    });
+  });
+
+  it("leaves the clean-scan nextStep unchanged when there are no violations", () => {
+    // No-violations branch is outside the dedupe predicate's scope —
+    // the flag is computed but irrelevant, and the clean-scan
+    // recommendation (`checklist`) must not be affected.
+    const result = buildNextStep(
+      formatted({ plan: { violations: 0, notes: 0, actionableManualItems: 0 } }),
+    );
+
+    expect(result.prose).toContain("checklist");
+    expect(result.prose).not.toContain("suggest_fix");
+    expect(result.structured).toEqual({ tool: "checklist", args: {} });
+  });
+
+  it("keeps the suggest_fix nudge when a violation is missing fixClass (fail-closed)", () => {
+    // Synthetic / legacy shapes that don't stamp fixClass must NOT
+    // slip past the predicate as "mechanical by default" — silent
+    // drop of the nudge on an unknown lane is the exact under-
+    // surfacing the AI-first doctrine rejects. The predicate
+    // fail-closes: if a violation is missing fixClass, the suggest_fix
+    // nudge stays.
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 1, mechanicalEditsAvailable: 1 },
+        files: [
+          {
+            path: "App.tsx",
+            // No fixClass on this finding.
+            findings: [{ ...sampleFinding, severity: "error" }],
+          },
+        ],
+      }),
+    );
+
+    expect(result.prose).toContain("suggest_fix");
+    expect(result.structured).toEqual({
+      tool: "suggest_fix",
+      args: { ruleId: "aria/hidden-focus", file: "App.tsx", line: 21 },
+    });
+  });
+
   it("produces prose and structured forms that agree on the named tool across every branch", () => {
     // Invariant check: iterate the branches that emit structured
     // output and confirm the tool name in `structured.tool` appears
