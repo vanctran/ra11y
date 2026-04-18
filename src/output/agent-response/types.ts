@@ -10,6 +10,7 @@
  * and docs/kb/architecture/ai-first-consumer.md for doctrine.
  */
 
+import type { FixClass } from "../../types/rule.ts";
 import type { Severity } from "../../types/violation.ts";
 
 export type Effort = "trivial" | "moderate" | "significant";
@@ -25,11 +26,14 @@ export type Safety = "safe" | "unsafe";
  * omitted — per CLAUDE.md §1 "Ambiguous field shapes are dishonest," empty
  * string sentinels (`oldText: ""`) are a silent-miss hazard. Use the
  * `description` field for prose guidance in both cases.
+ *
+ * Confidence lives on the parent {@link AgentFinding} — one confidence
+ * per finding, derived from severity. A separate per-fix confidence
+ * was redundant.
  */
 export interface AgentFix {
   readonly oldText?: string;
   readonly newText?: string;
-  readonly confidence: Confidence;
   readonly safety: Safety;
   readonly description: string;
 }
@@ -41,7 +45,14 @@ export interface AgentSnippet {
 }
 
 export interface AgentFinding {
-  readonly id: string;
+  /**
+   * Stable identity — lets agents verify "did my edit close finding
+   * X?" by exact ID rather than (file, line, ruleId) fuzzy match that
+   * breaks on line-number drift. Disambiguated from `ruleId` /
+   * `groupKey` by the `Id` suffix. Derived from
+   * `Violation.findingId` — see `src/utils/finding-id.ts`.
+   */
+  readonly findingId: string;
   /**
    * Stable group identity — same rule firing on AST-equivalent nodes
    * across files all share this key. Lets agents batch one fix across
@@ -50,6 +61,15 @@ export interface AgentFinding {
    */
   readonly groupKey: string;
   readonly ruleId: string;
+  /**
+   * Per-finding remediation lane stamped from the rule's `fixClass`
+   * metadata. Lets agents batch-route at scan time without a per-
+   * finding `suggest_fix` round-trip. See
+   * docs/adr/0007-violation-fix-class-metadata.md. Distinct axis from
+   * `suggest_fix.kind` ("what does the payload contain") — do not
+   * conflate.
+   */
+  readonly fixClass: FixClass;
   readonly criteria: readonly string[];
   /**
    * Short human titles aligned index-for-index with `criteria`. Present
@@ -65,6 +85,14 @@ export interface AgentFinding {
    */
   readonly couldBeWrongBecause?: readonly string[];
   readonly severity: Severity;
+  /**
+   * Top-level confidence for this finding, derived deterministically
+   * from `severity`: `error` → `high`, `warning` → `medium`, `info` →
+   * `low`. Lives on the finding (not on {@link AgentFix}) so callers
+   * can consume it without reading into the optional `fix` object —
+   * including findings that emit no fix at all.
+   */
+  readonly confidence: Confidence;
   readonly line: number;
   readonly column: number;
   readonly endLine?: number;

@@ -31,7 +31,6 @@ function buildSnippet(v: Violation): AgentSnippet {
 function buildFix(v: Violation): AgentFix | undefined {
   const hasMechanicalEdit = v.fixPaths?.primary.edit !== undefined;
   const hasGuidance = typeof v.suggestion === "string" && v.suggestion.length > 0;
-  const confidence = severityToConfidence(v.severity);
 
   if (hasMechanicalEdit && v.fixPaths !== undefined) {
     // Deterministic rewrite — emit both text fields so an agent can apply verbatim.
@@ -40,7 +39,6 @@ function buildFix(v: Violation): AgentFix | undefined {
       return {
         oldText: edit.oldText,
         newText: edit.newText,
-        confidence,
         safety: "safe",
         description: v.suggestion ?? v.fixPaths.primary.label,
       };
@@ -50,7 +48,6 @@ function buildFix(v: Violation): AgentFix | undefined {
   if (hasGuidance && typeof v.suggestion === "string") {
     // Prose guidance only — no hollow oldText/newText sentinels.
     return {
-      confidence,
       safety: "safe",
       description: v.suggestion,
     };
@@ -110,15 +107,17 @@ export function buildAgentFinding(v: Violation): AgentFinding {
   const fix = buildFix(v);
 
   return {
-    id: v.findingId,
+    findingId: v.findingId,
     groupKey: v.groupKey,
     ruleId: v.ruleId,
+    fixClass: v.fixClass,
     criteria: [...v.criteria],
     ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
     ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
       ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
       : {}),
     severity: v.severity,
+    confidence: severityToConfidence(v.severity),
     line: v.location.line,
     column: v.location.column,
     ...(v.location.endLine !== undefined && { endLine: v.location.endLine }),

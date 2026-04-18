@@ -102,10 +102,13 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
     files: Array<{
       path: string;
       findings: Array<{
-        id: string;
+        findingId: string;
+        groupKey: string;
         ruleId: string;
+        fixClass: string;
         criteria: string[];
         severity: string;
+        confidence: string;
         line: number;
         column: number;
         endLine?: number;
@@ -115,7 +118,6 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
         fix?: {
           oldText?: string;
           newText?: string;
-          confidence: string;
           safety: string;
           description: string;
         };
@@ -223,12 +225,12 @@ describe("formatter: agent — files", () => {
     expect(lines).toEqual([...lines].sort((a, b) => a - b));
   });
 
-  it("finding.id is the stable findingId hash (survives line-number drift)", () => {
+  it("finding.findingId is the stable findingId hash (survives line-number drift)", () => {
     const { files } = parse();
     const finding = files[0]?.findings[0];
     expect(finding).toBeDefined();
     // 12 hex chars, matches the Violation.findingId recipe.
-    expect(finding!.id).toMatch(/^[0-9a-f]{12}$/);
+    expect(finding!.findingId).toMatch(/^[0-9a-f]{12}$/);
   });
 
   it("suppressWith uses JSX block comment syntax for .tsx files", () => {
@@ -327,15 +329,26 @@ describe("formatter: agent — files", () => {
     const firstFinding = buttonFile?.findings[0];
     expect(firstFinding?.fix).toBeDefined();
     expect(firstFinding?.fix?.description).toBe("Add onKeyDown or onKeyUp alongside onClick.");
-    expect(firstFinding?.fix?.confidence).toBe("high");
+    expect(firstFinding?.confidence).toBe("high");
     expect(firstFinding?.fix?.safety).toBe("safe");
   });
 
-  it("finding.fix.confidence is medium for warning severity", () => {
+  it("finding.confidence is medium for warning severity", () => {
     const { files } = parse();
     const card = files.find((f) => f.path === "src/ui/Card.tsx");
     const warning = card?.findings.find((f) => f.severity === "warning");
-    expect(warning?.fix?.confidence).toBe("medium");
+    expect(warning?.confidence).toBe("medium");
+  });
+
+  it("finding exposes top-level fixClass from the rule's metadata", () => {
+    const { files } = parse();
+    const card = files.find((f) => f.path === "src/ui/Card.tsx");
+    const altImg = card?.findings.find((f) => f.ruleId === "media/alt-text-missing");
+    // The fixture declares `fixClass: "mechanical"` on the alt-text violation.
+    expect(altImg?.fixClass).toBe("mechanical");
+    // verify-in-source is the other fixClass in the sample fixtures.
+    const kbd = card?.findings.find((f) => f.ruleId === "keyboard/handler-missing");
+    expect(kbd?.fixClass).toBe("verify-in-source");
   });
 
   it("finding.snippet.highlighted is set when violation carries a snippet", () => {
