@@ -8,6 +8,7 @@ const RESULT: ScanResult = {
   violations: withFindingIds([
     {
       ruleId: "keyboard/handler-missing",
+      fixClass: "verify-in-source",
       criteria: ["wcag22:2.1.1", "wcag21:2.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Button.tsx", line: 8, column: 3 },
@@ -16,6 +17,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "semantics/button-name",
+      fixClass: "verify-in-source",
       criteria: ["wcag22:4.1.2"],
       severity: "error",
       location: { filePath: "src/ui/Button.tsx", line: 22, column: 5, endLine: 22, endColumn: 30 },
@@ -24,6 +26,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "keyboard/handler-missing",
+      fixClass: "verify-in-source",
       criteria: ["wcag22:2.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Card.tsx", line: 14, column: 7 },
@@ -33,6 +36,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1"],
       severity: "warning",
       location: { filePath: "src/ui/Card.tsx", line: 31, column: 9 },
@@ -44,6 +48,7 @@ const RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22", "wcag21"],
   isTTY: false,
+  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {
@@ -54,12 +59,14 @@ const REPORT: ReportData = {
       criterionId: "wcag22:1.2.1",
       location: { filePath: "src/ui/Card.tsx", line: 5, column: 1 },
       reason: "Video element may need a text alternative.",
+      confidence: "medium",
       snippet: "<video src='intro.mp4'>",
     },
     {
       criterionId: "wcag22:1.4.1",
       location: { filePath: "src/ui/Button.tsx", line: 10, column: 1 },
       reason: "Color may be the only visual means of conveying information.",
+      confidence: "medium",
     },
   ],
 };
@@ -70,6 +77,7 @@ const EMPTY_RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22"],
   isTTY: false,
+  perRuleCoverage: [],
 };
 
 const EMPTY_REPORT: ReportData = {
@@ -113,6 +121,7 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
         effort: string;
         category: string;
         suppressWith: string;
+        suppressPlacement: string;
       }>;
     }>;
     reviewCandidates: Array<{
@@ -246,6 +255,7 @@ describe("formatter: agent — files", () => {
       violations: withFindingIds([
         {
           ruleId: "parsing/duplicate-id",
+          fixClass: "mechanical",
           criteria: ["wcag22:4.1.2"],
           severity: "error",
           location: { filePath: "src/util.ts", line: 3, column: 1 },
@@ -268,6 +278,7 @@ describe("formatter: agent — files", () => {
       violations: withFindingIds([
         {
           ruleId: "focus/outline-visible",
+          fixClass: "verify-in-source",
           criteria: ["wcag22:2.4.7"],
           severity: "warning",
           location: { filePath: "src/app.css", line: 12, column: 3 },
@@ -290,6 +301,7 @@ describe("formatter: agent — files", () => {
       violations: withFindingIds([
         {
           ruleId: "media/alt-text-missing",
+          fixClass: "mechanical",
           criteria: ["wcag22:1.1.1"],
           severity: "error",
           location: { filePath: "index.html", line: 5, column: 3 },
@@ -379,7 +391,7 @@ describe("formatter: agent — reviewCandidates", () => {
     const { reviewCandidates } = parse();
     const withoutSnippet = reviewCandidates.find((c) => c.criterionId === "wcag22:1.4.1");
     expect(withoutSnippet).toBeDefined();
-    expect(Object.hasOwn(withoutSnippet, "snippet")).toBe(false);
+    expect(Object.hasOwn(withoutSnippet as object, "snippet")).toBe(false);
   });
 
   it("reviewCandidates are empty when report.candidates is undefined", () => {
