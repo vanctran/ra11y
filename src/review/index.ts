@@ -27,6 +27,7 @@ import { finder as serverErrorUntied } from "./finders/server-error-untied.ts";
 import { finder as suppressionNoReason } from "./finders/suppression-no-reason.ts";
 import { finder as timing } from "./finders/timing.ts";
 import { finder as useOfColor } from "./finders/use-of-color.ts";
+import { finder as validationTiming } from "./finders/validation-timing.ts";
 
 export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   captcha,
@@ -52,4 +53,5 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   suppressionNoReason,
   timing,
   useOfColor,
+  validationTiming,
 ];
