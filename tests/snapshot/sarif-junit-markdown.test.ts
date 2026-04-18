@@ -12,6 +12,7 @@ const RESULT: ScanResult = {
   violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Card.tsx", line: 12, column: 5 },
@@ -20,6 +21,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "navigation/link-descriptive-text",
+      fixClass: "guidance",
       criteria: ["wcag22:2.4.4"],
       severity: "warning",
       location: { filePath: "src/ui/Card.tsx", line: 45, column: 9 },
@@ -28,6 +30,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Header.tsx", line: 4, column: 3 },
@@ -39,6 +42,7 @@ const RESULT: ScanResult = {
   durationMs: 42,
   enabledStandards: ["wcag22"],
   isTTY: false,
+  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {
@@ -135,6 +139,7 @@ describe("formatter: junit", () => {
       violations: withFindingIds([
         {
           ruleId: "test/rule",
+          fixClass: "mechanical",
           criteria: ["wcag22:1.1.1"],
           severity: "error",
           location: { filePath: "a.html", line: 1, column: 1 },
@@ -182,6 +187,7 @@ describe("formatter: markdown", () => {
       violations: withFindingIds(
         Array.from({ length: 11 }, (_, i) => ({
           ruleId: "media/alt-text-missing",
+          fixClass: "mechanical" as const,
           criteria: ["wcag22:1.1.1"],
           severity: "error" as const,
           location: { filePath: `file${i}.html`, line: 1, column: 1 },
@@ -201,6 +207,7 @@ describe("formatter: markdown", () => {
       violations: withFindingIds([
         {
           ruleId: "test/rule",
+          fixClass: "mechanical",
           criteria: ["wcag22:1.1.1"],
           severity: "error",
           location: { filePath: "weird|path.html", line: 1, column: 1 },
@@ -241,6 +248,7 @@ describe("formatter: html", () => {
       violations: withFindingIds([
         {
           ruleId: "media/alt-text-missing",
+          fixClass: "mechanical",
           criteria: ["wcag22:1.1.1"],
           severity: "error",
           location: { filePath: "src/a.tsx", line: 1, column: 1 },

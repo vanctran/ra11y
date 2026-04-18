@@ -53,6 +53,7 @@ const ruleSatisfyingAlpha = defineRule({
   satisfies: ["alpha:1.1"],
   severity: "error",
   scope: "node",
+  fixClass: "mechanical",
   docs: {
     description: "",
     rationale: "",
@@ -136,6 +137,7 @@ describe("createStandardFilter", () => {
       satisfies: ["gamma:9.9"],
       severity: "warning",
       scope: "node",
+      fixClass: "mechanical",
       docs: {
         description: "",
         rationale: "",
@@ -201,6 +203,7 @@ describe("createStandardFilter", () => {
       satisfies: ["delta:1.1", "delta:9.9"],
       severity: "warning",
       scope: "node",
+      fixClass: "mechanical",
       docs: {
         description: "",
         rationale: "",
@@ -247,6 +250,7 @@ describe("createStandardFilter", () => {
       id: "test/rule-base",
       satisfies: ["s508ish:X"],
       severity: "error",
+      fixClass: "mechanical",
       scope: "node",
       docs: {
         description: "",

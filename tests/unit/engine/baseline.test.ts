@@ -11,6 +11,7 @@ import { withFindingId } from "../../helpers/make-violation.ts";
 function makeViolation(overrides: Partial<Violation> = {}): Violation {
   return withFindingId({
     ruleId: "media/alt-text-missing",
+    fixClass: "mechanical",
     criteria: ["wcag22:1.1.1"],
     severity: "error",
     location: { filePath: "src/ui/Card.tsx", line: 12, column: 5 },
@@ -26,6 +27,7 @@ function makeResult(violations: Violation[]): ScanResult {
     durationMs: 0,
     enabledStandards: ["wcag22"],
     isTTY: false,
+    perRuleCoverage: [],
   };
 }
 

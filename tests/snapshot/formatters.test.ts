@@ -14,6 +14,7 @@ const RESULT: ScanResult = {
   violations: withFindingIds([
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1", "wcag21:1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Card.tsx", line: 12, column: 5 },
@@ -22,6 +23,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "link/descriptive-text",
+      fixClass: "guidance",
       criteria: ["wcag22:2.4.4"],
       severity: "warning",
       location: { filePath: "src/ui/Card.tsx", line: 45, column: 9 },
@@ -30,6 +32,7 @@ const RESULT: ScanResult = {
     },
     {
       ruleId: "media/alt-text-missing",
+      fixClass: "mechanical",
       criteria: ["wcag22:1.1.1"],
       severity: "error",
       location: { filePath: "src/ui/Header.tsx", line: 4, column: 3 },
@@ -41,6 +44,7 @@ const RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22"],
   isTTY: false,
+  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {
@@ -74,6 +78,7 @@ describe("formatter: terminal (no color)", () => {
       durationMs: 0,
       enabledStandards: ["wcag22"],
       isTTY: false,
+      perRuleCoverage: [],
     };
     const output = terminalFormatter.format(empty, REPORT);
     expect(output).toContain("0 errors");
@@ -110,6 +115,7 @@ describe("formatter: plain", () => {
       durationMs: 0,
       enabledStandards: ["wcag22"],
       isTTY: false,
+      perRuleCoverage: [],
     };
     const output = plainFormatter.format(empty, REPORT);
     expect(output.trim()).toBe("0 violations in 5 files (0ms)");
