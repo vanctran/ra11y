@@ -24,6 +24,7 @@ import { coverageTool } from "./tool-coverage.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { explainStandardTool } from "./tool-explain-standard.ts";
 import { listSuppressionsTool } from "./tool-list-suppressions.ts";
+import { proposeConfigTool } from "./tool-propose-config.ts";
 import { reviewCandidatesTool } from "./tool-review-candidates.ts";
 import { scanDiffTool } from "./tool-scan-diff.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
@@ -537,6 +538,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   listRulesTool,
   listSuppressionsTool,
   suppressTool,
+  proposeConfigTool,
   sessionConfigureTool,
 ];
 

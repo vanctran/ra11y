@@ -53,20 +53,42 @@ export function buildSuggestedConfigSnippet(
   wrappers: readonly ConfirmedWrapperForSnippet[],
 ): string {
   if (wrappers.length === 0) return "";
+  const body = buildNativeWrappersBody(wrappers);
+  return ["defineConfig({", ...body.map((line) => `${INDENT}${line}`), "});"].join("\n");
+}
+
+/**
+ * Builds the bare `nativeWrappers: [...]` (array form) or
+ * `nativeWrappers: { ... }` (object form) lines WITHOUT the outer
+ * `defineConfig({ ... });` envelope. Returns one string per line, each
+ * already indented relative to the enclosing object body (two spaces
+ * for the key, four for each entry). Callers that need to compose the
+ * `nativeWrappers` field alongside other config keys (e.g. the
+ * `propose_config` tool, which also emits `exclude` and a commented
+ * rules stub) stitch the returned lines into their own
+ * `defineConfig({ ... })` envelope; callers that only want the
+ * wrapper-only snippet use {@link buildSuggestedConfigSnippet}.
+ *
+ * Returns an empty array when `wrappers` is empty — assembly sites
+ * conditional-spread on emptiness rather than embedding an empty
+ * `nativeWrappers: []` field.
+ */
+export function buildNativeWrappersBody(
+  wrappers: readonly ConfirmedWrapperForSnippet[],
+): readonly string[] {
+  if (wrappers.length === 0) return [];
   const anyMapped = wrappers.some((w) => typeof w.element === "string" && w.element.length > 0);
-  if (anyMapped) return buildObjectForm(wrappers);
-  return buildArrayForm(wrappers);
+  if (anyMapped) return buildObjectFormBody(wrappers);
+  return buildArrayFormBody(wrappers);
 }
 
-function buildArrayForm(wrappers: readonly ConfirmedWrapperForSnippet[]): string {
+function buildArrayFormBody(wrappers: readonly ConfirmedWrapperForSnippet[]): readonly string[] {
   const names = [...new Set(wrappers.map((w) => w.component))].sort();
-  const lines = names.map((name) => `${INDENT}${INDENT}${JSON.stringify(name)},`);
-  return ["defineConfig({", `${INDENT}nativeWrappers: [`, ...lines, `${INDENT}],`, "});"].join(
-    "\n",
-  );
+  const lines = names.map((name) => `${INDENT}${JSON.stringify(name)},`);
+  return ["nativeWrappers: [", ...lines, "],"];
 }
 
-function buildObjectForm(wrappers: readonly ConfirmedWrapperForSnippet[]): string {
+function buildObjectFormBody(wrappers: readonly ConfirmedWrapperForSnippet[]): readonly string[] {
   // Object form needs a name→element entry per wrapper. Names without a
   // mapping still appear (the consumer verified them, just without an
   // element), with `null` as the element — preserves the "we saw this
@@ -83,9 +105,7 @@ function buildObjectForm(wrappers: readonly ConfirmedWrapperForSnippet[]): strin
   const entries = sorted.map((name) => {
     const element = byName.get(name);
     const value = element === null ? "null" : JSON.stringify(element);
-    return `${INDENT}${INDENT}${JSON.stringify(name)}: ${value},`;
+    return `${INDENT}${JSON.stringify(name)}: ${value},`;
   });
-  return ["defineConfig({", `${INDENT}nativeWrappers: {`, ...entries, `${INDENT}},`, "});"].join(
-    "\n",
-  );
+  return ["nativeWrappers: {", ...entries, "},"];
 }
