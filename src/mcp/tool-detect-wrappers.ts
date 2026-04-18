@@ -14,6 +14,7 @@
  */
 
 import { gitRoot } from "../utils/git.ts";
+import { buildSuggestedConfigSnippet } from "./config-snippet.ts";
 import { collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { type McpTool, parseFiles, strParam, textResult } from "./tools-helpers.ts";
 
@@ -56,10 +57,21 @@ export const detectNativeWrappersTool: McpTool = {
     ];
     const absent = declared.filter((name) => !detectedNames.has(name));
 
+    // Structured twin of the English nudge in `nextStep`: agents can
+    // paste this directly into ra11y.config.ts instead of parsing the
+    // prose. Conditional-spread per CLAUDE.md §1 "Ambiguous field
+    // shapes are dishonest" — omit entirely when there are no
+    // candidates to seed a snippet from, rather than ship `""`.
+    const snippet = buildSuggestedConfigSnippet(
+      candidates.map((c) => ({ component: c.component })),
+    );
+    const snippetField = snippet.length > 0 ? { suggestedConfigSnippet: snippet } : {};
+
     return textResult({
       scannedRoot: root,
       candidates,
       ...(absent.length > 0 ? { absentDeclaredWrappers: absent } : {}),
+      ...snippetField,
       nextStep: buildNextStep(candidates, absent),
     });
   },

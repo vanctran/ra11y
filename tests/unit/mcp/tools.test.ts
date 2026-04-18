@@ -721,6 +721,97 @@ describe("MCP tool: detect_native_wrappers", () => {
     expect(data.candidates).toEqual([]);
     expect(data.nextStep).toContain("No PascalCase");
   });
+
+  it("emits suggestedConfigSnippet as a structured field when candidates are found", async () => {
+    // Q2R2-CFG-SNIPPET: agents previously had to parse the English
+    // `nextStep` prose to extract a usable config fragment. The
+    // structured twin is a `defineConfig`-compatible string they can
+    // paste directly into ra11y.config.ts. Array form here because
+    // `collectWrapperCandidates` does not carry per-candidate native
+    // element mappings.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-detect-snippet-"));
+    await writeFile(
+      joinPath(dir, "app.tsx"),
+      [
+        "export function App() {",
+        "  return (",
+        "    <>",
+        "      <Link onClick={x} />",
+        "      <Button onClick={y} />",
+        "    </>",
+        "  );",
+        "}",
+      ].join("\n"),
+    );
+
+    const tool = findTool("detect_native_wrappers");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+
+    const data = JSON.parse(result.content[0].text) as {
+      candidates: Array<{ component: string }>;
+      suggestedConfigSnippet?: string;
+      nextStep: string;
+    };
+    expect(data.candidates.length).toBeGreaterThan(0);
+    expect(typeof data.suggestedConfigSnippet).toBe("string");
+    // defineConfig-compatible; names sorted lexicographically.
+    expect(data.suggestedConfigSnippet).toBe(
+      ["defineConfig({", "  nativeWrappers: [", '    "Button",', '    "Link",', "  ],", "});"].join(
+        "\n",
+      ),
+    );
+    // nextStep prose stays unchanged — agents using either surface
+    // keep working (Q2R2-CFG-SNIPPET is additive, not a replacement).
+    expect(data.nextStep).toContain("nativeWrappers");
+  });
+
+  it("omits suggestedConfigSnippet entirely when zero candidates are produced", async () => {
+    // Per CLAUDE.md §1 "Ambiguous field shapes are dishonest," the
+    // response omits the field via conditional spread rather than
+    // shipping `""` or `null`. A caller checking `typeof` sees
+    // `undefined` and knows there's nothing to paste.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-detect-snippet-empty-"));
+    await writeFile(joinPath(dir, "app.tsx"), "export const x = 1;");
+
+    const tool = findTool("detect_native_wrappers");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+
+    const raw = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(raw.candidates).toEqual([]);
+    expect("suggestedConfigSnippet" in raw).toBe(false);
+  });
+
+  it("is idempotent on re-call — same cwd returns byte-identical snippet", async () => {
+    // Re-calling the tool on an unchanged project must yield the same
+    // snippet. Load-bearing for agents that diff scans across calls;
+    // a flapping snippet would look like a config change.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-detect-snippet-idem-"));
+    await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <Button onClick={x} />;");
+
+    const tool = findTool("detect_native_wrappers");
+    const session = new McpSession();
+    const first = await tool.handler({ cwd: dir }, session);
+    const second = await tool.handler({ cwd: dir }, session);
+
+    const a = JSON.parse(first.content[0].text) as { suggestedConfigSnippet?: string };
+    const b = JSON.parse(second.content[0].text) as { suggestedConfigSnippet?: string };
+    expect(a.suggestedConfigSnippet).toBeDefined();
+    expect(a.suggestedConfigSnippet).toBe(b.suggestedConfigSnippet);
+  });
 });
 
 describe("MCP tool: sessionConfigure", () => {

@@ -23,6 +23,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ParsedFile } from "../../../src/engine/scanner.ts";
 import { parseTsx } from "../../../src/input/parsers/index.ts";
+import { buildSuggestedConfigSnippet } from "../../../src/mcp/config-snippet.ts";
 import {
   classifyWrapperCandidates,
   collectWrapperCandidates,
@@ -350,5 +351,117 @@ describe("collectWrapperCandidates: definitionFile (Q2-WRAPPATH)", () => {
       const v = c.definitionFile;
       expect(v === null || (typeof v === "string" && v.length > 0)).toBe(true);
     }
+  });
+});
+
+describe("buildSuggestedConfigSnippet", () => {
+  // Structured twin of the English nudge in `detect_native_wrappers`'s
+  // `nextStep`. Agents paste this directly into ra11y.config.ts — the
+  // shape must be `defineConfig`-compatible (array form for name-only
+  // input, object form when any row carries a native-element mapping
+  // from Q2-WRAPMAP), lexicographic sort for stability across runs,
+  // and a single trailing comma that matches project Biome style.
+
+  it("emits the array form when every wrapper is name-only, sorted lexicographically", () => {
+    const snippet = buildSuggestedConfigSnippet([{ component: "Link" }, { component: "Button" }]);
+    expect(snippet).toBe(
+      ["defineConfig({", "  nativeWrappers: [", '    "Button",', '    "Link",', "  ],", "});"].join(
+        "\n",
+      ),
+    );
+  });
+
+  it("emits the object form when any wrapper carries a mapped native element, keys sorted", () => {
+    // One mapped wrapper is enough to flip the whole output to the
+    // object form — Q2-WRAPMAP accepts the shape as soon as a single
+    // entry is a map, so the snippet mirrors that.
+    const snippet = buildSuggestedConfigSnippet([
+      { component: "Link", element: "a" },
+      { component: "Button", element: "button" },
+    ]);
+    expect(snippet).toBe(
+      [
+        "defineConfig({",
+        "  nativeWrappers: {",
+        '    "Button": "button",',
+        '    "Link": "a",',
+        "  },",
+        "});",
+      ].join("\n"),
+    );
+  });
+
+  it("preserves rows without a mapping as `null` in object form rather than dropping them", () => {
+    // Mixed shape: one row carries a mapping, one doesn't. The unmapped
+    // row still appears in the snippet so the consumer sees every
+    // wrapper they confirmed — silently dropping it would look like
+    // the detector missed the component. `null` is the honest signal
+    // for "we confirmed this name but couldn't identify its element."
+    const snippet = buildSuggestedConfigSnippet([
+      { component: "Button", element: "button" },
+      { component: "CustomThing" },
+    ]);
+    expect(snippet).toBe(
+      [
+        "defineConfig({",
+        "  nativeWrappers: {",
+        '    "Button": "button",',
+        '    "CustomThing": null,',
+        "  },",
+        "});",
+      ].join("\n"),
+    );
+  });
+
+  it("treats an empty-string element as name-only (no mapping)", () => {
+    // `element: ""` is the canonical "ambiguous empty" — we treat it
+    // as absent so a buggy caller never flips the whole snippet to
+    // object form with empty values. All-name-only collapses to the
+    // array form.
+    const snippet = buildSuggestedConfigSnippet([
+      { component: "Button", element: "" },
+      { component: "Link" },
+    ]);
+    expect(snippet).toBe(
+      ["defineConfig({", "  nativeWrappers: [", '    "Button",', '    "Link",', "  ],", "});"].join(
+        "\n",
+      ),
+    );
+  });
+
+  it("returns an empty string for an empty input list so the caller can omit the field", () => {
+    // The response omits `suggestedConfigSnippet` entirely when there's
+    // nothing to suggest (conditional spread at the assembly site).
+    // This function surfaces that as `""`, not a sentinel snippet.
+    expect(buildSuggestedConfigSnippet([])).toBe("");
+  });
+
+  it("is idempotent: re-calling with the same input returns the same string", () => {
+    // Stability guard — callers may call the builder twice (e.g. once
+    // for the response, once for a log line) and expect byte-identical
+    // output. The sort + dedup should be stable across calls.
+    const input = [{ component: "Zebra" }, { component: "Alpha" }, { component: "Mango" }];
+    const first = buildSuggestedConfigSnippet(input);
+    const second = buildSuggestedConfigSnippet(input);
+    expect(first).toBe(second);
+    // And the name order inside the snippet is sorted regardless of
+    // input order.
+    expect(first.indexOf('"Alpha"')).toBeLessThan(first.indexOf('"Mango"'));
+    expect(first.indexOf('"Mango"')).toBeLessThan(first.indexOf('"Zebra"'));
+  });
+
+  it("dedupes repeated components so the snippet never lists a name twice", () => {
+    // Safety net in case a caller passes duplicates (not the detect
+    // tool's normal output, but the helper should be robust).
+    const snippet = buildSuggestedConfigSnippet([
+      { component: "Button" },
+      { component: "Button" },
+      { component: "Link" },
+    ]);
+    expect(snippet).toBe(
+      ["defineConfig({", "  nativeWrappers: [", '    "Button",', '    "Link",', "  ],", "});"].join(
+        "\n",
+      ),
+    );
   });
 });
