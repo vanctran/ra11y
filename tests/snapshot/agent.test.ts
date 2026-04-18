@@ -92,7 +92,8 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
   return JSON.parse(raw) as {
     plan: {
       totalFindings: number;
-      fixSuggestionAvailable: number;
+      mechanicalEditsAvailable: number;
+      guidanceFixesAvailable: number;
       reviewNeeded: number;
       manualOnly: number;
       estimatedEffort: string;
@@ -183,10 +184,12 @@ describe("formatter: agent — plan", () => {
     expect(plan.summary).toContain("keyboard/handler-missing");
   });
 
-  it("plan.fixSuggestionAvailable counts violations with a suggestion", () => {
+  it("plan splits fix suggestions into mechanical vs guidance counters", () => {
     const { plan } = parse();
-    // All 4 violations have suggestions
-    expect(plan.fixSuggestionAvailable).toBe(4);
+    // All 4 violations have a suggestion string but no fixPaths.primary.edit,
+    // so they are guidance fixes (prose only), not mechanical edits.
+    expect(plan.mechanicalEditsAvailable).toBe(0);
+    expect(plan.guidanceFixesAvailable).toBe(4);
     expect(plan.reviewNeeded).toBe(0);
   });
 

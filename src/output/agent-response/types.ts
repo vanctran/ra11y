@@ -98,9 +98,22 @@ export interface AgentReviewCandidate {
   readonly suggestedFix?: string;
 }
 
+/**
+ * Executive summary for the agent: counts, effort, and a natural-language blurb.
+ *
+ * `mechanicalEditsAvailable` counts violations where `fixPaths?.primary.edit`
+ * is present — deterministic, batch-apply work.
+ * `guidanceFixesAvailable` counts violations with prose-only guidance but no
+ * mechanical edit — route-to-rewrite work.
+ *
+ * These two replace the former `fixSuggestionAvailable` composite, which summed
+ * categorically different sub-buckets. Per CLAUDE.md §1 "Composite headline
+ * counts are dishonest," split counters are the honest shape.
+ */
 export interface AgentPlan {
   readonly totalFindings: number;
-  readonly fixSuggestionAvailable: number;
+  readonly mechanicalEditsAvailable: number;
+  readonly guidanceFixesAvailable: number;
   readonly reviewNeeded: number;
   readonly manualOnly: number;
   readonly estimatedEffort: Effort;
