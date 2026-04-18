@@ -414,7 +414,7 @@ describe("MCP tool: scan_project", () => {
       // Simulate a prior configure() call contributing a wrapper that
       // isn't present in this scan's source — so the session and
       // autoDetect channels stay cleanly non-overlapping.
-      session.config = { ...session.config, nativeWrappers: ["SessionOnlyWidget"] };
+      session.config.nativeWrappers = ["SessionOnlyWidget"];
       const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
       const data = JSON.parse(result.content[0].text) as {
         meta: {

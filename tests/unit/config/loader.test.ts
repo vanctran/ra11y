@@ -23,15 +23,15 @@ describe("loadConfig precedence", () => {
 
   beforeEach(() => {
     dir = makeTmpDir();
-    delete process.env["RA11Y_CONFIG"];
+    Reflect.deleteProperty(process.env, "RA11Y_CONFIG");
   });
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
     if (savedEnv === undefined) {
-      delete process.env["RA11Y_CONFIG"];
+      Reflect.deleteProperty(process.env, "RA11Y_CONFIG");
     } else {
-      process.env["RA11Y_CONFIG"] = savedEnv;
+      (process.env as Record<string, string>)["RA11Y_CONFIG"] = savedEnv;
     }
   });
 
@@ -88,7 +88,7 @@ describe("loadConfig precedence", () => {
     );
     const alt = join(dir, "env.json");
     writeFileSync(alt, JSON.stringify({ standards: ["wcag21"], level: "AA" }));
-    process.env["RA11Y_CONFIG"] = alt;
+    (process.env as Record<string, string>)["RA11Y_CONFIG"] = alt;
     const loaded = await loadConfig({ cwd: dir });
     expect(loaded.level).toBe("AA");
     expect(loaded.standards).toEqual(["wcag21"]);
@@ -99,7 +99,7 @@ describe("loadConfig precedence", () => {
     const explicitPath = join(dir, "explicit.json");
     writeFileSync(envPath, JSON.stringify({ level: "A" }));
     writeFileSync(explicitPath, JSON.stringify({ level: "AAA" }));
-    process.env["RA11Y_CONFIG"] = envPath;
+    (process.env as Record<string, string>)["RA11Y_CONFIG"] = envPath;
     const loaded = await loadConfig({ cwd: dir, configPath: explicitPath });
     expect(loaded.level).toBe("AAA");
   });
