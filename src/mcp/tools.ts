@@ -22,6 +22,7 @@ import { attestTool } from "./tool-attest.ts";
 import { auditTool } from "./tool-audit.ts";
 import { baselineTool } from "./tool-baseline.ts";
 import { checklistTool } from "./tool-checklist.ts";
+import { conformanceStatementTool } from "./tool-conformance-statement.ts";
 import { coverageTool } from "./tool-coverage.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { explainStandardTool } from "./tool-explain-standard.ts";
@@ -509,6 +510,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   applyFixTool,
   coverageTool,
   checklistTool,
+  conformanceStatementTool,
   reviewCandidatesTool,
   auditTool,
   baselineTool,
