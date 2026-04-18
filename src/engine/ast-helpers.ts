@@ -101,6 +101,113 @@ export function findJsxElementsByTag(module: TsxModule, tag: string): readonly J
   return out;
 }
 
+/**
+ * Resolves the effective tag for a JSX element, accounting for the
+ * polymorphic `as` / `asChild` patterns.
+ *
+ * - `as="<string-literal>"` → returns the literal as `tagName` with
+ *   `resolvedFromAs: true`. Only string-literal values resolve —
+ *   `as={Identifier}` and dynamic expressions stay unresolved so the
+ *   agent reads the source and decides.
+ * - `asChild` with exactly one JsxElement child (whitespace-only
+ *   `JsxText` siblings are ignored) → returns that child's `tagName`
+ *   with `resolvedFromAsChild: true`. Multiple element children,
+ *   expression children, or no element child → unresolved.
+ * - Otherwise → returns `element.tagName` with both flags `false`.
+ *
+ * Pure function. Never reads beyond the supplied element's own
+ * attributes / direct children.
+ */
+export function resolvePolymorphicTag(element: JsxElement): PolymorphicResolutionShape {
+  const asLiteral = getJsxAttributeString(element, "as");
+  if (asLiteral !== null && asLiteral.length > 0) {
+    return { tagName: asLiteral, resolvedFromAs: true, resolvedFromAsChild: false };
+  }
+  if (hasJsxAttribute(element, "asChild")) {
+    const delegated = singleElementChild(element);
+    if (delegated) {
+      return {
+        tagName: delegated.tagName,
+        resolvedFromAs: false,
+        resolvedFromAsChild: true,
+      };
+    }
+  }
+  return { tagName: element.tagName, resolvedFromAs: false, resolvedFromAsChild: false };
+}
+
+interface PolymorphicResolutionShape {
+  readonly tagName: string;
+  readonly resolvedFromAs: boolean;
+  readonly resolvedFromAsChild: boolean;
+}
+
+/**
+ * Returns the element's sole meaningful JSX-element child, or
+ * `undefined` when the element has zero, multiple, or mixed-expression
+ * children. Whitespace-only `JsxText` nodes are ignored — they're an
+ * artefact of JSX formatting, not user-meaningful children. A
+ * `JsxExpression` child disqualifies the element entirely: we can't
+ * know what it renders.
+ */
+function singleElementChild(element: JsxElement): JsxElement | undefined {
+  let found: JsxElement | undefined;
+  for (const child of element.children) {
+    if (child.kind === "JsxText") {
+      if (child.value.trim().length > 0) return undefined;
+      continue;
+    }
+    if (child.kind === "JsxExpression") return undefined;
+    // JsxElement — only the first one counts; a second means "unresolved".
+    if (found) return undefined;
+    found = child;
+  }
+  return found;
+}
+
+/**
+ * Finds every JSX element a rule should treat as the target `tag`.
+ * Unified entry point for the three resolution channels a polymorphic-
+ * aware rule cares about:
+ *
+ * 1. Bare tag match (`<a>`, `<img>`, `<input>` — case-sensitive, matching
+ *    the React convention preserved by the parser).
+ * 2. Mapped wrapper name match — driven by
+ *    `ctx.wrappersForElement` which is already filtered against the
+ *    rule's `wrapperTreatsAsElement` target.
+ * 3. Polymorphic resolution — elements whose `as="<tag>"` literal or
+ *    `asChild` + single-element-child delegates to the target tag.
+ *    Case-insensitive comparison (native HTML tags are lowercased by
+ *    convention).
+ *
+ * A single element matches at most once even if multiple channels
+ * agree (e.g. `<a as="a">`). Intentionally not a generator — rules
+ * typically walk the list once and keeping the array makes the
+ * iteration order stable for snapshot tests.
+ */
+export function findJsxElementsForTag(
+  module: TsxModule,
+  tag: string,
+  wrappers: ReadonlySet<string>,
+): readonly JsxElement[] {
+  const loweredTag = tag.toLowerCase();
+  const out: JsxElement[] = [];
+  for (const el of walkJsxElements(module)) {
+    if (el.tagName === tag) {
+      out.push(el);
+      continue;
+    }
+    if (wrappers.has(el.tagName)) {
+      out.push(el);
+      continue;
+    }
+    const resolved = resolvePolymorphicTag(el);
+    if (!(resolved.resolvedFromAs || resolved.resolvedFromAsChild)) continue;
+    if (resolved.tagName.toLowerCase() === loweredTag) out.push(el);
+  }
+  return out;
+}
+
 /** Gets a JSX attribute by name, or null if missing. */
 export function getJsxAttribute(element: JsxElement, name: string): JsxAttribute | null {
   for (const attr of element.attributes) {

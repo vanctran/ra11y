@@ -8,8 +8,14 @@
  * are pure functions that see exactly what they need.
  */
 
-import type { Ast } from "../types/ast.ts";
-import type { EmittedViolation, Language, RuleContext } from "../types/rule.ts";
+import type { Ast, JsxElement } from "../types/ast.ts";
+import type {
+  EmittedViolation,
+  Language,
+  PolymorphicResolution,
+  RuleContext,
+} from "../types/rule.ts";
+import { resolvePolymorphicTag } from "./ast-helpers.ts";
 
 export interface ContextInput {
   readonly filePath: string;
@@ -53,6 +59,9 @@ export function buildContext(
     ast: input.ast.root,
     enabledStandards: input.enabledStandards,
     wrappersForElement,
+    resolvePolymorphic(element: unknown): PolymorphicResolution {
+      return resolvePolymorphicTag(element as JsxElement);
+    },
     emit(violation: EmittedViolation): void {
       violationSink.push(violation);
     },

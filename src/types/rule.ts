@@ -123,10 +123,46 @@ export interface RuleContext {
    * supplied, or when no mapped wrapper renders this rule's tag.
    */
   readonly wrappersForElement: ReadonlySet<string>;
+  /**
+   * Resolves the effective tag for a JSX element, accounting for the
+   * polymorphic `as` / `asChild` patterns common in design systems
+   * (`<Button as="a">`, `<Slot asChild><a>…</a></Slot>`).
+   *
+   * - `as="<literal>"` → returns that literal as `tagName` with
+   *   `resolvedFromAs: true`. Only string-literal values are resolved —
+   *   `as={Identifier}` stays unresolved (the agent reads the source).
+   * - `asChild` with exactly one JSX-element child → returns that child's
+   *   `tagName` with `resolvedFromAsChild: true`. Multiple children,
+   *   expression children, or a missing child → unresolved.
+   * - Otherwise → returns `element.tagName` with both flags `false`.
+   *
+   * Rules opted into {@link Rule.wrapperTreatsAsElement} pair this with
+   * `findJsxElementsForTag` (or call it directly) to decide whether an
+   * arbitrary JSX element should run through the rule's native-tag
+   * checks. Only the resolution — not the per-rule match decision —
+   * lives on `ctx`; rules stay in charge of how they use the result.
+   */
+  resolvePolymorphic(element: unknown): PolymorphicResolution;
   /** Emit a violation without specifying ruleId/criteria — the engine fills them in. */
   emit(violation: EmittedViolation): void;
   /** Is the given (line, ruleId) suppressed by an inline disable pragma? */
   isDisabled(line: number, ruleId: string): boolean;
+}
+
+/**
+ * Result of {@link RuleContext.resolvePolymorphic}. `tagName` is the
+ * tag a rule should treat the element as; the two flags tell the rule
+ * whether resolution came from the element's own tag (both false), a
+ * string-literal `as` prop, or a single-child `asChild` delegation.
+ *
+ * Keeping the flags distinct (rather than a `source: "self" | "as" |
+ * "asChild"` union) lets rules that only care about one channel read
+ * a single boolean without reasoning about the third case.
+ */
+export interface PolymorphicResolution {
+  readonly tagName: string;
+  readonly resolvedFromAs: boolean;
+  readonly resolvedFromAsChild: boolean;
 }
 
 /** The type beforeFile/afterFile see — whole-file access. */

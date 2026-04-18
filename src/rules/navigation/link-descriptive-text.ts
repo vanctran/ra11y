@@ -24,7 +24,7 @@
 import { defineRule } from "../../api/plugin.ts";
 import {
   findHtmlElementsByTag,
-  findJsxElementsByTag,
+  findJsxElementsForTag,
   getHtmlAttribute,
   getJsxAttributeString,
   hasHtmlAttribute,
@@ -129,35 +129,46 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
 }
 
 function checkJsx(module: TsxModule, wrappersForA: ReadonlySet<string>, emit: Emit): void {
-  // Iterate the baseline JSX link tags plus any PascalCase wrapper the
-  // user declared as rendering `<a>` via the `nativeWrappers` map
-  // (Q2-WRAPMAP-RULES). `JSX_LINK_TAGS` already covers `Link` / `NavLink`
-  // / `Anchor` so adding them again from the wrapper set is a no-op via
-  // the dedup Set below.
-  const tags = new Set<string>(JSX_LINK_TAGS);
-  for (const name of wrappersForA) tags.add(name);
-  for (const tag of tags) {
-    for (const el of findJsxElementsByTag(module, tag)) {
-      if (hasAccessibleNameOverrideJsx(el)) continue;
-      // Only check link-style elements with href/to props.
-      if (!(hasJsxAttribute(el, "href") || hasJsxAttribute(el, "to"))) continue;
-      const text = jsxTextContent(el);
-      const generic = matchesGenericPhrase(text);
-      if (!generic) continue;
-      emit({
-        severity: "warning",
-        location: {
-          filePath: "",
-          line: el.loc.start.line,
-          column: el.loc.start.column,
-        },
-        message: `<${tag}> text "${generic}" is not descriptive — screen readers reading this out of context tell users nothing about where they'll end up.`,
-        suggestion: buildSuggestion(
-          getJsxAttributeString(el, "href") ?? getJsxAttributeString(el, "to"),
-          generic,
-        ),
-      });
-    }
+  // Three resolution channels feed this check:
+  //   1. baseline JSX link tags — `<a>`, `<Link>`, `<NavLink>`, `<Anchor>`.
+  //   2. `wrappersForA` — PascalCase wrappers the user declared as
+  //      rendering `<a>` via `nativeWrappers`.
+  //   3. polymorphic `as="a"` / `asChild` → `<a>` — surfaced by
+  //      `findJsxElementsForTag` once per matching element.
+  // Dedupe across (1)+(2) by building a union of the tag/wrapper names
+  // and iterating it alongside the polymorphic sweep driven by the
+  // native tag literal `"a"`.
+  const seen = new Set<JsxElement>();
+  const emitEl = (el: JsxElement): void => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    if (hasAccessibleNameOverrideJsx(el)) return;
+    if (!(hasJsxAttribute(el, "href") || hasJsxAttribute(el, "to"))) return;
+    const text = jsxTextContent(el);
+    const generic = matchesGenericPhrase(text);
+    if (!generic) return;
+    emit({
+      severity: "warning",
+      location: {
+        filePath: "",
+        line: el.loc.start.line,
+        column: el.loc.start.column,
+      },
+      message: `<${el.tagName}> text "${generic}" is not descriptive — screen readers reading this out of context tell users nothing about where they'll end up.`,
+      suggestion: buildSuggestion(
+        getJsxAttributeString(el, "href") ?? getJsxAttributeString(el, "to"),
+        generic,
+      ),
+    });
+  };
+  // Pass the full set of tag names (native `<a>` + framework link tags
+  // + mapped wrappers) as the "wrappers" argument; `findJsxElementsForTag`
+  // treats them all as equivalent native/wrapper matches for `"a"`,
+  // and layers polymorphic resolution on top.
+  const wrappers = new Set<string>([...JSX_LINK_TAGS, ...wrappersForA]);
+  wrappers.delete("a"); // bare <a> is already the `targetTag` channel.
+  for (const el of findJsxElementsForTag(module, "a", wrappers)) {
+    emitEl(el);
   }
 }
 
