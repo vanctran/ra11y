@@ -273,7 +273,7 @@ Source: the 10-agent round-2 eval aggregation (`AGGREGATED.md`). Most items were
 #### Accepted (P3 — polish)
 
 - [x] **Q2R2-INTENTIONAL** `@ra11y-intentional` JSDoc tag on a component declaration — intentional-failure-demo marker (Storybook "bad example" pattern). Functionally a file-scoped `ra11y-disable *` pragma but syntactically part of docs markup. Required reason. [round 2, agent 4]
-- [ ] **Q2R2-SCAN-MIXED-DOC** Document that `scan` accepts `paths: string[]` of mixed files + dirs. The primitive exists; it's non-obvious. One-line in `tools/list` description + a `docs/mcp/tools.md` note. [round 2, agent 5]
+- [x] **Q2R2-SCAN-MIXED-DOC** Document that `scan` accepts `paths: string[]` of mixed files + dirs. The primitive exists; it's non-obvious. One-line in `tools/list` description + a `docs/mcp/tools.md` note. [round 2, agent 5]
 
 #### Considered and rejected (round 2 retriage)
 
