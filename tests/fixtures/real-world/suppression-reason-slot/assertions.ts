@@ -100,7 +100,9 @@ export const assertions: FixtureAssertions = {
 
     // App.tsx entry (index 0, alphabetical order): reasoned JSX-comment pragma.
     // The full entry shape is asserted so any change to path, line, kind,
-    // ruleIds, or reason is caught as a regression.
+    // ruleIds, or reason is caught as a regression. `tag` is "ra11y-disable"
+    // for every comment-pragma form; the JSDoc `@ra11y-intentional` variant
+    // is guarded separately in the jsdoc-intentional-tag fixture.
     {
       kind: "meta-field",
       path: ["suppressions", "0"],
@@ -111,6 +113,7 @@ export const assertions: FixtureAssertions = {
           kind: "disable-next-line",
           ruleIds: ["media/alt-text-missing"],
           reason: "demo page, intentionally missing alt",
+          tag: "ra11y-disable",
         },
       },
     },
@@ -127,6 +130,7 @@ export const assertions: FixtureAssertions = {
           line: 6,
           kind: "disable",
           ruleIds: ["wcag22:2.4.6"],
+          tag: "ra11y-disable",
         },
       },
     },
@@ -142,6 +146,7 @@ export const assertions: FixtureAssertions = {
           kind: "disable-next-line",
           ruleIds: ["keyboard/handler-missing"],
           reason: "legacy widget, scheduled for replacement",
+          tag: "ra11y-disable",
         },
       },
     },

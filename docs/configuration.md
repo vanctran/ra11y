@@ -158,7 +158,18 @@ Supported comment styles: `//`, `/* */`, `<!-- -->`, `{/* */}`. Rule lists can b
 // ra11y-disable-next-line contrast/minimum -- legacy, will fix in #1234
 ```
 
-See `src/config/inline-disables.ts` for the grammar.
+### JSDoc `@ra11y-intentional` tag
+
+A JSDoc block attached to a function/class/variable declaration can carry an `@ra11y-intentional <reason>` tag. The tag is functionally a file-scoped `ra11y-disable *` pragma limited to the decorated declaration's body (brace-balanced), intended for Storybook-style "intentionally bad example" components where the demo must keep its violation on-screen:
+
+```tsx
+/** @ra11y-intentional demo of missing alt attribute */
+export function BadImageExample() {
+  return <img src="/teaching/chart.png" />;
+}
+```
+
+The reason slot is required: a bare `@ra11y-intentional` (no reason text) is **not** honored — the decorated declaration is scanned normally and a `suppression/no-reason` review candidate surfaces so the author adds the justification. Same grammar as the inline pragmas above; see `src/config/inline-disables.ts`.
 
 ## Plugin standards and rules
 
