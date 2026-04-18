@@ -42,6 +42,12 @@ export type {
   RuleSetting,
 } from "./config.ts";
 export type {
+  CriterionEvidence,
+  EvidenceLedger,
+  EvidenceSource,
+  EvidenceStatus,
+} from "./evidence.ts";
+export type {
   CandidateFinder,
   CandidateFinderDocs,
   CandidateFinderScope,

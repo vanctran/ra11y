@@ -20,6 +20,7 @@
  */
 
 import type { Ast } from "../types/ast.ts";
+import type { EvidenceLedger } from "../types/evidence.ts";
 import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
 import type {
   EmittedViolation,
@@ -40,6 +41,7 @@ import { computeFindingId } from "../utils/finding-id.ts";
 import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
 import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
+import { buildEvidenceLedger } from "./evidence-ledger.ts";
 import { buildPerRuleCoverage } from "./per-rule-coverage.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
@@ -102,6 +104,16 @@ export interface ScanProducts {
    * shape evolves.
    */
   readonly perRuleCoverage: readonly PerRuleCoverage[];
+  /**
+   * Per-criterion evidence aggregate for this scan. Static findings
+   * and review candidates from this run are joined into a single
+   * shape that later phases extend with attestations, runtime
+   * ingest, and sampling verdicts — all without changing this field's
+   * type. Kept off {@link ScanResult} for the same fixture-churn
+   * reason as `perRuleCoverage`. See
+   * docs/adr/0011-evidence-as-first-class-primitive.md.
+   */
+  readonly ledger: EvidenceLedger;
 }
 
 export function runScan(inputs: ScanInputs): ScanProducts {
@@ -171,7 +183,14 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     allCandidates,
   );
 
-  return { result, report, perRuleCoverage };
+  const ledger = buildEvidenceLedger({
+    result,
+    report,
+    standards: inputs.standards,
+    enabled,
+  });
+
+  return { result, report, perRuleCoverage, ledger };
 }
 
 /**
