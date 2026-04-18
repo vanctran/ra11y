@@ -93,6 +93,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 ## rules
 
+- [aria/conflicting-role](./rules/aria__conflicting-role.md)
 - [aria/hidden-focus](./rules/aria__hidden-focus.md)
 - [aria/invalid-role](./rules/aria__invalid-role.md)
 - [aria/live-region-valid](./rules/aria__live-region-valid.md)
