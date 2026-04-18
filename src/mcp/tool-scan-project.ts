@@ -10,11 +10,13 @@ import type { ParsedFile } from "../engine/scanner.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
-import { probeBaselineStatus } from "./baseline-status.ts";
+import { baselineStatusField, probeBaselineStatus } from "./baseline-status.ts";
 import { collectBuildArtifacts } from "./build-artifacts.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
 import { buildNextStep } from "./next-step.ts";
+import { referenceGuideField } from "./reference-guide.ts";
 import { includeRuleDetailsSchema, ruleCatalogField } from "./rule-catalog.ts";
+import { skipCriterionSchema, skippedByCallerField } from "./skip-criterion.ts";
 import {
   errorResult,
   type McpTool,
@@ -96,6 +98,7 @@ export const scanProjectTool: McpTool = {
             "Starting index into the full files-with-findings list. Defaults to 0. Use with `limit` + the `nextOffset` from a previous truncated response to iterate.",
         },
         includeRuleDetails: includeRuleDetailsSchema,
+        skipCriterion: skipCriterionSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -151,6 +154,7 @@ export const scanProjectTool: McpTool = {
     const detectedNames = detected.map((c) => c.component);
     const classified = classifyIfAutoDetect(autoDetect, files, detectedNames);
     const t1 = performance.now();
+    const skipCriterion = strArrayParam(params, "skipCriterion");
     const { formatted } = await runScanAndFormat(
       files,
       session,
@@ -160,6 +164,7 @@ export const scanProjectTool: McpTool = {
       buildWrapperSources(projectConfig.nativeWrappers, session.config.nativeWrappers, classified),
       root,
       params["verboseMeta"] === true,
+      skipCriterion,
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
@@ -184,13 +189,10 @@ export const scanProjectTool: McpTool = {
     // separate `baseline check` round-trip. Omitted when no baseline
     // exists (honest shape per CLAUDE.md §1).
     const baselineStatus = await probeBaselineStatus(root);
-    // P1-OVF: response-size guard. Large monorepo scans can produce
-    // files lists that exceed MCP token caps; the scan itself still
-    // runs over everything (plan.totalFindings stays the full tally),
-    // but the emitted `files` array is capped. When more files with
-    // findings exist than fit, the response carries `truncated: true`
-    // and `nextOffset` so the agent can page. Fields omitted when the
-    // whole result fits (honest shape per CLAUDE.md §1).
+    // Response-size guard: the scan always runs over every file, but
+    // the emitted `files` array is capped so large monorepos don't
+    // blow through MCP token limits. `truncated` + `nextOffset` are
+    // omitted when the whole result fits.
     const pageParams = readPageParams(params);
     const page = paginateFiles(formatted.files, pageParams);
     return textResult({
@@ -207,6 +209,7 @@ export const scanProjectTool: McpTool = {
       }),
       meta: {
         ...formatted.meta,
+        ...skippedByCallerField(skipCriterion),
         scannedRoot: root,
         scanMode: actualMode,
         ...(fallbackReason === undefined ? {} : { fallbackReason }),
@@ -611,17 +614,10 @@ function checkCwdExists(explicitCwd: string | undefined): ReturnType<typeof erro
 }
 
 /**
- * Builds the spreadable build-artifacts field pair: a `metaField` to
- * mix into the response's `meta` block (omitted when no artifacts) and
- * a `present` boolean for `warningsFieldFromScanMeta`. Extracted from
- * the handler so the conditional spread doesn't add to its cognitive
- * complexity score.
- */
-/**
  * Conditional-spread the structured form of `nextStep` — omitted when
  * the prose degrades to generic advice (no concrete first finding), per
- * CLAUDE.md §1 "Ambiguous field shapes are dishonest." Extracted so the
- * handler's cognitive complexity stays inside the lint budget.
+ * CLAUDE.md §1 "Ambiguous field shapes are dishonest." Lets the
+ * handler spread unconditionally.
  */
 function structuredField(nextStep: { readonly structured?: unknown }): {
   readonly nextStepStructured?: unknown;
@@ -631,29 +627,10 @@ function structuredField(nextStep: { readonly structured?: unknown }): {
 }
 
 /**
- * Conditional-spread the top-level `referenceGuide` field — omitted when
- * no findings exist. Extracted to keep the handler's cognitive
- * complexity inside the lint budget.
+ * Build-artifacts spread: a `metaField` to mix into `meta` (omitted
+ * when no artifacts) and a `present` boolean for
+ * `warningsFieldFromScanMeta`.
  */
-function referenceGuideField(formatted: { readonly referenceGuide?: unknown }): {
-  readonly referenceGuide?: unknown;
-} {
-  if (formatted.referenceGuide === undefined) return {};
-  return { referenceGuide: formatted.referenceGuide };
-}
-
-/**
- * Conditional-spread the `baselineStatus` meta field — present only
- * when a `.ra11y-baseline.json` exists at the scan root. Extracted so
- * the handler's cognitive complexity stays inside the lint budget.
- */
-function baselineStatusField(status: Awaited<ReturnType<typeof probeBaselineStatus>>): {
-  readonly baselineStatus?: NonNullable<typeof status>;
-} {
-  if (status === null) return {};
-  return { baselineStatus: status };
-}
-
 function buildArtifactsFields(files: readonly ParsedFile[]): {
   readonly present: boolean;
   readonly metaField: { readonly scannedBuildArtifacts?: readonly string[] };

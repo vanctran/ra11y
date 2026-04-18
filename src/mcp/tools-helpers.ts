@@ -404,6 +404,14 @@ export async function runScanAndFormat(
   // the agent can verify which rules ran on which languages. Gated
   // because these arrays can be large on noisy projects.
   verboseMeta = false,
+  // Caller-supplied criterion IDs to exclude. Findings whose entire
+  // `criteria` list is contained in this set are dropped; findings
+  // that also satisfy an un-skipped criterion stay (the un-skipped
+  // coverage is the honest reason to keep them). Empty / undefined
+  // leaves the output unchanged. Not suppression by the tool — this
+  // is the caller filtering its own result. The `skippedByCaller`
+  // meta field surfaces the filter input verbatim.
+  skipCriteria?: readonly string[],
 ): Promise<{
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
@@ -435,7 +443,8 @@ export async function runScanAndFormat(
   } = resolveWrapperSources(wrapperSources, session);
   const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
   const unusedWrappers = await resolveUnusedWrappers(wrappers, files, cwd);
-  const filtered = filterBySeverity(withoutWrapperNoise, minSeverity);
+  const severityFiltered = filterBySeverity(withoutWrapperNoise, minSeverity);
+  const filtered = applyCriterionSkip(severityFiltered, skipCriteria);
   const grouped = groupViolationsByFile(filtered);
   const fileEntries = [...grouped.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -685,6 +694,23 @@ export function filterBySeverity(
   const minRank = SEVERITY_RANK[minSeverity ?? "info"] ?? 1;
   if (minRank <= 1) return violations;
   return violations.filter((v) => (SEVERITY_RANK[v.severity] ?? 1) >= minRank);
+}
+
+/**
+ * Caller-driven criterion filter. A violation is dropped when every
+ * criterion in its `criteria` list appears in `skipCriteria`; otherwise
+ * it stays — the un-skipped criteria are the honest reason to keep
+ * showing the finding. `undefined` or empty skip list returns the
+ * input unchanged. Not suppression by the tool — the caller is
+ * filtering its own result.
+ */
+export function applyCriterionSkip(
+  violations: readonly Violation[],
+  skipCriteria: readonly string[] | undefined,
+): readonly Violation[] {
+  if (skipCriteria === undefined || skipCriteria.length === 0) return violations;
+  const skip = new Set(skipCriteria);
+  return violations.filter((v) => v.criteria.some((c) => !skip.has(c)));
 }
 
 // ─── Source context ─────────────────────────────────────────────────────────

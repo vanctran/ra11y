@@ -636,6 +636,93 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta.activeNativeWrappersNote).toBeUndefined();
   });
 
+  it("checklist skipCriterion drops caller-named criteria and surfaces skippedByCaller", async () => {
+    const baseline = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
+    ]);
+    const baselineBody = bodyOf(baseline[1]) as {
+      items: Array<{ criterionId: string }>;
+      likelyIrrelevant: Array<{ criterionId: string }>;
+    };
+    const firstCrit = baselineBody.items[0]?.criterionId;
+    const firstIrrelevant = baselineBody.likelyIrrelevant[0]?.criterionId;
+    if (!(firstCrit && firstIrrelevant)) throw new Error("fixture produced no items");
+
+    const skipped = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", {
+        paths: [BAD_ALT_DIR],
+        skipCriterion: [firstCrit, firstIrrelevant],
+      }),
+    ]);
+    const body = bodyOf(skipped[1]) as {
+      items: Array<{ criterionId: string }>;
+      likelyIrrelevant: Array<{ criterionId: string }>;
+      summary: {
+        actionable: number;
+        likelyIrrelevant: number;
+        skippedByCaller?: readonly string[];
+      };
+    };
+    expect(body.items.some((i) => i.criterionId === firstCrit)).toBe(false);
+    expect(body.likelyIrrelevant.some((i) => i.criterionId === firstIrrelevant)).toBe(false);
+    expect(body.summary.skippedByCaller).toEqual([firstCrit, firstIrrelevant].sort());
+    expect(body.summary.actionable).toBeLessThan(baselineBody.items.length + 1);
+  });
+
+  it("checklist omits skippedByCaller when skipCriterion is absent", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
+    ]);
+    const body = bodyOf(responses[1]) as { summary: Record<string, unknown> };
+    expect(body.summary).not.toHaveProperty("skippedByCaller");
+  });
+
+  it("scan_project skipCriterion filters findings whose criteria are fully contained in the skip set", async () => {
+    const baseline = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const baselineBody = bodyOf(baseline[1]) as {
+      plan: { totalFindings: number };
+      files: Array<{ findings: Array<{ criteria: readonly string[] }> }>;
+    };
+    // Pick a criterion that every finding in the fixture satisfies —
+    // skipping it must drop all findings.
+    const everyFindingCrit = baselineBody.files
+      .flatMap((f) => f.findings)
+      .reduce<string | null>((acc, v) => {
+        if (acc === null) return v.criteria[0] ?? null;
+        return v.criteria.includes(acc) ? acc : null;
+      }, null);
+    if (everyFindingCrit === null) throw new Error("no shared criterion in fixture findings");
+
+    const skipped = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", {
+        cwd: BAD_ALT_DIR,
+        skipCriterion: [everyFindingCrit],
+      }),
+    ]);
+    const body = bodyOf(skipped[1]) as {
+      plan: { totalFindings: number };
+      meta: { skippedByCaller?: readonly string[] };
+    };
+    expect(body.meta.skippedByCaller).toEqual([everyFindingCrit]);
+    expect(body.plan.totalFindings).toBeLessThan(baselineBody.plan.totalFindings);
+  });
+
+  it("scan_project omits skippedByCaller when skipCriterion is absent", async () => {
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "scan_project", { cwd: BAD_ALT_DIR }),
+    ]);
+    const body = bodyOf(responses[1]) as { meta: Record<string, unknown> };
+    expect(body.meta).not.toHaveProperty("skippedByCaller");
+  });
+
   it("checklist returns actionable items and omits untargeted by default", async () => {
     const responses = await mcpSession([
       initMsg(1),

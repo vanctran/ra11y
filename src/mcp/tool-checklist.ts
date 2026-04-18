@@ -17,6 +17,7 @@ import {
   irrelevanceReason,
   isLikelyIrrelevant,
 } from "./manual-applicability.ts";
+import { skipCriterionSchema } from "./skip-criterion.ts";
 import { buildSnippetForReason, type SourceEntry, sourceIndex } from "./source-snippet.ts";
 import {
   applyRuleSettings,
@@ -159,6 +160,7 @@ export const checklistTool: McpTool = {
           description:
             "Caps candidates per criterion within the returned page — orthogonal to `limit`. Defaults to 10, clamped to [1, 100]. Prevents one noisy criterion from consuming the whole page without hiding it. When any criterion is clipped, the response carries `perCriterionClipped: true`; `totalCandidates` still reports the pre-clip tally so the agent can see what was elided.",
         },
+        skipCriterion: skipCriterionSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -207,8 +209,13 @@ export const checklistTool: McpTool = {
     // 3 real finds, which was the dominant feedback after the first
     // priority pass. Agents that still want the full list can compose
     // [...items, ...untargeted].
-    const actionable = needsReview.filter((i) => i.candidates.length > 0);
-    const untargeted = needsReview.filter((i) => i.candidates.length === 0);
+    const skipCriterion = strArrayParam(params, "skipCriterion");
+    const skipSet = skipCriterion && skipCriterion.length > 0 ? new Set(skipCriterion) : undefined;
+    const keep = (i: { criterionId: string }) =>
+      skipSet === undefined || !skipSet.has(i.criterionId);
+    const actionable = needsReview.filter((i) => i.candidates.length > 0 && keep(i));
+    const untargeted = needsReview.filter((i) => i.candidates.length === 0 && keep(i));
+    const filteredIrrelevant = likelyIrrelevant.filter(keep);
     // Q2-CHECKLIST-LIMIT: pagination over the candidate stream. The
     // scan still evaluates every criterion — this caps response size
     // so a noisy finder (say, 200 ambiguous focus-order candidates in
@@ -265,7 +272,7 @@ export const checklistTool: McpTool = {
     const summary = {
       headline:
         `${actionable.length} actionable · ${untargeted.length} untargeted · ` +
-        `${likelyIrrelevant.length} likely irrelevant`,
+        `${filteredIrrelevant.length} likely irrelevant`,
       actionable: actionable.length,
       byPriority,
       untargeted: untargeted.length,
@@ -274,9 +281,10 @@ export const checklistTool: McpTool = {
       // belongs here, not buried in the tool docstring.
       untargetedMeaning:
         "manual-review criteria whose candidate finder could not ground them in code; pass `showUntargeted: true` to see the full WCAG prompts for them.",
-      likelyIrrelevant: likelyIrrelevant.length,
+      likelyIrrelevant: filteredIrrelevant.length,
       manualReviewRequired: actionable.length + untargeted.length,
       automatedCoverage,
+      ...(skipSet === undefined ? {} : { skippedByCaller: [...skipSet].sort() }),
     };
 
     const showUntargeted = params["showUntargeted"] === true;
@@ -286,7 +294,7 @@ export const checklistTool: McpTool = {
       totalCandidates: page.totalCandidates,
       ...page.paginationFields,
       ...(showUntargeted ? { untargeted } : {}),
-      likelyIrrelevant,
+      likelyIrrelevant: filteredIrrelevant,
     });
   },
 };

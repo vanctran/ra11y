@@ -68,3 +68,15 @@ export function buildReferenceGuide(
   }
   return { suppressPlacement };
 }
+
+/**
+ * Conditional-spread the top-level `referenceGuide` field — omitted when
+ * no findings exist. Lets scan-tool handlers spread unconditionally
+ * and keeps their cognitive complexity inside the lint budget.
+ */
+export function referenceGuideField(formatted: { readonly referenceGuide?: ReferenceGuide }): {
+  readonly referenceGuide?: ReferenceGuide;
+} {
+  if (formatted.referenceGuide === undefined) return {};
+  return { referenceGuide: formatted.referenceGuide };
+}

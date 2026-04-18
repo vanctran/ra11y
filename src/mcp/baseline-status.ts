@@ -40,3 +40,16 @@ export async function probeBaselineStatus(cwd: string): Promise<BaselineStatus |
     return null;
   }
 }
+
+/**
+ * Conditional-spread the `baselineStatus` meta field — present only
+ * when a `.ra11y-baseline.json` exists at the scan root. Lets callers
+ * spread unconditionally and keeps their cognitive complexity inside
+ * the lint budget.
+ */
+export function baselineStatusField(status: BaselineStatus | null): {
+  readonly baselineStatus?: BaselineStatus;
+} {
+  if (status === null) return {};
+  return { baselineStatus: status };
+}
