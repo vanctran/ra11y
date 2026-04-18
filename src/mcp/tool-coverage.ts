@@ -48,7 +48,7 @@ export const coverageTool: McpTool = {
         showUntargeted: {
           type: "boolean",
           description:
-            "Include the full `manualUntargeted` list (bare WCAG titles for criteria no finder grounded in code). Default false; `manualUntargetedCount` is always returned. Mirrors the `checklist` tool so both surfaces behave consistently.",
+            "Include the full `untargetedCriteriaList` (bare WCAG titles for criteria no finder grounded in code). Default false; `untargetedCriteria` (the count) is always returned. Mirrors the `checklist` tool so both surfaces behave consistently.",
         },
       },
     },
@@ -114,8 +114,14 @@ export const coverageTool: McpTool = {
         // the list is gated behind showUntargeted so the default response
         // doesn't ship 16 entries of bare WCAG titles that mirror the
         // checklist tool's showUntargeted default.
-        manualUntargetedCount: untargeted.length,
-        ...(showUntargeted ? { manualUntargeted: withTitles(untargeted) } : {}),
+        //
+        // Canonical count field is `untargetedCriteria`
+        // (matches scan_project's `plan` and
+        // checklist's `summary`). The list uses the distinct name
+        // `untargetedCriteriaList` so the number and array fields don't
+        // collide when both are present.
+        untargetedCriteria: untargeted.length,
+        ...(showUntargeted ? { untargetedCriteriaList: withTitles(untargeted) } : {}),
         likelyIrrelevantCriteria: withTitles(likelyIrrelevant),
         // Renamed from "automatedGaps" — agents consistently misread
         // that as "criteria automation can't cover" when it actually

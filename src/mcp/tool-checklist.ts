@@ -123,7 +123,7 @@ export const checklistTool: McpTool = {
   def: {
     name: "checklist",
     description:
-      "Get the manual review checklist — criteria that can't be fully automated. Returns `items` (criteria with concrete candidate locations — start here) and `likelyIrrelevant` (criteria the scan can tell don't apply, e.g., no <video>/<audio> for 1.2.*). The summary also reports `untargeted`: criteria with no candidates the finders could ground in code. Pass `showUntargeted: true` to include them in the response when you're preparing a VPAT or running a formal audit — by default they're counted but not returned, since 18 bare WCAG titles will drown 3 real finds.",
+      "Get the manual review checklist — criteria that can't be fully automated. Returns `items` (criteria with concrete candidate locations — start here) and `likelyIrrelevant` (criteria the scan can tell don't apply, e.g., no <video>/<audio> for 1.2.*). The summary also reports `untargetedCriteria`: the count of criteria with no candidates the finders could ground in code. Pass `showUntargeted: true` to include the full list (`untargetedCriteriaList`) in the response when you're preparing a VPAT or running a formal audit — by default they're counted but not returned, since 18 bare WCAG titles will drown 3 real finds.",
     inputSchema: {
       type: "object",
       properties: {
@@ -269,18 +269,24 @@ export const checklistTool: McpTool = {
     // counters. `manualReviewRequired` stays as the cross-tool total
     // (must match scan / scan_project / coverage), but trails the
     // actionable split so it no longer dominates the summary.
+    // Canonical count field is `untargetedCriteria` across all MCP tools.
+    // scan_project uses it on `plan`; checklist matches here on `summary`;
+    // coverage on its per-standard entry.
+    // Previous names (`untargeted` count, `manualUntargetedCount`) are
+    // removed — a minor shape break, called out in CHANGELOG so a
+    // single grep surfaces the migration.
     const summary = {
       headline:
         `${actionable.length} actionable · ${untargeted.length} untargeted · ` +
         `${filteredIrrelevant.length} likely irrelevant`,
       actionable: actionable.length,
       byPriority,
-      untargeted: untargeted.length,
+      untargetedCriteria: untargeted.length,
       // One-line gloss: untargeted count is cryptic on its own — the
       // agent's read-order goes summary → items, so the definition
       // belongs here, not buried in the tool docstring.
-      untargetedMeaning:
-        "manual-review criteria whose candidate finder could not ground them in code; pass `showUntargeted: true` to see the full WCAG prompts for them.",
+      untargetedCriteriaMeaning:
+        "manual-review criteria whose candidate finder could not ground them in code; pass `showUntargeted: true` to see the full WCAG prompts for them (emitted as `untargetedCriteriaList`).",
       likelyIrrelevant: filteredIrrelevant.length,
       manualReviewRequired: actionable.length + untargeted.length,
       automatedCoverage,
@@ -293,7 +299,7 @@ export const checklistTool: McpTool = {
       items: page.items,
       totalCandidates: page.totalCandidates,
       ...page.paginationFields,
-      ...(showUntargeted ? { untargeted } : {}),
+      ...(showUntargeted ? { untargetedCriteriaList: untargeted } : {}),
       likelyIrrelevant: filteredIrrelevant,
     });
   },

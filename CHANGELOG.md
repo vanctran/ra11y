@@ -147,6 +147,7 @@ ADR: [`docs/adr/0006-real-world-fixture-harness.md`](./docs/adr/0006-real-world-
 - `suggest_fix`: response shape changed from `{ suggestion: string }` to `{ fixPaths: { primary: FixPath, alternatives: FixPath[] } }`. Agents relying on the prose-only shape must update to read `fixPaths`.
 - `checklist`: `reviewNeeded` field renamed to a structured array with `priority` and `wcagPrinciple` per item.
 - `coverage`: `manualUntargeted` is no longer returned by default; `manualUntargetedCount` is always present. Pass `showUntargeted: true` to restore the full list.
+- Canonical untargeted-criteria count is now `untargetedCriteria` across all tools: `scan_project` (on `plan`), `checklist` (on `summary`), `coverage` (per-standard). Previous names `untargeted` (checklist) and `manualUntargetedCount` (coverage) removed — callers reading them will see `undefined`. Gated list emitted as `untargetedCriteriaList` when requested.
 - `/continue` skill now fans out up to three parallel agents per turn across active tracks (D/M/R/F). Serial dispatch is no longer used.
 - Pre-commit hook scoped to staged files only; previously it ran on the full working tree, causing false failures on unstaged changes.
 - `list-structure` rule: bare `<li>` outside a list container is now `info` severity (down from `warning`). The element is still surfaced; the level reflects that the most common cause is a template partial that renders correctly at runtime.

@@ -312,29 +312,29 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       standardId: string;
       criteriaTotal: number;
       automatedCriteriaPassRate: number;
-      manualUntargetedCount: number;
-      manualUntargeted?: unknown;
+      untargetedCriteria: number;
+      untargetedCriteriaList?: unknown;
     };
     expect(body.standardId).toBe("wcag22");
     expect(body.criteriaTotal).toBeGreaterThan(0);
     expect(typeof body.automatedCriteriaPassRate).toBe("number");
     // Count always present; list gated behind showUntargeted (mirrors
     // checklist tool so default responses stay compact).
-    expect(typeof body.manualUntargetedCount).toBe("number");
-    expect(body.manualUntargeted).toBeUndefined();
+    expect(typeof body.untargetedCriteria).toBe("number");
+    expect(body.untargetedCriteriaList).toBeUndefined();
   });
 
-  it("coverage emits manualUntargeted list only when showUntargeted is true", async () => {
+  it("coverage emits untargetedCriteriaList only when showUntargeted is true", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "coverage", { cwd: BAD_ALT_DIR, showUntargeted: true }),
     ]);
     const body = bodyOf(responses[1]) as {
-      manualUntargeted?: readonly unknown[];
-      manualUntargetedCount: number;
+      untargetedCriteriaList?: readonly unknown[];
+      untargetedCriteria: number;
     };
-    expect(Array.isArray(body.manualUntargeted)).toBe(true);
-    expect(body.manualUntargeted?.length).toBe(body.manualUntargetedCount);
+    expect(Array.isArray(body.untargetedCriteriaList)).toBe(true);
+    expect(body.untargetedCriteriaList?.length).toBe(body.untargetedCriteria);
   });
 
   it("clean scan surfaces limitations as a structured field (not buried in prose)", async () => {
@@ -787,7 +787,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body.meta).not.toHaveProperty("skippedByCaller");
   });
 
-  it("checklist returns actionable items and omits untargeted by default", async () => {
+  it("checklist returns actionable items and omits untargetedCriteriaList by default", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
@@ -798,23 +798,23 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
         candidates: unknown[];
         principle?: { number: number; name: string };
       }>;
-      untargeted?: unknown;
+      untargetedCriteriaList?: unknown;
       likelyIrrelevant: Array<{ criterionId: string }>;
       summary: {
         manualReviewRequired: number;
         actionable: number;
-        untargeted: number;
+        untargetedCriteria: number;
         likelyIrrelevant: number;
       };
     };
     expect(Array.isArray(body.items)).toBe(true);
     expect(Array.isArray(body.likelyIrrelevant)).toBe(true);
-    expect(body.untargeted).toBeUndefined();
+    expect(body.untargetedCriteriaList).toBeUndefined();
     expect(body.items.every((i) => i.candidates.length > 0)).toBe(true);
     expect(body.summary.actionable).toBe(body.items.length);
     expect(body.summary.likelyIrrelevant).toBe(body.likelyIrrelevant.length);
     expect(body.summary.manualReviewRequired).toBe(
-      body.summary.actionable + body.summary.untargeted,
+      body.summary.actionable + body.summary.untargetedCriteria,
     );
     // WCAG principle is spec-defined data derived from criterionId;
     // surfacing it lets the agent sort beyond level without us
@@ -855,18 +855,18 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     );
   });
 
-  it("checklist includes untargeted when showUntargeted: true", async () => {
+  it("checklist includes untargetedCriteriaList when showUntargeted: true", async () => {
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR], showUntargeted: true }),
     ]);
     const body = bodyOf(responses[1]) as {
-      untargeted: Array<{ criterionId: string; candidates: unknown[] }>;
-      summary: { untargeted: number };
+      untargetedCriteriaList: Array<{ criterionId: string; candidates: unknown[] }>;
+      summary: { untargetedCriteria: number };
     };
-    expect(Array.isArray(body.untargeted)).toBe(true);
-    expect(body.untargeted.every((i) => i.candidates.length === 0)).toBe(true);
-    expect(body.summary.untargeted).toBe(body.untargeted.length);
+    expect(Array.isArray(body.untargetedCriteriaList)).toBe(true);
+    expect(body.untargetedCriteriaList.every((i) => i.candidates.length === 0)).toBe(true);
+    expect(body.summary.untargetedCriteria).toBe(body.untargetedCriteriaList.length);
   });
 
   it("review_candidates returns a candidateCount with the active level echoed", async () => {
