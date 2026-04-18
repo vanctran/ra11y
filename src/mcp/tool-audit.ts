@@ -85,11 +85,34 @@ export const auditTool: McpTool = {
     const scanParams = pickScanParams(params);
     const coverageParams = pickCoverageParams(params);
     const checklistParams = pickChecklistParams(params);
-    const [scanRes, coverageRes, checklistRes] = await Promise.all([
-      Promise.resolve(scanProjectTool.handler(scanParams, session)),
-      Promise.resolve(coverageTool.handler(coverageParams, session)),
-      Promise.resolve(checklistTool.handler(checklistParams, session)),
+    // allSettled so a single sub-handler throwing doesn't sink the
+    // other two — agents get a structured error envelope they can
+    // branch on instead of a JSON-RPC protocol error escaping the tool.
+    const [scanSettled, coverageSettled, checklistSettled] = await Promise.allSettled([
+      Promise.resolve().then(() => scanProjectTool.handler(scanParams, session)),
+      Promise.resolve().then(() => coverageTool.handler(coverageParams, session)),
+      Promise.resolve().then(() => checklistTool.handler(checklistParams, session)),
     ]);
+    const rejections: Record<string, string> = {};
+    if (scanSettled.status === "rejected")
+      rejections["scan"] = describeRejection(scanSettled.reason);
+    if (coverageSettled.status === "rejected")
+      rejections["coverage"] = describeRejection(coverageSettled.reason);
+    if (checklistSettled.status === "rejected")
+      rejections["checklist"] = describeRejection(checklistSettled.reason);
+    if (Object.keys(rejections).length > 0) {
+      return errorResult({
+        code: "audit-sub-tool-threw",
+        message: "audit sub-tool rejected",
+        details: { rejections },
+      });
+    }
+    // All three settled to fulfilled here — the status-narrowing above
+    // plus the early-return leaves the fulfilled branch as the only
+    // reachable shape.
+    const scanRes = (scanSettled as PromiseFulfilledResult<McpToolResult>).value;
+    const coverageRes = (coverageSettled as PromiseFulfilledResult<McpToolResult>).value;
+    const checklistRes = (checklistSettled as PromiseFulfilledResult<McpToolResult>).value;
     const scan = unwrapPayload(scanRes);
     const coverage = unwrapPayload(coverageRes);
     const checklist = unwrapPayload(checklistRes);
@@ -112,6 +135,16 @@ export const auditTool: McpTool = {
     });
   },
 };
+
+function describeRejection(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === "string") return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
 
 /**
  * Extracts the single text-content block from a sub-tool result and

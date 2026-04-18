@@ -104,7 +104,11 @@ export type StructuredErrorCode =
   // precedence (CLAUDE.md §1 "Ambiguous field shapes are dishonest").
   | "conflicting-file-params"
   // meta-tool internal
-  | "audit-sub-tool-unparseable";
+  | "audit-sub-tool-unparseable"
+  // audit meta-tool: one of the sub-handlers rejected instead of
+  // returning an McpToolResult. Distinct from -unparseable so agents
+  // can tell "handler threw" from "handler answered with garbage."
+  | "audit-sub-tool-threw";
 
 /** Structured-error envelope — emitted via `structuredContent` + `isError: true`. */
 export interface StructuredError {
