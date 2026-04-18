@@ -15,6 +15,7 @@ import {
   applyRuleSettings,
   errorResult,
   firstUnknownStandard,
+  loadDurableAttestations,
   type McpTool,
   parseFiles,
   resolveLevel,
@@ -73,6 +74,7 @@ export const coverageTool: McpTool = {
     }
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
+    const attestations = await loadDurableAttestations(cwd);
 
     const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
@@ -81,6 +83,7 @@ export const coverageTool: McpTool = {
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
       level,
+      ...(attestations.length > 0 && { attestations }),
     });
 
     const candidateCriteria = new Set((report.candidates ?? []).map((c) => c.criterionId));

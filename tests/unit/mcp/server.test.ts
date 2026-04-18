@@ -80,11 +80,12 @@ describe("MCP server JSON-RPC", () => {
 
     expect(res.id).toBe(2);
     const result = res.result as { tools: Array<{ name: string }> };
-    expect(result.tools.length).toBe(20);
+    expect(result.tools.length).toBe(21);
 
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "apply_fix",
+      "attest",
       "audit",
       "baseline",
       "checklist",

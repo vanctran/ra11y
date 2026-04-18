@@ -18,6 +18,7 @@ import { pathExists } from "./path-exists.ts";
 import { dedupeReviewCandidatesForSingleFile } from "./review-candidate-dedup.ts";
 import { includeRuleDetailsSchema, ruleCatalogField } from "./rule-catalog.ts";
 import { applyFixTool } from "./tool-apply-fix.ts";
+import { attestTool } from "./tool-attest.ts";
 import { auditTool } from "./tool-audit.ts";
 import { baselineTool } from "./tool-baseline.ts";
 import { checklistTool } from "./tool-checklist.ts";
@@ -514,6 +515,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   listRulesTool,
   listSuppressionsTool,
   suppressTool,
+  attestTool,
   proposeConfigTool,
   proposeBaselineTool,
   sessionConfigureTool,

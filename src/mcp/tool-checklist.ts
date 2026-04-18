@@ -24,6 +24,7 @@ import {
   errorResult,
   findStandard,
   firstUnknownStandard,
+  loadDurableAttestations,
   type McpTool,
   parseFiles,
   resolveLevel,
@@ -184,6 +185,7 @@ export const checklistTool: McpTool = {
     }
     const level = resolveLevel(strParam(params, "level"), session);
     const files = await parseFiles(paths, session, cwd);
+    const attestations = await loadDurableAttestations(cwd);
 
     const { result, report } = runScan({
       standards: BUILTIN_STANDARDS,
@@ -192,6 +194,7 @@ export const checklistTool: McpTool = {
       files,
       finders: BUILTIN_CANDIDATE_FINDERS,
       level,
+      ...(attestations.length > 0 && { attestations }),
     });
 
     const coverage = buildCoverageReport(result, BUILTIN_STANDARDS, level);

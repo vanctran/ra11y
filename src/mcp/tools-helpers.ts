@@ -7,6 +7,7 @@
  */
 
 import { isAbsolute, resolve } from "node:path";
+import { readAttestations } from "../config/attestation-store.ts";
 import { type ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
 import {
@@ -406,6 +407,23 @@ export interface ScanFormatted {
 }
 
 /**
+ * Reads durable attestations from `<cwd>/.ra11y/attestations.jsonl`
+ * into the runScan inputs, returning [] when the file is missing or
+ * malformed. Exported so every MCP tool that invokes `runScan`
+ * directly (coverage, checklist, review_candidates) can call it
+ * without re-implementing the soft-fail read.
+ */
+export async function loadDurableAttestations(
+  cwd: string,
+): Promise<readonly import("../types/evidence.ts").AttestationRecord[]> {
+  try {
+    return await readAttestations(cwd);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Runs the scanner against the pre-parsed files and formats the result
  * into the agent-facing shape (plan, files, meta). Factored out so both
  * `scan` and `scan_project` share identical semantics.
@@ -450,6 +468,7 @@ export async function runScanAndFormat(
 }> {
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
+  const attestations = await loadDurableAttestations(cwd ?? process.cwd());
   const { result, report, perRuleCoverage } = runScan({
     standards: BUILTIN_STANDARDS,
     rules: activeRules,
@@ -457,6 +476,7 @@ export async function runScanAndFormat(
     files,
     finders: BUILTIN_CANDIDATE_FINDERS,
     level: session.config.level,
+    ...(attestations.length > 0 && { attestations }),
   });
 
   const {
