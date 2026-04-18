@@ -40,8 +40,7 @@ These are non-negotiable. A PR that breaks any of them is rejected before review
 9. **Network isolation.** `src/` never references `fetch`, `node:http`, `node:https`, `node:net`, `node:dns`, or `Bun.fetch`. Enforced by `scripts/check-network-isolation.ts`. This is a compliance tool — users running it against proprietary source must trust it is offline.
 10. **No `console.*`.** Use `src/utils/logger.ts`. Biome's `noConsole` blocks this; exceptions live in `.claude/hooks/` and `scripts/` (dev-time only).
 11. **No `--no-verify`, no `git commit --amend` on pushed commits.** If a hook fails, fix the underlying issue. If you need a fix up, create a new commit.
-12. **No magic numbers in `src/`.** Named constants only. `scripts/check-magic-numbers.ts` detects violations but is not wired into `verify` pending a cleanup pass on `src/rules/` and `src/review/finders/`; run it manually before landing changes in a fresh file. Tests are exempt.
-13. **MCP response-shape discipline.** MCP tool responses, reports, and agent-facing formatters conform to the AI-first consumer model — no labeled-bucket or heuristic suppression, verbose `meta` stays, optional fields are present-when-meaningful, zero-output success carries a structured `warnings` code, composite headline counters split by kind. Full rules in `.claude/rules/mcp-response-shapes.md` and `@docs/kb/architecture/ai-first-consumer.md`.
+12. **MCP response-shape discipline.** MCP tool responses, reports, and agent-facing formatters conform to the AI-first consumer model — no labeled-bucket or heuristic suppression, verbose `meta` stays, optional fields are present-when-meaningful, zero-output success carries a structured `warnings` code, composite headline counters split by kind. Full rules in `.claude/rules/mcp-response-shapes.md` and `@docs/kb/architecture/ai-first-consumer.md`.
 
 ## 4. Verification commands
 
