@@ -1,12 +1,13 @@
 /**
  * MCP tool definitions — name, description, inputSchema, handler.
  *
- * 8 tools:
- *   scan, scan_file, explain_rule, suggest_fix,
- *   coverage, checklist, list_rules, configure
+ * `MCP_TOOLS` (exported below) is the canonical inventory consumed by
+ * `tools/list`. Tools whose handlers fit in one file live here; larger
+ * tools live in their own `tool-*.ts` module and are imported into the
+ * `MCP_TOOLS` array.
  *
- * Every handler is a pure function over the scanner's output + session state.
- * No MCP-specific logic leaks into src/engine/.
+ * Every handler is a pure function over the scanner's output + session
+ * state. No MCP-specific logic leaks into `src/engine/`.
  */
 
 import { isAbsolute, resolve } from "node:path";
