@@ -17,9 +17,18 @@ export type Category = "auto-fix" | "review" | "manual";
 export type Confidence = "high" | "medium" | "low";
 export type Safety = "safe" | "unsafe";
 
+/**
+ * A structured fix suggestion attached to a single finding.
+ *
+ * `oldText` and `newText` are present only when the rule emits a mechanical
+ * edit that can be applied verbatim. For guidance-only findings they are
+ * omitted — per CLAUDE.md §1 "Ambiguous field shapes are dishonest," empty
+ * string sentinels (`oldText: ""`) are a silent-miss hazard. Use the
+ * `description` field for prose guidance in both cases.
+ */
 export interface AgentFix {
-  readonly oldText: string;
-  readonly newText: string;
+  readonly oldText?: string;
+  readonly newText?: string;
   readonly confidence: Confidence;
   readonly safety: Safety;
   readonly description: string;
@@ -62,7 +71,8 @@ export interface AgentFinding {
   readonly endColumn?: number;
   readonly message: string;
   readonly snippet: AgentSnippet;
-  readonly fix: AgentFix | null;
+  /** Present when the violation has a mechanical edit or prose guidance; absent otherwise. */
+  readonly fix?: AgentFix;
   readonly effort: Effort;
   readonly category: Category;
   readonly suppressWith: string;

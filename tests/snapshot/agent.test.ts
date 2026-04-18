@@ -111,13 +111,13 @@ function parse(result: ScanResult = RESULT, report: ReportData = REPORT) {
         endColumn?: number;
         message: string;
         snippet: { before: string[]; highlighted: string; after: string[] };
-        fix: {
-          oldText: string;
-          newText: string;
+        fix?: {
+          oldText?: string;
+          newText?: string;
           confidence: string;
           safety: string;
           description: string;
-        } | null;
+        };
         effort: string;
         category: string;
         suppressWith: string;
@@ -322,7 +322,7 @@ describe("formatter: agent — files", () => {
     const { files } = parse();
     const buttonFile = files.find((f) => f.path === "src/ui/Button.tsx");
     const firstFinding = buttonFile?.findings[0];
-    expect(firstFinding?.fix).not.toBeNull();
+    expect(firstFinding?.fix).toBeDefined();
     expect(firstFinding?.fix?.description).toBe("Add onKeyDown or onKeyUp alongside onClick.");
     expect(firstFinding?.fix?.confidence).toBe("high");
     expect(firstFinding?.fix?.safety).toBe("safe");

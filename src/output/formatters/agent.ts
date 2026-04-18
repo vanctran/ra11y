@@ -14,18 +14,14 @@
 import { defineFormatter } from "../../api/plugin.ts";
 import { EVALUATION_PROMPTS } from "../../review/evaluation-prompts.ts";
 import type { ReviewCandidate } from "../../types/review.ts";
-import type { ReportData, ScanResult, Severity, Violation } from "../../types/violation.ts";
+import type { ReportData, ScanResult, Violation } from "../../types/violation.ts";
+import { buildAgentFinding } from "../agent-response/build-finding.ts";
 import type {
   AgentFile,
-  AgentFinding,
-  AgentFix,
   AgentMeta,
   AgentOutput,
   AgentPlan,
   AgentReviewCandidate,
-  AgentSnippet,
-  Category,
-  Confidence,
   Effort,
 } from "../agent-response/types.ts";
 
@@ -78,116 +74,10 @@ function groupByFile(violations: readonly Violation[]): Map<string, Violation[]>
 
 function buildFiles(byFile: Map<string, Violation[]>): readonly AgentFile[] {
   const paths = [...byFile.keys()].sort();
-  return paths.map((path) => {
-    const violations = byFile.get(path) ?? [];
-    return {
-      path,
-      findings: violations.map((v) => buildFinding(v)),
-    };
-  });
-}
-
-function buildFinding(v: Violation): AgentFinding {
-  const hasSuggestion = typeof v.suggestion === "string" && v.suggestion.length > 0;
-  const category: Category =
-    v.severity === "info" ? "review" : hasSuggestion ? "auto-fix" : "review";
-
-  const finding: AgentFinding = {
-    // Stable identity — survives line-number drift in the same file.
-    // See src/utils/finding-id.ts for the hash recipe.
-    id: v.findingId,
-    // Stable group identity — same rule firing on AST-equivalent nodes
-    // across files share this key. docs/adr/0008-violation-group-key.md.
-    groupKey: v.groupKey,
-    ruleId: v.ruleId,
-    criteria: [...v.criteria],
-    // Aligned index-for-index with `criteria`. Conditional-spread so we
-    // never emit an ambiguous `criteriaTitles: []` sentinel when the
-    // upstream Violation omitted the field (CLAUDE.md §1 "Ambiguous
-    // field shapes are dishonest").
-    ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
-    // Named reason codes for known escape hatches; informational only,
-    // never auto-suppressing. Omitted when empty — see
-    // docs/adr/0009-violation-could-be-wrong-because.md.
-    ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
-      ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
-      : {}),
-    severity: v.severity,
-    line: v.location.line,
-    column: v.location.column,
-    ...(v.location.endLine !== undefined && { endLine: v.location.endLine }),
-    ...(v.location.endColumn !== undefined && { endColumn: v.location.endColumn }),
-    message: v.message,
-    snippet: buildSnippet(v),
-    fix: hasSuggestion ? buildFix(v) : null,
-    effort: "trivial",
-    category,
-    suppressWith: buildSuppressPragma(v.location.filePath, v.ruleId),
-    suppressPlacement: buildSuppressPlacement(v.location.filePath),
-  };
-
-  return finding;
-}
-
-/**
- * Per-file-type placement guidance so the agent lands the pragma in a
- * syntactically valid spot on the first edit. JSX is the common
- * footgun — the JSX-expression pragma form is not an attribute value,
- * and placing it inside a tag's attribute list is a syntax error.
- * Other languages get shorter notes.
- */
-function buildSuppressPlacement(filePath: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
-    return "Place on the line immediately above the opening JSX tag of the flagged element — not inside attributes, and not between adjacent JSX siblings without a wrapping expression. The `{/* … */}` wrapper is valid as a JSX expression or at module scope.";
-  }
-  if (lower.endsWith(".css")) {
-    return "Place on the line immediately above the CSS rule whose declarations are flagged.";
-  }
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    return "Place on the line immediately above the opening tag of the flagged element.";
-  }
-  return "Place on the line immediately above the flagged statement.";
-}
-
-function buildSnippet(v: Violation): AgentSnippet {
-  if (typeof v.snippet === "string" && v.snippet.length > 0) {
-    return { before: [], highlighted: v.snippet, after: [] };
-  }
-  return { before: [], highlighted: "", after: [] };
-}
-
-function buildFix(v: Violation): AgentFix {
-  return {
-    oldText: "",
-    newText: "",
-    confidence: severityToConfidence(v.severity),
-    safety: "safe",
-    description: v.suggestion ?? "",
-  };
-}
-
-/**
- * Comment syntax by file type. TSX/JSX gets the `{/* … *\/}` form so it
- * pastes correctly inside a JSX element (where most violations live);
- * that form is also valid at module scope.
- */
-function buildSuppressPragma(filePath: string, ruleId: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    return `<!-- ra11y-disable-next-line ${ruleId} -->`;
-  }
-  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
-    return `{/* ra11y-disable-next-line ${ruleId} */}`;
-  }
-  return `// ra11y-disable-next-line ${ruleId}`;
-}
-
-function severityToConfidence(severity: Severity): Confidence {
-  if (severity === "error") return "high";
-  if (severity === "warning") return "medium";
-  return "low";
+  return paths.map((path) => ({
+    path,
+    findings: (byFile.get(path) ?? []).map(buildAgentFinding),
+  }));
 }
 
 function buildPlan(files: readonly AgentFile[], totalFindings: number): AgentPlan {
