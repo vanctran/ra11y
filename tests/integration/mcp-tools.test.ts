@@ -687,16 +687,24 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
   it("activeNativeWrappersNote is no longer repeated in every response", async () => {
     // Regression: the 60-word prose note was context tax on every
     // scan. Semantics moved to the MCP server instructions block
-    // once per session; per-response only the field itself remains.
+    // once per session; per-response only the tagged list remains.
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "configure", { nativeWrappers: ["Button"] }),
       toolCall(3, "scan", { paths: [BAD_ALT_DIR] }),
     ]);
     const body = bodyOf(responses[2]) as {
-      meta: { activeNativeWrappers?: readonly string[]; activeNativeWrappersNote?: unknown };
+      meta: {
+        activeNativeWrappers?: ReadonlyArray<{
+          readonly name: string;
+          readonly source: string;
+          readonly confirmed?: boolean;
+        }>;
+        activeNativeWrappersNote?: unknown;
+      };
     };
-    expect(body.meta.activeNativeWrappers).toContain("Button");
+    const names = (body.meta.activeNativeWrappers ?? []).map((e) => e.name);
+    expect(names).toContain("Button");
     expect(body.meta.activeNativeWrappersNote).toBeUndefined();
   });
 

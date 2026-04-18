@@ -1,22 +1,28 @@
 /**
  * Unit tests for wrappers-meta.ts — the response-shape builder that
- * merges the three native-wrapper sources and assembles the
- * `activeNativeWrappers` / `activeNativeWrappersBySource` meta block.
+ * merges the three native-wrapper sources and assembles the unified
+ * tagged `activeNativeWrappers` list.
  *
  * Invariants under test:
- *   - auto-detect `confirmed` names flow into `activeNativeWrappers`;
+ *   - auto-detect `confirmed` names flow into the effective allowlist;
  *     `assumed` names do NOT (P1-F)
- *   - `fromAutoDetect` in the meta block is a `{ confirmed, assumed }`
- *     object, not a flat string[]; empty sub-lists are omitted
- *   - the meta block is still emitted when only `assumed` names are
- *     present (agent needs to see the candidate) even though
- *     `activeNativeWrappers` is then absent
+ *   - the unified `activeNativeWrappers` list is tagged per entry with
+ *     `{ name, source, confirmed? }`
+ *   - `confirmed` is populated ONLY for `source: "autoDetect"` entries
+ *     (true for confirmed, false for assumed); omitted entirely for
+ *     `"config"` and `"session"` per the honest-shape doctrine
+ *   - the meta block still emits entries when only `assumed` names are
+ *     present (agent needs to see the candidate) — those entries carry
+ *     `confirmed: false`
  *   - session and config names pass through unchanged
+ *   - a name declared in multiple channels emits one entry per channel
+ *     so agents see every origin independently
  */
 
 import { describe, expect, it } from "bun:test";
 import { McpSession } from "../../../src/mcp/session.ts";
 import {
+  type ActiveNativeWrapper,
   type NativeWrapperSources,
   resolveWrapperSources,
   wrappersMetaBlock,
@@ -98,35 +104,45 @@ describe("resolveWrapperSources: auto-detect split", () => {
   });
 });
 
-describe("wrappersMetaBlock: shape", () => {
+describe("wrappersMetaBlock: unified tagged list shape", () => {
   const EMPTY_SPLIT = { confirmed: [] as readonly string[], assumed: [] as readonly string[] };
 
-  it("emits activeNativeWrappersBySource.fromAutoDetect as {confirmed, assumed}", () => {
+  it("emits config-only entries with source: 'config' and no confirmed field", () => {
+    // Author-supplied: `confirmed` is omitted per CLAUDE.md §1
+    // "Ambiguous field shapes are dishonest." Populating it on a
+    // config entry would either lie ("we verified your config") or
+    // carry no signal.
     const meta = wrappersMetaBlock({
-      wrappers: ["Button"],
       sessionOnly: [],
       unusedWrappers: [],
       wrapperProvenance: {
-        fromConfig: [],
+        fromConfig: ["ConfigButton"],
         fromSession: [],
-        fromAutoDetect: { confirmed: ["Button"], assumed: ["BeliefSubmitButton"] },
+        fromAutoDetect: EMPTY_SPLIT,
       },
     });
-    expect(meta["activeNativeWrappers"]).toEqual(["Button"]);
-    const bySource = meta["activeNativeWrappersBySource"] as Record<string, unknown>;
-    expect(bySource["fromAutoDetect"]).toEqual({
-      confirmed: ["Button"],
-      assumed: ["BeliefSubmitButton"],
-    });
+    const entries = meta["activeNativeWrappers"] as readonly ActiveNativeWrapper[];
+    expect(entries).toEqual([{ name: "ConfigButton", source: "config" }]);
+    expect(entries[0]).not.toHaveProperty("confirmed");
   });
 
-  it("omits an empty sub-list inside fromAutoDetect (no sentinel-empty arrays)", () => {
-    // CLAUDE.md §1 "Ambiguous field shapes are dishonest" — an empty
-    // `assumed: []` tells the agent "no assumed wrappers," whereas
-    // omission says "no signal at all here." They need to read the
-    // same way: present only when meaningful.
+  it("emits session-only entries with source: 'session' and no confirmed field", () => {
     const meta = wrappersMetaBlock({
-      wrappers: ["Button"],
+      sessionOnly: ["SessButton"],
+      unusedWrappers: [],
+      wrapperProvenance: {
+        fromConfig: [],
+        fromSession: ["SessButton"],
+        fromAutoDetect: EMPTY_SPLIT,
+      },
+    });
+    const entries = meta["activeNativeWrappers"] as readonly ActiveNativeWrapper[];
+    expect(entries).toEqual([{ name: "SessButton", source: "session" }]);
+    expect(entries[0]).not.toHaveProperty("confirmed");
+  });
+
+  it("emits autoDetect confirmed entries with source: 'autoDetect', confirmed: true", () => {
+    const meta = wrappersMetaBlock({
       sessionOnly: [],
       unusedWrappers: [],
       wrapperProvenance: {
@@ -135,18 +151,17 @@ describe("wrappersMetaBlock: shape", () => {
         fromAutoDetect: { confirmed: ["Button"], assumed: [] },
       },
     });
-    const bySource = meta["activeNativeWrappersBySource"] as Record<string, unknown>;
-    expect(bySource["fromAutoDetect"]).toEqual({ confirmed: ["Button"] });
+    expect(meta["activeNativeWrappers"]).toEqual([
+      { name: "Button", source: "autoDetect", confirmed: true },
+    ]);
   });
 
-  it("still surfaces fromAutoDetect when only assumed names exist (activeNativeWrappers absent)", () => {
-    // This is the load-bearing P1-F case: the scan found wrappers,
-    // none confirmed, `activeNativeWrappers` is empty — but the
-    // agent MUST still see the assumed names so it knows what the
-    // scanner considered. Silent omission would defeat the whole
-    // probe.
+  it("emits autoDetect assumed entries with source: 'autoDetect', confirmed: false", () => {
+    // Load-bearing P1-F case: the scan found wrappers, none confirmed
+    // — but the agent MUST still see the assumed names so it knows
+    // what the scanner considered. Silent omission would defeat the
+    // whole probe.
     const meta = wrappersMetaBlock({
-      wrappers: [],
       sessionOnly: [],
       unusedWrappers: [],
       wrapperProvenance: {
@@ -155,14 +170,13 @@ describe("wrappersMetaBlock: shape", () => {
         fromAutoDetect: { confirmed: [], assumed: ["BeliefSubmitButton"] },
       },
     });
-    expect(meta["activeNativeWrappers"]).toBeUndefined();
-    const bySource = meta["activeNativeWrappersBySource"] as Record<string, unknown>;
-    expect(bySource["fromAutoDetect"]).toEqual({ assumed: ["BeliefSubmitButton"] });
+    expect(meta["activeNativeWrappers"]).toEqual([
+      { name: "BeliefSubmitButton", source: "autoDetect", confirmed: false },
+    ]);
   });
 
-  it("omits the wrapper meta block entirely when no wrapper signal is present", () => {
+  it("omits the activeNativeWrappers field entirely when no wrapper signal is present", () => {
     const meta = wrappersMetaBlock({
-      wrappers: [],
       sessionOnly: [],
       unusedWrappers: [],
       wrapperProvenance: {
@@ -172,26 +186,77 @@ describe("wrappersMetaBlock: shape", () => {
       },
     });
     expect(meta["activeNativeWrappers"]).toBeUndefined();
-    expect(meta["activeNativeWrappersBySource"]).toBeUndefined();
   });
 
-  it("emits config and session provenance alongside the split auto-detect", () => {
+  it("emits one entry per channel when a name appears in multiple sources", () => {
+    // Names overlap freely across sources — config + session of the
+    // same name stays active even if one source is removed. The
+    // tagged list surfaces each origin independently so agents
+    // triaging "why is X active?" see every channel.
     const meta = wrappersMetaBlock({
-      wrappers: ["ConfigBtn", "SessBtn", "AutoBtn"],
+      sessionOnly: ["Button"],
+      unusedWrappers: [],
+      wrapperProvenance: {
+        fromConfig: ["Button"],
+        fromSession: ["Button"],
+        fromAutoDetect: EMPTY_SPLIT,
+      },
+    });
+    expect(meta["activeNativeWrappers"]).toEqual([
+      { name: "Button", source: "config" },
+      { name: "Button", source: "session" },
+    ]);
+  });
+
+  it("emits mixed-source entries in deterministic order (config, autoDetect, session)", () => {
+    const meta = wrappersMetaBlock({
       sessionOnly: ["SessBtn"],
       unusedWrappers: [],
       wrapperProvenance: {
         fromConfig: ["ConfigBtn"],
         fromSession: ["SessBtn"],
-        fromAutoDetect: { confirmed: ["AutoBtn"], assumed: ["AssumedBtn"] },
+        fromAutoDetect: { confirmed: ["AutoConfBtn"], assumed: ["AutoAssBtn"] },
       },
     });
-    const bySource = meta["activeNativeWrappersBySource"] as Record<string, unknown>;
-    expect(bySource["fromConfig"]).toEqual(["ConfigBtn"]);
-    expect(bySource["fromSession"]).toEqual(["SessBtn"]);
-    expect(bySource["fromAutoDetect"]).toEqual({
-      confirmed: ["AutoBtn"],
-      assumed: ["AssumedBtn"],
+    expect(meta["activeNativeWrappers"]).toEqual([
+      { name: "ConfigBtn", source: "config" },
+      { name: "AutoConfBtn", source: "autoDetect", confirmed: true },
+      { name: "AutoAssBtn", source: "autoDetect", confirmed: false },
+      { name: "SessBtn", source: "session" },
+    ]);
+  });
+
+  it("does NOT emit legacy fields activeNativeWrappersBySource or sessionNativeWrappers", () => {
+    // Breaking change called out in CHANGELOG — three fields collapse
+    // into one tagged list. Callers relying on the old shape see
+    // undefined and must migrate.
+    const meta = wrappersMetaBlock({
+      sessionOnly: ["SessBtn"],
+      unusedWrappers: [],
+      wrapperProvenance: {
+        fromConfig: ["ConfigBtn"],
+        fromSession: ["SessBtn"],
+        fromAutoDetect: { confirmed: ["AutoBtn"], assumed: [] },
+      },
     });
+    expect(meta["activeNativeWrappersBySource"]).toBeUndefined();
+    expect(meta["sessionNativeWrappers"]).toBeUndefined();
+  });
+
+  it("still emits sessionOverridesNote when session-only names exist", () => {
+    // The prose note survives the collapse — it names the
+    // operational consequence (restart to un-layer) that the
+    // per-entry `source: "session"` tag alone does not explain.
+    const meta = wrappersMetaBlock({
+      sessionOnly: ["SessBtn"],
+      unusedWrappers: [],
+      wrapperProvenance: {
+        fromConfig: [],
+        fromSession: ["SessBtn"],
+        fromAutoDetect: EMPTY_SPLIT,
+      },
+    });
+    expect(meta["sessionOverridesNote"]).toBeDefined();
+    expect(meta["sessionOverridesNote"]).toContain("configure()");
   });
 });

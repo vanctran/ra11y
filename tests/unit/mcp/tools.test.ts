@@ -331,11 +331,13 @@ describe("MCP tool: scan_project", () => {
       expect(session.config.nativeWrappers).not.toContain("Widget");
     });
 
-    it("does NOT mis-attribute auto-detected wrappers to sessionNativeWrappers", async () => {
+    it("does NOT mis-attribute auto-detected wrappers to session provenance", async () => {
       // Regression: prior impl dumped detected names into fromSession so
       // the sessionOverridesNote falsely warned that configure() had
-      // added them. The audit should stay pristine when the agent only
-      // used autoDetectWrappers.
+      // added them. Under the unified tagged list, the invariant is
+      // that no entry carries `source: "session"` and
+      // sessionOverridesNote stays absent when the agent only used
+      // autoDetectWrappers.
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
       const { join: joinPath } = await import("node:path");
@@ -361,26 +363,30 @@ describe("MCP tool: scan_project", () => {
       const data = JSON.parse(result.content[0].text) as {
         meta: {
           autoDetectedWrappers?: string[];
-          sessionNativeWrappers?: string[];
+          activeNativeWrappers?: Array<{ name: string; source: string; confirmed?: boolean }>;
           sessionOverridesNote?: string;
         };
       };
       expect(data.meta.autoDetectedWrappers).toEqual(["DesignSystemButton", "DesignSystemCard"]);
-      expect(data.meta.sessionNativeWrappers).toBeUndefined();
+      const sessionTagged = (data.meta.activeNativeWrappers ?? []).filter(
+        (e) => e.source === "session",
+      );
+      expect(sessionTagged).toEqual([]);
       expect(data.meta.sessionOverridesNote).toBeUndefined();
     });
 
-    it("attributes activeNativeWrappers to their source (config / session / autoDetect)", async () => {
+    it("tags each activeNativeWrappers entry with its source (config / session / autoDetect)", async () => {
       // Debugging "why is X active?" needs the source per wrapper.
-      // configure() contributes session names, autoDetect contributes
-      // scan-scoped names, and ra11y.config.ts contributes config names.
-      // bySource shows all three.
+      // configure() contributes `source: "session"`, autoDetect
+      // contributes `source: "autoDetect"` (with a `confirmed` flag),
+      // and ra11y.config.ts contributes `source: "config"`. The
+      // unified tagged list shows all three in one field.
       //
-      // autoDetect names are split into `{confirmed, assumed}` by the
-      // one-hop AST probe (P1-F). This test adds a defining
-      // `ActionButton.tsx` whose root is a native <button>, so the
-      // detector promotes it to `confirmed` — the path that flows into
-      // the active allowlist.
+      // autoDetect names are split by the one-hop AST probe (P1-F).
+      // This test adds a defining `ActionButton.tsx` whose root is a
+      // native <button>, so the detector promotes it to
+      // `confirmed: true` — the path that flows into the active
+      // allowlist and silences findings.
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
       const { join: joinPath } = await import("node:path");
@@ -406,37 +412,35 @@ describe("MCP tool: scan_project", () => {
       const tool = findTool("scan_project");
       const session = new McpSession();
       // Simulate a prior configure() call contributing a wrapper that
-      // isn't present in this scan's source — so fromSession and
-      // fromAutoDetect stay cleanly non-overlapping.
+      // isn't present in this scan's source — so the session and
+      // autoDetect channels stay cleanly non-overlapping.
       session.config = { ...session.config, nativeWrappers: ["SessionOnlyWidget"] };
       const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
       const data = JSON.parse(result.content[0].text) as {
         meta: {
-          activeNativeWrappers?: string[];
-          activeNativeWrappersBySource?: {
-            fromConfig?: string[];
-            fromSession?: string[];
-            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
-          };
+          activeNativeWrappers?: Array<{ name: string; source: string; confirmed?: boolean }>;
         };
       };
-      expect(data.meta.activeNativeWrappers).toEqual(
-        expect.arrayContaining(["ActionButton", "SessionOnlyWidget"]),
+      const entries = data.meta.activeNativeWrappers ?? [];
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          { name: "ActionButton", source: "autoDetect", confirmed: true },
+          { name: "SessionOnlyWidget", source: "session" },
+        ]),
       );
-      expect(data.meta.activeNativeWrappersBySource?.fromConfig).toBeUndefined();
-      expect(data.meta.activeNativeWrappersBySource?.fromSession).toEqual(["SessionOnlyWidget"]);
-      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
-        confirmed: ["ActionButton"],
-      });
+      // No config-sourced entries because no ra11y.config.ts lives
+      // under the temp dir.
+      expect(entries.some((e) => e.source === "config")).toBe(false);
     });
 
     it("splits auto-detected wrappers into confirmed vs assumed via the one-hop AST probe (P1-F)", async () => {
       // The core P1-F behavior: an auto-detected wrapper whose
-      // defining file renders a native <button> is `confirmed` and
-      // silences findings; one whose defining file renders <div> is
-      // `assumed` and stays opaque (rules fire as if the name were
-      // NOT in the wrapper list). See CLAUDE.md §1 "No heuristic
-      // suppression" — only structural evidence earns confirmation.
+      // defining file renders a native <button> is `confirmed: true`
+      // and silences findings; one whose defining file renders <div>
+      // is `confirmed: false` (assumed) and stays opaque (rules fire
+      // as if the name were NOT in the wrapper list). See CLAUDE.md
+      // §1 "No heuristic suppression" — only structural evidence
+      // earns confirmation.
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
       const { join: joinPath } = await import("node:path");
@@ -449,7 +453,7 @@ describe("MCP tool: scan_project", () => {
       );
       // A PascalCase wrapper whose root is a bare <div> — assumed.
       // This is the canonical silent-silencing risk P1-F closes: if
-      // this wrapper reached `activeNativeWrappers`, findings on it
+      // this wrapper reached the effective allowlist, findings on it
       // would disappear even though the <div> underneath might be a
       // real keyboard-operability bug.
       await writeFile(
@@ -475,34 +479,29 @@ describe("MCP tool: scan_project", () => {
       const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
       const data = JSON.parse(result.content[0].text) as {
         meta: {
-          activeNativeWrappers?: string[];
-          activeNativeWrappersBySource?: {
-            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
-          };
+          activeNativeWrappers?: Array<{ name: string; source: string; confirmed?: boolean }>;
         };
       };
-      // Only the confirmed wrapper reaches the active list; the
-      // assumed one is surfaced in the provenance block but NOT
-      // silenced.
-      expect(data.meta.activeNativeWrappers).toEqual(["Button"]);
-      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
-        confirmed: ["Button"],
-        assumed: ["BeliefSubmitButton"],
-      });
+      // Both names surface as tagged entries; only the confirmed one
+      // carries `confirmed: true`, the assumed one carries
+      // `confirmed: false` and is left out of the effective allowlist.
+      const entries = data.meta.activeNativeWrappers ?? [];
+      expect(entries).toEqual([
+        { name: "Button", source: "autoDetect", confirmed: true },
+        { name: "BeliefSubmitButton", source: "autoDetect", confirmed: false },
+      ]);
     });
 
     it("leaves assumed wrappers opaque — findings on them are NOT silenced", async () => {
       // Acceptance criterion (v) from the P1-F brief, observed at the
-      // MCP filter layer: when a wrapper is assumed (not confirmed),
+      // MCP filter layer: when a wrapper is assumed (confirmed: false),
       // the scanner's wrapper-noise filter must not drop findings
       // carrying that component's name.
       //
-      // The invariant is encoded at the effective-allowlist layer: if
-      // an assumed name is NOT in `activeNativeWrappers`, then
-      // `dropWrapperNoise` (keyed on that list) cannot silence findings
-      // whose message starts with `<AssumedName>`. This test proves
-      // the list exclusion; the downstream filter is transitively
-      // correct.
+      // Under the unified tagged list, the invariant is that an
+      // assumed entry is still emitted (so the agent sees it), but
+      // `dropWrapperNoise` is keyed on the confirmed-only effective
+      // allowlist — so findings on assumed names stay live.
       const { mkdtemp, writeFile } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os");
       const { join: joinPath } = await import("node:path");
@@ -523,16 +522,12 @@ describe("MCP tool: scan_project", () => {
       const result = await tool.handler({ cwd: dir, autoDetectWrappers: true }, session);
       const data = JSON.parse(result.content[0].text) as {
         meta: {
-          activeNativeWrappers?: string[];
-          activeNativeWrappersBySource?: {
-            fromAutoDetect?: { confirmed?: string[]; assumed?: string[] };
-          };
+          activeNativeWrappers?: Array<{ name: string; source: string; confirmed?: boolean }>;
         };
       };
-      expect(data.meta.activeNativeWrappers).toBeUndefined();
-      expect(data.meta.activeNativeWrappersBySource?.fromAutoDetect).toEqual({
-        assumed: ["PerceptionSlider"],
-      });
+      expect(data.meta.activeNativeWrappers).toEqual([
+        { name: "PerceptionSlider", source: "autoDetect", confirmed: false },
+      ]);
     });
 
     it("reports zero-detection plainly when no candidates are found", async () => {

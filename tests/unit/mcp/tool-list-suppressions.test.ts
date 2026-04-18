@@ -35,7 +35,11 @@ interface SuppressionResponse {
     readonly configSource: string | null;
     readonly filesScanned: number;
     readonly rulesEvaluated: number;
-    readonly activeNativeWrappers?: readonly string[];
+    readonly activeNativeWrappers?: ReadonlyArray<{
+      readonly name: string;
+      readonly source: "config" | "autoDetect" | "session";
+      readonly confirmed?: boolean;
+    }>;
   };
   readonly nextStep: string;
 }
