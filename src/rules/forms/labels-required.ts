@@ -58,6 +58,15 @@ export const rule = defineRule({
   severity: "error",
   scope: "document",
   fixClass: "verify-in-source",
+  // Opt in: wrapper components declared as rendering `<input>` via the
+  // object form of `nativeWrappers` (e.g. `{ TextField: "input",
+  // EmailInput: "input" }`) get the same label-or-aria-label check as a
+  // bare `<input>`. select/textarea wrappers aren't covered here —
+  // `wrapperTreatsAsElement` names a single native tag; users with
+  // `<SelectBox>` wrappers either declare them as `"input"` (works,
+  // same accessible-name requirement) or leave the rule to catch the
+  // missing label inside the wrapper definition file.
+  wrapperTreatsAsElement: "input",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },
@@ -83,7 +92,7 @@ export const rule = defineRule({
       ctx.language === "ts" ||
       ctx.language === "js"
     ) {
-      checkJsx(ctx.ast as TsxModule, (v) => ctx.emit(v));
+      checkJsx(ctx.ast as TsxModule, ctx.wrappersForElement, (v) => ctx.emit(v));
     }
   },
 });
@@ -178,17 +187,28 @@ function htmlHasLabel(
 // JSX
 // ---------------------------------------------------------------------------
 
-function checkJsx(module: TsxModule, emit: Emit): void {
+function checkJsx(module: TsxModule, wrappersForInput: ReadonlySet<string>, emit: Emit): void {
   // JSX label/control association: htmlFor attribute on <label> must
   // match id attribute on the control. We collect the htmlFor set
   // first, then check each control. Implicit labeling (control nested
   // inside label) handled by JSX element children structure.
   const labelHtmlFors = collectJsxLabelHtmlFors(module);
-  const implicitlyLabeledElementIds = collectJsxImplicitlyLabeledControls(module);
+  const implicitlyLabeledElementIds = collectJsxImplicitlyLabeledControls(module, wrappersForInput);
 
   for (const tag of LABELABLE_TAGS) {
     for (const el of findJsxElementsByTag(module, tag)) {
       if (isExcludedJsxControl(el)) continue;
+      if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
+      emit(buildJsxViolation(el));
+    }
+  }
+  // Mapped wrappers (Q2-WRAPMAP-RULES): components the user declared as
+  // rendering `<input>` internally (`{ TextField: "input", EmailInput:
+  // "input" }`) need the same label-association check. isExcludedJsxControl
+  // is skipped because we can't infer `type="submit"` etc. from a
+  // PascalCase call site — the wrapper is opaque.
+  for (const name of wrappersForInput) {
+    for (const el of findJsxElementsByTag(module, name)) {
       if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
       emit(buildJsxViolation(el));
     }
@@ -232,11 +252,16 @@ function collectJsxLabelHtmlFors(module: TsxModule): ReadonlySet<string> {
   return fors;
 }
 
-function collectJsxImplicitlyLabeledControls(module: TsxModule): Set<number> {
+function collectJsxImplicitlyLabeledControls(
+  module: TsxModule,
+  wrappersForInput: ReadonlySet<string> = new Set(),
+): Set<number> {
   const ranges = new Set<number>();
   for (const label of findJsxElementsByTag(module, "label")) {
     for (const descendant of walkJsxDescendants(label)) {
-      if (!LABELABLE_TAGS.has(descendant.tagName.toLowerCase())) continue;
+      const tag = descendant.tagName;
+      const labelable = LABELABLE_TAGS.has(tag.toLowerCase()) || wrappersForInput.has(tag);
+      if (!labelable) continue;
       ranges.add(descendant.range.start);
     }
   }

@@ -63,6 +63,11 @@ export const rule = defineRule({
   severity: "warning",
   scope: "node",
   fixClass: "guidance",
+  // Opt in: wrapper components declared as rendering `<a>` via the
+  // object form of `nativeWrappers` also get checked. `ctx.wrappersForElement`
+  // surfaces the matching names; checkJsx iterates them alongside the
+  // baseline `JSX_LINK_TAGS` list.
+  wrapperTreatsAsElement: "a",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },
@@ -89,7 +94,7 @@ export const rule = defineRule({
       ctx.language === "ts" ||
       ctx.language === "js"
     ) {
-      checkJsx(ctx.ast as TsxModule, (v) => ctx.emit(v));
+      checkJsx(ctx.ast as TsxModule, ctx.wrappersForElement, (v) => ctx.emit(v));
     }
   },
 });
@@ -123,8 +128,15 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
   }
 }
 
-function checkJsx(module: TsxModule, emit: Emit): void {
-  for (const tag of JSX_LINK_TAGS) {
+function checkJsx(module: TsxModule, wrappersForA: ReadonlySet<string>, emit: Emit): void {
+  // Iterate the baseline JSX link tags plus any PascalCase wrapper the
+  // user declared as rendering `<a>` via the `nativeWrappers` map
+  // (Q2-WRAPMAP-RULES). `JSX_LINK_TAGS` already covers `Link` / `NavLink`
+  // / `Anchor` so adding them again from the wrapper set is a no-op via
+  // the dedup Set below.
+  const tags = new Set<string>(JSX_LINK_TAGS);
+  for (const name of wrappersForA) tags.add(name);
+  for (const tag of tags) {
     for (const el of findJsxElementsByTag(module, tag)) {
       if (hasAccessibleNameOverrideJsx(el)) continue;
       // Only check link-style elements with href/to props.

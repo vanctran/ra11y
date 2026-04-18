@@ -147,4 +147,37 @@ describe("rule media/alt-text-missing", () => {
       expect(rule.docs.references[0]).toContain("WCAG22");
     });
   });
+
+  describe("nativeWrapperElements mapping (Q2-WRAPMAP-RULES)", () => {
+    it("opts in to the native `img` tag so mapped wrappers fire", () => {
+      expect(rule.wrapperTreatsAsElement).toBe("img");
+    });
+
+    it("fires on a wrapper declared to render `<img>` via the mapping", () => {
+      const violations = runRule(rule, `const X = <Avatar src="u.png" />;`, {
+        nativeWrapperElements: { Avatar: "img" },
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.ruleId).toBe("media/alt-text-missing");
+    });
+
+    it("silences when the mapped wrapper call site supplies alt", () => {
+      const violations = runRule(rule, `const X = <Avatar src="u.png" alt="User avatar" />;`, {
+        nativeWrapperElements: { Avatar: "img" },
+      });
+      expect(violations).toHaveLength(0);
+    });
+
+    it("does not fire on a wrapper mapped to a non-image tag", () => {
+      const violations = runRule(rule, `const X = <Card src="u.png" />;`, {
+        nativeWrapperElements: { Card: "div" },
+      });
+      expect(violations).toHaveLength(0);
+    });
+
+    it("does not fire on an unmapped PascalCase component", () => {
+      const violations = runRule(rule, `const X = <UnknownWrapper src="u.png" />;`);
+      expect(violations).toHaveLength(0);
+    });
+  });
 });

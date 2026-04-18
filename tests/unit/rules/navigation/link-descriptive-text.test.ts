@@ -106,4 +106,30 @@ describe("rule navigation/link-descriptive-text", () => {
     expect(rule.satisfies).toContain("wcag22:2.4.4");
     expect(rule.satisfies).toContain("wcag21:2.4.4");
   });
+
+  describe("nativeWrapperElements mapping (Q2-WRAPMAP-RULES)", () => {
+    it("opts in to the native `a` tag so mapped wrappers fire", () => {
+      expect(rule.wrapperTreatsAsElement).toBe("a");
+    });
+
+    it("fires on a wrapper declared to render `<a>` via the mapping", () => {
+      const v = runRule(rule, `const X = <MyRouterLink to="/x">click here</MyRouterLink>;`, {
+        nativeWrapperElements: { MyRouterLink: "a" },
+      });
+      expect(v).toHaveLength(1);
+      expect(v[0]?.message).toContain("click here");
+    });
+
+    it("does not fire on a wrapper whose mapping targets a different tag", () => {
+      const v = runRule(rule, `const X = <Chip to="/x">click here</Chip>;`, {
+        nativeWrapperElements: { Chip: "button" },
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not fire on a wrapper absent from the mapping", () => {
+      const v = runRule(rule, `const X = <UnknownWidget to="/x">click here</UnknownWidget>;`);
+      expect(v).toHaveLength(0);
+    });
+  });
 });

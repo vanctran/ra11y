@@ -121,4 +121,44 @@ describe("rule forms/labels-required", () => {
     expect(rule.satisfies).toContain("wcag22:3.3.2");
     expect(rule.satisfies).toContain("wcag21:3.3.2");
   });
+
+  describe("nativeWrapperElements mapping (Q2-WRAPMAP-RULES)", () => {
+    it("opts in to the native `input` tag so mapped wrappers fire", () => {
+      expect(rule.wrapperTreatsAsElement).toBe("input");
+    });
+
+    it("fires on a wrapper declared to render `<input>` via the mapping", () => {
+      const v = runRule(rule, `const X = <TextField />;`, {
+        nativeWrapperElements: { TextField: "input" },
+      });
+      expect(v.length).toBeGreaterThan(0);
+      expect(v[0]?.ruleId).toBe("forms/labels-required");
+    });
+
+    it("silences when the mapped wrapper call site has aria-label", () => {
+      const v = runRule(rule, `const X = <TextField aria-label="Email" />;`, {
+        nativeWrapperElements: { TextField: "input" },
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it("silences when the mapped wrapper is wrapped in a JSX <label>", () => {
+      const v = runRule(rule, `const X = <label>Email<TextField /></label>;`, {
+        nativeWrapperElements: { TextField: "input" },
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not fire on a wrapper mapped to a non-form tag", () => {
+      const v = runRule(rule, `const X = <Row />;`, {
+        nativeWrapperElements: { Row: "div" },
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not fire on an unmapped PascalCase component", () => {
+      const v = runRule(rule, `const X = <UnknownInput />;`);
+      expect(v).toHaveLength(0);
+    });
+  });
 });
