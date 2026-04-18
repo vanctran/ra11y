@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Conflicting role — bad (button masquerading as link)</title>
+  </head>
+  <body>
+    <!--
+      <button role="link"> conflicts: the browser fires on Enter and
+      Space (button behavior) but AT announces "link" to users, who
+      then expect navigation, right-click context menu, and
+      open-in-new-tab. Fix: use <a href> for links, <button> for
+      actions.
+    -->
+    <button type="button" role="link">Go to docs</button>
+  </body>
+</html>

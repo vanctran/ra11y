@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Conflicting role — bad (nav masquerading as main)</title>
+  </head>
+  <body>
+    <!--
+      <nav role="main"> fractures the landmarks list AT users navigate
+      by: the rotor shows both a navigation landmark (the tag) and a
+      main landmark (the role) pointing at the same element. Fix: use
+      <main> for the primary content landmark.
+    -->
+    <nav role="main">
+      <h1>Primary content</h1>
+    </nav>
+  </body>
+</html>

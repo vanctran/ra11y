@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Conflicting role — good (decorative image, documented override)</title>
+  </head>
+  <body>
+    <!--
+      role="presentation" on a decorative <img> is the documented
+      pattern for hiding it from AT. The rule honors presentation/none
+      on <img> and does not treat it as a conflict with the implicit
+      "img" role.
+    -->
+    <img src="flourish.svg" alt="" role="presentation" />
+  </body>
+</html>
