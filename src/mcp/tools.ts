@@ -57,7 +57,8 @@ const scanTool: McpTool = {
         paths: {
           type: "array",
           items: { type: "string" },
-          description: "File or directory paths to scan.",
+          description:
+            "File or directory paths to scan. A single array may mix files and directories — each entry is resolved individually before scanning.",
         },
         standard: {
           type: "string",

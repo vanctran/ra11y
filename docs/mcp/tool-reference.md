@@ -37,6 +37,13 @@ Scans explicit paths. Required: `paths: string[]`. Optional: `standard`, `level`
 
 **Use when:** the agent has a specific set of files to check (e.g. the ones it just edited).
 
+**Mixed files and directories:** each entry in `paths` can be a file path or a directory path, and a single call can mix both. The scanner resolves directories recursively and merges them with any explicit file entries before scanning.
+
+```jsonc
+// Mix a changed file with a directory in one call:
+{ "paths": ["src/components/Button.tsx", "src/forms/"] }
+```
+
 **Default `minSeverity`:** `info` — keep it. Info findings are exactly where the agent adds value by reading source code; filtering to `warning` ships false negatives.
 
 ### `scan_project`
