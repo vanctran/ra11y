@@ -44,7 +44,6 @@ const RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22"],
   isTTY: false,
-  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {
@@ -78,7 +77,6 @@ describe("formatter: terminal (no color)", () => {
       durationMs: 0,
       enabledStandards: ["wcag22"],
       isTTY: false,
-      perRuleCoverage: [],
     };
     const output = terminalFormatter.format(empty, REPORT);
     expect(output).toContain("0 errors");
@@ -115,7 +113,6 @@ describe("formatter: plain", () => {
       durationMs: 0,
       enabledStandards: ["wcag22"],
       isTTY: false,
-      perRuleCoverage: [],
     };
     const output = plainFormatter.format(empty, REPORT);
     expect(output.trim()).toBe("0 violations in 5 files (0ms)");

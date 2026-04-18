@@ -446,7 +446,7 @@ export async function runScanAndFormat(
 }> {
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
-  const { result, report } = runScan({
+  const { result, report, perRuleCoverage } = runScan({
     standards: BUILTIN_STANDARDS,
     rules: activeRules,
     enabled,
@@ -515,7 +515,7 @@ export async function runScanAndFormat(
   // — matching the plan's `totalFindings` so a rule silenced by the
   // session's minSeverity filter reads as "0 findings for this
   // consumer" here too.
-  const ruleCoverageDerivative = buildRuleCoverageDerivative(result.perRuleCoverage, filtered);
+  const ruleCoverageDerivative = buildRuleCoverageDerivative(perRuleCoverage, filtered);
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
@@ -603,7 +603,7 @@ export async function runScanAndFormat(
       // CSS files and the headline 0 findings is meaningless without
       // this context). Omitted when the array is empty so clean scans
       // on non-extension-gated rule sets don't ship an empty field.
-      ...(result.perRuleCoverage.length > 0 ? { perRuleCoverage: result.perRuleCoverage } : {}),
+      ...(perRuleCoverage.length > 0 ? { perRuleCoverage } : {}),
     },
     ...(referenceGuide === undefined ? {} : { referenceGuide }),
     ...(ruleCoverageDerivative === null ? {} : { ruleCoverage: ruleCoverageDerivative }),

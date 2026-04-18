@@ -46,7 +46,6 @@ function formatterFinding(v: Violation): Record<string, unknown> {
     durationMs: 0,
     enabledStandards: ["wcag22"],
     isTTY: false,
-    perRuleCoverage: [],
   };
   const report: ReportData = { coverage: [], manualReviewNeeded: [] };
   const payload = JSON.parse(agentFormatter.format(scan, report));

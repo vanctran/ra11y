@@ -29,7 +29,13 @@ import type {
   Rule,
 } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
-import type { ReportData, ScanResult, Severity, Violation } from "../types/violation.ts";
+import type {
+  PerRuleCoverage,
+  ReportData,
+  ScanResult,
+  Severity,
+  Violation,
+} from "../types/violation.ts";
 import { computeFindingId } from "../utils/finding-id.ts";
 import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
 import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
@@ -82,6 +88,20 @@ export interface ScanInputs {
 export interface ScanProducts {
   readonly result: ScanResult;
   readonly report: ReportData;
+  /**
+   * Per-rule evaluation telemetry for rules with an extension gate.
+   * One entry per active rule whose `appliesTo.fileExtensions` could
+   * fail to match any scanned file. Drives the `meta.perRuleCoverage`
+   * field and the `ruleCoverage` derivative on MCP scan responses —
+   * see {@link PerRuleCoverage}.
+   *
+   * Produced here rather than stamped onto {@link ScanResult} because
+   * the MCP response layer (`src/mcp/tools-helpers.ts`) is the sole
+   * consumer. Keeping it off the shared result type avoids churning
+   * every fixture that constructs a `ScanResult` literal whenever the
+   * shape evolves.
+   */
+  readonly perRuleCoverage: readonly PerRuleCoverage[];
 }
 
 export function runScan(inputs: ScanInputs): ScanProducts {
@@ -142,7 +162,6 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     durationMs,
     enabledStandards: [...enabled].sort(),
     isTTY: inputs.isTTY ?? false,
-    perRuleCoverage,
   };
 
   const report: ReportData = buildReportData(
@@ -152,7 +171,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     allCandidates,
   );
 
-  return { result, report };
+  return { result, report, perRuleCoverage };
 }
 
 /**

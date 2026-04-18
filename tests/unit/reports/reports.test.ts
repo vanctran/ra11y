@@ -40,7 +40,6 @@ const RESULT: ScanResult = {
   durationMs: 5,
   enabledStandards: ["wcag22", "wcag21", "section508", "en301549"],
   isTTY: false,
-  perRuleCoverage: [],
 };
 
 describe("buildCoverageReport", () => {

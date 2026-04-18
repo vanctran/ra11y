@@ -5,8 +5,8 @@
  * `appliesTo.fileExtensions` could fail to match any scanned file.
  *
  * Lives next to the scanner (not under `src/mcp/`) because the shape is
- * engine-owned — both the CLI reports and the MCP responses pivot off
- * the same array on `ScanResult.perRuleCoverage`.
+ * engine-owned — the MCP response layer pivots off the same array the
+ * scanner returns as `ScanProducts.perRuleCoverage`.
  *
  * The canonical acute case motivating this module is Tailwind pre-build:
  * `contrast/minimum` targets `.css`, a Tailwind project's source tree

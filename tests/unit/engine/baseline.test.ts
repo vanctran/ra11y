@@ -27,7 +27,6 @@ function makeResult(violations: Violation[]): ScanResult {
     durationMs: 0,
     enabledStandards: ["wcag22"],
     isTTY: false,
-    perRuleCoverage: [],
   };
 }
 

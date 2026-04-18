@@ -42,7 +42,6 @@ const RESULT: ScanResult = {
   durationMs: 42,
   enabledStandards: ["wcag22"],
   isTTY: false,
-  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {

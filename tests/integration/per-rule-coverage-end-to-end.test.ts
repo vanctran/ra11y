@@ -44,14 +44,14 @@ describe("per-rule coverage end-to-end", () => {
         `export function Button({ label }: { label: string }) { return <button>{label}</button>; }`,
       ),
     ];
-    const { result } = runScan({
+    const { result, perRuleCoverage } = runScan({
       standards: [wcag22],
       rules: BUILTIN_RULES,
       enabled: ["wcag22"],
       files,
     });
 
-    const cssRuleRows = result.perRuleCoverage.filter((r) => r.ruleId.startsWith("contrast/"));
+    const cssRuleRows = perRuleCoverage.filter((r) => r.ruleId.startsWith("contrast/"));
     // Every contrast rule targets `.css`; with no CSS files scanned
     // they must all show 0 eligible + low confidence.
     expect(cssRuleRows.length).toBeGreaterThan(0);
@@ -62,7 +62,7 @@ describe("per-rule coverage end-to-end", () => {
       expect(row.remediation).toBeDefined();
     }
 
-    const derivative = buildRuleCoverageDerivative(result.perRuleCoverage, result.violations);
+    const derivative = buildRuleCoverageDerivative(perRuleCoverage, result.violations);
     expect(derivative).not.toBeNull();
     // contrast/minimum is the canonical acute case — verify it's in the
     // low-confidence bucket and not in confidentlyClean.
@@ -76,14 +76,14 @@ describe("per-rule coverage end-to-end", () => {
       tsxFile("src/App.tsx", `export function App() { return <main><h1>Hi</h1></main>; }`),
       cssFile("src/styles.css", `body { color: #000; background: #fff; }`),
     ];
-    const { result } = runScan({
+    const { perRuleCoverage } = runScan({
       standards: [wcag22],
       rules: BUILTIN_RULES,
       enabled: ["wcag22"],
       files,
     });
 
-    const contrastMinRow = result.perRuleCoverage.find((r) => r.ruleId === "contrast/minimum");
+    const contrastMinRow = perRuleCoverage.find((r) => r.ruleId === "contrast/minimum");
     expect(contrastMinRow).toBeDefined();
     expect(contrastMinRow!.filesEligible).toBeGreaterThan(0);
     expect(contrastMinRow!.coverageConfidence).toBe("high");

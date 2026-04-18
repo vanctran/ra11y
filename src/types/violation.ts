@@ -202,6 +202,12 @@ export interface Violation {
  * Rules with `scope: "project"` and no `appliesTo.fileExtensions` (e.g.
  * `focus/outline-visible`) are not tracked — the concept doesn't apply.
  *
+ * Produced by the scanner as a sibling field on
+ * {@link import("../engine/scanner.ts").ScanProducts} — not on
+ * {@link ScanResult}, because the MCP response layer is the sole
+ * consumer. Keeping it off the shared result type avoids churning every
+ * fixture that constructs a `ScanResult` literal when the shape evolves.
+ *
  * See also: the top-level `ruleCoverage` derivative on scan responses
  * (`confidentlyClean` vs `lowConfidenceClean`) assembled by the MCP
  * layer from this array.
@@ -222,14 +228,6 @@ export interface ScanResult {
   readonly durationMs: number;
   readonly enabledStandards: readonly string[];
   readonly isTTY: boolean;
-  /**
-   * Per-rule evaluation telemetry for rules with an extension gate.
-   * One entry per active rule whose `appliesTo.fileExtensions` could
-   * fail to match any scanned file. Drives the `perRuleCoverage` field
-   * and the `ruleCoverage` derivative on MCP scan responses — see
-   * {@link PerRuleCoverage}.
-   */
-  readonly perRuleCoverage: readonly PerRuleCoverage[];
 }
 
 /** Structured data produced from a ScanResult, consumed by formatters and reports. */

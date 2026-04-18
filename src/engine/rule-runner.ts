@@ -25,8 +25,9 @@ import type { StandardFilter } from "./standard-filter.ts";
  * bumps `eligible` when the file's extension matches the rule's
  * `appliesTo.fileExtensions` (unconstrained rules are eligible on every
  * file), and bumps `evaluated` when the rule actually runs. The
- * engine folds the resulting map into `ScanResult.perRuleCoverage`
- * at scan end — see `src/types/violation.ts` for the surface shape.
+ * engine folds the resulting map into `ScanProducts.perRuleCoverage`
+ * at scan end — see `src/engine/scanner.ts` and
+ * `src/types/violation.ts` for the surface shape.
  */
 export interface RuleEvaluationTracker {
   readonly counts: Map<string, { eligible: number; evaluated: number }>;

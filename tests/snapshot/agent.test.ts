@@ -48,7 +48,6 @@ const RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22", "wcag21"],
   isTTY: false,
-  perRuleCoverage: [],
 };
 
 const REPORT: ReportData = {
@@ -77,7 +76,6 @@ const EMPTY_RESULT: ScanResult = {
   durationMs: 0,
   enabledStandards: ["wcag22"],
   isTTY: false,
-  perRuleCoverage: [],
 };
 
 const EMPTY_REPORT: ReportData = {
