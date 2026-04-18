@@ -53,11 +53,15 @@ const stagedFiles = getStagedFiles(projectDir);
 // .claude/hooks/. Anything else (e.g. integrations/, which is a
 // sibling project with its own toolchain) is intentionally outside
 // biome's scope and would make `biome check` fail with "no files
-// processed" if passed explicitly.
+// processed" if passed explicitly. The extension list here mirrors
+// biome.json's `files.includes`, which is TypeScript-only; passing
+// .json or .js through to biome triggers the same "no files
+// processed" failure, so we filter to the extensions biome actually
+// handles.
 const BIOME_SCOPED = /^(src|tests|scripts|\.claude\/hooks)\//;
 const stagedTsFiles = stagedFiles.filter((f) => /\.(ts|tsx|cts|mts)$/.test(f));
 const stagedLintTargets = stagedFiles.filter(
-  (f) => /\.(ts|tsx|cts|mts|js|jsx|json|jsonc)$/.test(f) && BIOME_SCOPED.test(f),
+  (f) => /\.(ts|tsx|cts|mts)$/.test(f) && BIOME_SCOPED.test(f),
 );
 const stagedTsFilesInProject = stagedTsFiles.filter((f) => BIOME_SCOPED.test(f));
 const stagedPackageManifest = stagedFiles.some(
