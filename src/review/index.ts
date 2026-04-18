@@ -23,6 +23,7 @@ import { finder as pointerInput } from "./finders/pointer-input.ts";
 import { finder as redundantEntry } from "./finders/redundant-entry.ts";
 import { finder as sectionHeadings } from "./finders/section-headings.ts";
 import { finder as sensoryCharacteristics } from "./finders/sensory-characteristics.ts";
+import { finder as serverErrorUntied } from "./finders/server-error-untied.ts";
 import { finder as suppressionNoReason } from "./finders/suppression-no-reason.ts";
 import { finder as timing } from "./finders/timing.ts";
 import { finder as useOfColor } from "./finders/use-of-color.ts";
@@ -47,6 +48,7 @@ export const BUILTIN_CANDIDATE_FINDERS: readonly CandidateFinder[] = [
   redundantEntry,
   sectionHeadings,
   sensoryCharacteristics,
+  serverErrorUntied,
   suppressionNoReason,
   timing,
   useOfColor,
