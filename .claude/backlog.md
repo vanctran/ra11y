@@ -266,7 +266,7 @@ Source: the 10-agent round-2 eval aggregation (`AGGREGATED.md`). Most items were
 
 - [ ] **Q2R2-BOOTSTRAP** `bootstrap` MCP tool — composes `detect_native_wrappers` + `propose_config` + `scan_project` + `baseline create` + returns a CI snippet in one call. Interrogation note (§1 "Interrogate the problem"): is this a docs gap or a genuine composition primitive? Round-2 signal from two independent agents suggests the latter; build after Q2R2-PROPOSE-CFG lands. [round 2, agents 7, 10]
 - [ ] **Q2R2-SUPPRESS-TOOL** `suppress` MCP tool — input `{ file, line, ruleId, reason }`. Inserts the appropriate source pragma (block-comment for HTML, JSX-comment for TSX). Required reason (rejects bare — mirrors Q2-REASON source-rule). [round 2, agent 7]
-- [ ] **Q2R2-CFG-SNIPPET** `detect_native_wrappers` response adds `suggestedConfigSnippet: string` as a structured field. Today it's buried in `nextStep`'s English; agents parse prose to extract config. [round 2, agent 9]
+- [x] **Q2R2-CFG-SNIPPET** `detect_native_wrappers` response adds `suggestedConfigSnippet: string` as a structured field. Today it's buried in `nextStep`'s English; agents parse prose to extract config. [round 2, agent 9]
 - [ ] **Q2R2-PROPOSE-CFG** `propose_config` MCP tool — synthesizes `ra11y.config.ts` from scan state (wrappers + exclude + commented rules stub). Deterministic; no LLM. [round 2, agent 10]
 - [ ] **Q2R2-PROPOSE-BASE** `propose_baseline` MCP tool — categorizes each would-be entry with a machine-readable reason code (`wrapper-undetected` / `third-party-html` / `legacy-route` / `design-system-internal`). Reviewers triage by category. [round 2, agent 10]
 
