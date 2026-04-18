@@ -144,4 +144,77 @@ describe("loadConfig precedence", () => {
     expect(loaded.nativeWrappers).toEqual([]);
     expect(loaded.nativeWrapperElements).toEqual({});
   });
+
+  it("flattens nested nativeWrappers to dotted-path compound names", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: {
+          Card: { Header: "div", Body: "div" },
+          Composer: { SendButton: "button" },
+        },
+      }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect([...loaded.nativeWrappers].sort()).toEqual([
+      "Card.Body",
+      "Card.Header",
+      "Composer.SendButton",
+    ]);
+    expect(loaded.nativeWrapperElements).toEqual({
+      "Card.Body": "div",
+      "Card.Header": "div",
+      "Composer.SendButton": "button",
+    });
+  });
+
+  it("accepts mixed flat + nested nativeWrappers in one object", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: {
+          Button: "button",
+          Card: { Header: "div" },
+        },
+      }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect([...loaded.nativeWrappers].sort()).toEqual(["Button", "Card.Header"]);
+    expect(loaded.nativeWrapperElements).toEqual({
+      Button: "button",
+      "Card.Header": "div",
+    });
+  });
+
+  it("supports deeper nesting (3+ levels) via repeated dotted-path flattening", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: {
+          Table: {
+            Row: {
+              Cell: "td",
+            },
+          },
+        },
+      }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.nativeWrappers).toEqual(["Table.Row.Cell"]);
+    expect(loaded.nativeWrapperElements).toEqual({ "Table.Row.Cell": "td" });
+  });
+
+  it("preserves glob patterns inside nested keys without munging the dotted path", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: {
+          Card: { "*Section": "div" },
+        },
+      }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.nativeWrappers).toEqual(["Card.*Section"]);
+    expect(loaded.nativeWrapperElements).toEqual({ "Card.*Section": "div" });
+  });
 });

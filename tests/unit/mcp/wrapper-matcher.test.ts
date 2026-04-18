@@ -82,6 +82,33 @@ describe("nameMatchesAnyWrapper", () => {
   });
 });
 
+describe("matchesWrapperPattern — compound (dotted) names (Q2R2-COMPOUND)", () => {
+  it("matches a literal compound wrapper name segment-for-segment", () => {
+    expect(matchesWrapperPattern("Card.Header", "Card.Header")).toBe(true);
+    expect(matchesWrapperPattern("Card.Body", "Card.Header")).toBe(false);
+    // Namespace prefix alone is not a match — literal compares full string.
+    expect(matchesWrapperPattern("Card", "Card.Header")).toBe(false);
+    expect(matchesWrapperPattern("Card.Header", "Card")).toBe(false);
+  });
+
+  it("flat glob `*Header` does NOT cross a namespace dot into `Card.Header`", () => {
+    // Identifier-chars wildcard intentionally excludes `.` — keeps flat
+    // globs from leaking into compound-component namespaces.
+    expect(matchesWrapperPattern("Card.Header", "*Header")).toBe(false);
+    expect(matchesWrapperPattern("Card.Header", "Card*")).toBe(false);
+  });
+
+  it("namespace-scoped glob `Card.*Section` matches compound subcomponents", () => {
+    // Flattened form of `{ Card: { "*Section": "div" } }` — the literal
+    // `.` stays literal, the `*` expands within the final segment.
+    expect(matchesWrapperPattern("Card.HeaderSection", "Card.*Section")).toBe(true);
+    expect(matchesWrapperPattern("Card.FooterSection", "Card.*Section")).toBe(true);
+    expect(matchesWrapperPattern("Card.Header", "Card.*Section")).toBe(false);
+    // Different namespace does NOT match — the literal `Card.` prefix is required.
+    expect(matchesWrapperPattern("Panel.HeaderSection", "Card.*Section")).toBe(false);
+  });
+});
+
 describe("wrapperPatternToTagRegexSource", () => {
   it("returns an escaped literal for non-glob patterns", () => {
     const source = wrapperPatternToTagRegexSource("Button");

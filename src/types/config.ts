@@ -26,6 +26,27 @@ export interface ConfigOverride {
   readonly rules?: Readonly<Record<string, RuleSetting>>;
 }
 
+/**
+ * Nested mapping of wrapper component name → native element. Enables
+ * compound components (`<Card.Header>`, `<Composer.SendButton>`) — each
+ * nested level becomes a segment of the component's dotted JSX tag name.
+ *
+ * A leaf value is the native element the wrapper renders (`"div"`,
+ * `"button"`, `"a"`). A nested object maps further subcomponents of
+ * that namespace:
+ *
+ *     { Card: { Header: "div", Body: "div" }, Composer: { SendButton: "button" } }
+ *
+ * flattens to the dotted names `Card.Header`, `Card.Body`,
+ * `Composer.SendButton` — exactly what the TSX parser produces for
+ * `<Card.Header>` (tag name includes the dot). Arbitrary nesting depth
+ * is supported; each segment may itself be a glob pattern (`*Section`)
+ * following the same rules as the flat object form.
+ */
+export interface NativeWrapperMap {
+  readonly [name: string]: string | NativeWrapperMap;
+}
+
 /** One project inside a monorepo — workspace-style runs. */
 export interface ProjectConfig {
   readonly name: string;
@@ -52,7 +73,7 @@ export interface Config {
    * Project-level acknowledgment that replaces sprinkling inline pragmas at
    * every call site.
    *
-   * Two accepted shapes:
+   * Three accepted shapes:
    *   - `string[]` — `["Button", "ActionButton", "IconButton"]`. Opaque
    *     names; rules only know "skip this, it's a wrapper." Legacy shape,
    *     still the most common.
@@ -61,13 +82,20 @@ export interface Config {
    *     that depend on the underlying semantics (link-descriptive-text on
    *     `"a"`-mapped wrappers, alt-text on `"img"`-mapped wrappers) can
    *     run through the wrapper as if it were the native tag.
+   *   - {@link NativeWrapperMap} — nested object form for compound
+   *     components: `{ Card: { Header: "div", Body: "div" }, Composer:
+   *     { SendButton: "button" } }`. Nested keys flatten to dotted
+   *     paths (`Card.Header`, `Composer.SendButton`) matching the JSX
+   *     tag names the TSX parser emits for `<Card.Header>` call sites.
+   *     Leaves and nested maps may be freely mixed at any level
+   *     (`{ Button: "button", Card: { Header: "div" } }`).
    *
-   * Both shapes produce the same `LoadedConfig.nativeWrappers: string[]`
-   * for existing consumers. The object form also populates
+   * All shapes produce the same `LoadedConfig.nativeWrappers: string[]`
+   * for existing consumers. The object/nested forms also populate
    * `LoadedConfig.nativeWrapperElements: Record<string, string>` — new,
    * optional, consumed only by rules that opt in.
    */
-  readonly nativeWrappers?: readonly string[] | Readonly<Record<string, string>>;
+  readonly nativeWrappers?: readonly string[] | Readonly<Record<string, string>> | NativeWrapperMap;
   /** Per-directory overrides (last match wins). */
   readonly overrides?: readonly ConfigOverride[];
   /** Monorepo/workspace projects. */

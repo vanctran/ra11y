@@ -23,7 +23,13 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import type { Config, ConfigOverride, LoadedConfig, RuleSetting } from "../types/config.ts";
+import type {
+  Config,
+  ConfigOverride,
+  LoadedConfig,
+  NativeWrapperMap,
+  RuleSetting,
+} from "../types/config.ts";
 import { DEFAULT_CONFIG } from "./defaults.ts";
 
 const CONFIG_FILENAMES = [
@@ -142,15 +148,23 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
 }
 
 /**
- * Accepts either the string-array form (`["Button", "Link"]`) or the
- * object form (`{ Button: "button", Link: "a" }`) of `Config.nativeWrappers`
- * and returns the canonical `LoadedConfig` pair: names for the existing
- * silence-on-wrapper callers, elements for rules that want the mapping.
+ * Normalizes every accepted shape of `Config.nativeWrappers` into the
+ * canonical `LoadedConfig` pair: a flat name list for existing
+ * silence-on-wrapper callers, and a flat wrapper → native-element map
+ * for rules that opt into mapped wrappers.
+ *
+ * Three input shapes collapse to the same output shape:
+ *   - `["Button", "Link"]` → names only, empty element map
+ *   - `{ Button: "button", Link: "a" }` → names + flat element map
+ *   - `{ Card: { Header: "div" }, Composer: { SendButton: "button" } }` →
+ *     nested keys flatten to dotted paths (`Card.Header`,
+ *     `Composer.SendButton`) in both outputs, so `<Card.Header>` JSX
+ *     call sites (whose tag names already contain the dot) silence and
+ *     map identically to a flat `"Card.Header"` declaration.
+ *
  * An un-supplied field falls back to the defaults' empties.
  */
-function normalizeNativeWrappers(
-  raw: readonly string[] | Readonly<Record<string, string>> | undefined,
-): {
+function normalizeNativeWrappers(raw: readonly string[] | NativeWrapperMap | undefined): {
   readonly nativeWrappers: readonly string[];
   readonly nativeWrapperElements: Readonly<Record<string, string>>;
 } {
@@ -163,7 +177,31 @@ function normalizeNativeWrappers(
   if (Array.isArray(raw)) {
     return { nativeWrappers: raw, nativeWrapperElements: {} };
   }
-  const map = raw as Readonly<Record<string, string>>;
-  const names = Object.keys(map).sort();
-  return { nativeWrappers: names, nativeWrapperElements: map };
+  const elements: Record<string, string> = {};
+  flattenWrapperMap(raw as NativeWrapperMap, "", elements);
+  const names = Object.keys(elements).sort();
+  return { nativeWrappers: names, nativeWrapperElements: elements };
+}
+
+/**
+ * Walks a (possibly nested) wrapper map and writes every leaf into the
+ * accumulator under its dotted path. Leaf = string (the native element);
+ * nested object = descend with `prefix + key + "."`. Non-string,
+ * non-object values at a leaf are skipped silently — the loader's
+ * fall-back-to-defaults policy applies to malformed subtrees the same
+ * way it applies to a broken file.
+ */
+function flattenWrapperMap(
+  node: NativeWrapperMap,
+  prefix: string,
+  out: Record<string, string>,
+): void {
+  for (const [key, value] of Object.entries(node)) {
+    const path = prefix === "" ? key : `${prefix}.${key}`;
+    if (typeof value === "string") {
+      out[path] = value;
+    } else if (value !== null && typeof value === "object") {
+      flattenWrapperMap(value as NativeWrapperMap, path, out);
+    }
+  }
 }

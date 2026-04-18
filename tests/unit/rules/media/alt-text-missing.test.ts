@@ -179,5 +179,25 @@ describe("rule media/alt-text-missing", () => {
       const violations = runRule(rule, `const X = <UnknownWrapper src="u.png" />;`);
       expect(violations).toHaveLength(0);
     });
+
+    it("fires on a dotted compound wrapper name (Q2R2-COMPOUND) mapped to img", () => {
+      // Flattened form of `{ Media: { Avatar: "img" } }` from the config
+      // loader — the dotted key drives findJsxElementsByTag via
+      // ctx.wrappersForElement, matching the <Media.Avatar> tag name.
+      const violations = runRule(rule, `const X = <Media.Avatar src="u.png" />;`, {
+        nativeWrapperElements: { "Media.Avatar": "img" },
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.ruleId).toBe("media/alt-text-missing");
+    });
+
+    it("silences the compound wrapper call site when alt is supplied", () => {
+      const violations = runRule(
+        rule,
+        `const X = <Media.Avatar src="u.png" alt="User avatar" />;`,
+        { nativeWrapperElements: { "Media.Avatar": "img" } },
+      );
+      expect(violations).toHaveLength(0);
+    });
   });
 });
