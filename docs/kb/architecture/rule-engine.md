@@ -27,8 +27,12 @@ interface ScanInputs {
 interface ScanProducts {
   readonly result: ScanResult;
   readonly report: ReportData;
+  readonly perRuleCoverage: readonly PerRuleCoverage[];
+  readonly ledger: EvidenceLedger;
 }
 ```
+
+`perRuleCoverage` and `ledger` ride alongside `result`/`report` rather than inside `ScanResult` itself — the MCP layer is the sole consumer for the former and the latter is derived per scan, so keeping both off the shared `ScanResult` avoids churning every fixture that builds a `ScanResult` literal when the shape evolves.
 
 Inputs are already-parsed files — the engine is deliberately decoupled from file discovery and parsing. That lets tests drive the engine end-to-end with synthetic in-memory ASTs (see `scripts/bench.ts` for the benchmark harness, and `tests/helpers/run-rule.ts` for the unit-test helper).
 
@@ -170,6 +174,21 @@ After the violation list is complete, `buildReportData()` produces the `ReportDa
 - `manualReviewNeeded` — criteria with `automatable: "manual"` (the whole standard's manual-only list, deduplicated across standards)
 
 This is the data behind `--coverage`, `--vpat`, `--certification`, and `--checklist`.
+
+## Evidence ledger
+
+After `buildReportData()`, `buildEvidenceLedger()` in `src/engine/evidence-ledger.ts` folds violations and review candidates into a per-criterion `EvidenceLedger` on `ScanProducts.ledger`. It's the substrate for conformance claims — a shape that reconciles multiple sources (static findings today; attestations, runtime ingests, and sampling verdicts in later phases) per criterion instead of leaving them as parallel arrays on `ScanResult` and `ReportData`.
+
+Each entry carries the criterion ID, its automatability, every source that spoke to it, and a derived `status`:
+
+- **`"fail"`** — at least one `static` source (a violation cites this criterion).
+- **`"pass"`** — automatable criterion (not `manual`) with no `static` source.
+- **`"unknown"`** — manual criterion, or no source speaks to it. Candidates point a reviewer at locations but do not move a criterion out of `"unknown"` — they're not assertions.
+- **`"n/a"`** — reserved for Phase 2+ (attestations declaring a criterion inapplicable).
+
+The derivation is a pure function over `sources[]`; adding a producer in a later phase never changes the shape or forces a consumer migration. Equivalence fan-out is already applied upstream — `Violation.criteria` contains every equivalent criterion ID, so indexing on `v.criteria` directly propagates one finding across every equivalent standard.
+
+See [ADR 0011](../../adr/0011-evidence-as-first-class-primitive.md) for the full three-phase rollout.
 
 ## Extension points
 
