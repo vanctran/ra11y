@@ -67,6 +67,15 @@ export interface ScanInputs {
    * (AAA-only) won't fire at `"AA"`. Undefined = no level gating.
    */
   readonly level?: ConformanceLevel;
+  /**
+   * Wrapper component name → native element tag, as carried on
+   * `LoadedConfig.nativeWrapperElements` when the user supplied the
+   * object form of `Config.nativeWrappers`. Surfaces to rules that opt
+   * in via {@link Rule.wrapperTreatsAsElement} through
+   * `RuleContext.wrappersForElement`. Undefined or empty = rules see no
+   * additional wrappers, identical to pre-Q2-WRAPMAP-RULES behaviour.
+   */
+  readonly nativeWrapperElements?: Readonly<Record<string, string>>;
 }
 
 export interface ScanProducts {
@@ -108,6 +117,9 @@ export function runScan(inputs: ScanInputs): ScanProducts {
       disableMap: file.disableMap ?? new Map(),
       rules: inputs.rules,
       filter,
+      ...(inputs.nativeWrapperElements !== undefined && {
+        nativeWrapperElements: inputs.nativeWrapperElements,
+      }),
     });
     for (const v of perFile) allViolations.push(v);
   }

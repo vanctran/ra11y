@@ -50,7 +50,7 @@ function runOneRule(rule: Rule, input: RuleRunnerInput, out: Violation[]): void 
   const citedCriteria = input.filter.citedCriteria(rule);
   const citedCriteriaTitles = input.filter.citedCriteriaTitles(rule);
   const sink: EmittedViolation[] = [];
-  const ctx = buildContext(input, sink);
+  const ctx = buildContext(input, sink, rule.wrapperTreatsAsElement);
 
   try {
     invokeLifecycle(rule, ctx, input.ast.root, sink);

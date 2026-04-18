@@ -20,6 +20,13 @@ import { computeGroupKey, UNKNOWN_SHAPE } from "../../src/utils/group-key.ts";
 export interface RunRuleOptions {
   readonly filePath?: string;
   readonly enabledStandards?: readonly string[];
+  /**
+   * Wrapper component name → native element tag, mirroring
+   * `LoadedConfig.nativeWrapperElements`. Rules opted in via
+   * `wrapperTreatsAsElement` see the matching wrapper names on
+   * `ctx.wrappersForElement` when this is set.
+   */
+  readonly nativeWrapperElements?: Readonly<Record<string, string>>;
 }
 
 export function runRule(
@@ -37,8 +44,12 @@ export function runRule(
       ast,
       enabledStandards: new Set(options.enabledStandards ?? ["wcag22", "wcag21"]),
       disableMap: new Map(),
+      ...(options.nativeWrapperElements !== undefined && {
+        nativeWrapperElements: options.nativeWrapperElements,
+      }),
     },
     sink,
+    rule.wrapperTreatsAsElement,
   );
   invokeLifecycle(rule, ctx, ast, filePath, source, sink);
   return sink.map((v) => shapeViolation(rule, v, filePath, source, ast));

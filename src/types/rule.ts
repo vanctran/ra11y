@@ -87,6 +87,17 @@ export interface Rule {
   readonly docs: RuleDocs;
   /** Optional rename/alias path — see semver policy. */
   readonly deprecatedBy?: string;
+  /**
+   * Opt-in: the native HTML tag this rule's JSX checks care about (`"a"`,
+   * `"img"`, `"input"`, …). When set, the engine exposes
+   * {@link RuleContext.wrappersForElement} — the set of wrapper component
+   * names whose `LoadedConfig.nativeWrapperElements` mapping targets this
+   * tag. The rule iterates those names alongside the native tag so a
+   * declared `<Link>`-renders-`<a>` wrapper runs through the same
+   * link-text check as a bare `<a>`. Non-element-dependent rules leave
+   * the field unset and keep ignoring the map.
+   */
+  readonly wrapperTreatsAsElement?: string;
   /** Called once per applicable file before the node walk. Optional. */
   beforeFile?(ctx: FileContext): void;
   /** Node-scoped check — called for every matching node. */
@@ -104,6 +115,14 @@ export interface RuleContext {
   readonly language: Language;
   readonly ast: unknown; // narrowed by language in ast-helpers
   readonly enabledStandards: ReadonlySet<string>;
+  /**
+   * PascalCase component names the rule should treat as its opted-in
+   * native element (via {@link Rule.wrapperTreatsAsElement}). Derived from
+   * `LoadedConfig.nativeWrapperElements` filtered by the rule's target
+   * tag. Empty set when the rule hasn't opted in, when no config was
+   * supplied, or when no mapped wrapper renders this rule's tag.
+   */
+  readonly wrappersForElement: ReadonlySet<string>;
   /** Emit a violation without specifying ruleId/criteria — the engine fills them in. */
   emit(violation: EmittedViolation): void;
   /** Is the given (line, ruleId) suppressed by an inline disable pragma? */
