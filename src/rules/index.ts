@@ -5,6 +5,7 @@
  */
 
 import type { Rule } from "../types/rule.ts";
+import { rule as conflictingRole } from "./aria/conflicting-role.ts";
 import { rule as hiddenFocus } from "./aria/hidden-focus.ts";
 import { rule as invalidRole } from "./aria/invalid-role.ts";
 import { rule as liveRegionValid } from "./aria/live-region-valid.ts";
@@ -64,6 +65,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   buttonName,
   cancellation,
   characterShortcuts,
+  conflictingRole,
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
@@ -117,6 +119,7 @@ export {
   buttonName,
   cancellation,
   characterShortcuts,
+  conflictingRole,
   contrastEnhanced,
   contrastMinimum,
   contrastNonText,
