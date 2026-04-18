@@ -104,7 +104,7 @@ const SERVER_INSTRUCTIONS = [
   "Consumption tips: verbose `meta` fields (configSource, activeNativeWrappers, rulesEvaluated, filesByExtension) are scan-confidence telemetry — pass them through when explaining a result. `nextStep` on each response tells you the canonical next call.",
   "",
   "Field semantics worth remembering so responses can stay terse:",
-  "  - `activeNativeWrappers`: component names treated as native-element wrappers for the scan — rules that fire on bare `<div onClick>` skip instances of these components. Configure via `ra11y.config.ts` `nativeWrappers` or the `configure` tool.",
+  "  - `activeNativeWrappers`: tagged list of component names treated as native-element wrappers for the scan — rules that fire on bare `<div onClick>` skip instances of these components. Each entry is `{ name, source: 'config'|'autoDetect'|'session', confirmed? }`; `confirmed` is populated only for `source: 'autoDetect'` (true = the one-hop AST probe matched a native interactive root; false = the scanner considered the name but didn't trust it, so findings stay live). Configure via `ra11y.config.ts` `nativeWrappers`, `autoDetectWrappers: true` on scan_project, or the `sessionConfigure` tool.",
   "  - `limitations` (when present on a clean scan): runtime-only checks the static scanner can't perform; don't claim a11y conformance on the strength of this tool alone.",
 ].join("\n");
 

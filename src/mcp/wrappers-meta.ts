@@ -18,7 +18,7 @@ import { matchesWrapperPattern, wrapperPatternToTagRegexSource } from "./wrapper
 /**
  * Auto-detected wrapper candidates split by the one-hop AST probe
  * from {@link classifyWrapperCandidates} (P1-F). `confirmed` wrappers
- * flow into `activeNativeWrappers` and silently silence findings;
+ * flow into the effective allowlist and silently silence findings;
  * `assumed` wrappers stay opaque (rules fire as if the name were NOT
  * in the wrapper list) but are still surfaced in the response so the
  * agent can see the candidate and verify by reading the source.
@@ -36,10 +36,10 @@ export interface NativeWrapperSources {
   /**
    * Auto-detected for THIS scan only (e.g. scan_project's
    * `autoDetectWrappers: true`). Tracked separately so the
-   * session-override audit (`sessionNativeWrappers` +
-   * `sessionOverridesNote`) doesn't mis-attribute them to a stale
-   * configure() call. Scan-scoped by contract — never touches
-   * session.config.
+   * session-override audit (`sessionOverridesNote` + the
+   * `source: "session"` entries in the unified `activeNativeWrappers`
+   * list) doesn't mis-attribute them to a stale configure() call.
+   * Scan-scoped by contract — never touches session.config.
    *
    * Split into `confirmed` vs `assumed` so that only confirmed
    * wrappers (those whose defining file's JSX root is a native
@@ -69,7 +69,7 @@ export interface ResolvedWrapperSources {
 /**
  * Merges the three native-wrapper sources (config file, session,
  * auto-detect) and derives the session-only audit list used for the
- * `sessionNativeWrappers` meta warning. Auto-detected wrappers are
+ * `sessionOverridesNote` meta warning. Auto-detected wrappers are
  * deliberately excluded from `sessionOnly` — they come from this scan,
  * not a stale configure() call, and flow into their own
  * `autoDetectedWrappers` meta block.
@@ -116,35 +116,68 @@ export function resolveWrapperSources(
 }
 
 /**
- * Assembles the wrapper-related meta block: activeNativeWrappers +
- * provenance (bySource) + session-only audit + unused-in-config audit.
- * Each sub-block is conditionally included only when there's content
- * to report — no sentinel-empty fields.
+ * The wrapper source tag. `source` names the channel the wrapper was
+ * registered through for this scan — `"config"` for ra11y.config.ts,
+ * `"autoDetect"` for an inline `autoDetectWrappers: true` pass, and
+ * `"session"` for a prior `configure()` call layered on top of the
+ * file. One entry is emitted per (name × channel) so a name declared
+ * in two channels appears twice — agents triaging "why is X active?"
+ * see every channel independently.
+ */
+export type WrapperSource = "config" | "autoDetect" | "session";
+
+/**
+ * One entry in the unified `activeNativeWrappers` tagged list (Q2R2-
+ * WRAPPER-SOURCES). Replaces the former trio of `activeNativeWrappers:
+ * string[]` + `activeNativeWrappersBySource: { fromConfig, fromSession,
+ * fromAutoDetect }` + `sessionNativeWrappers: string[]` with one shape
+ * the agent can iterate without cross-referencing three fields.
+ *
+ * `confirmed` is populated ONLY for `source: "autoDetect"` entries
+ * (P1-F): `true` when the one-hop AST probe found a native interactive
+ * root in the defining file, `false` when the probe could not confirm
+ * and the name stays opaque (rules still fire on it). Omitted for
+ * `"config"` and `"session"` — those are author-supplied, so the
+ * confirmed-vs-assumed distinction does not apply. Conditional-spread
+ * at the assembly site per CLAUDE.md §1 "Ambiguous field shapes are
+ * dishonest."
+ */
+export interface ActiveNativeWrapper {
+  readonly name: string;
+  readonly source: WrapperSource;
+  readonly confirmed?: boolean;
+}
+
+/**
+ * Assembles the wrapper-related meta block: a unified tagged
+ * `activeNativeWrappers` list, the session-override audit prose, and
+ * the unused-in-config audit. Each sub-block is conditionally
+ * included only when there's content to report — no sentinel-empty
+ * fields.
  */
 export function wrappersMetaBlock(args: {
-  wrappers: readonly string[];
   sessionOnly: readonly string[];
   unusedWrappers: readonly string[];
   wrapperProvenance: ResolvedWrapperSources["bySource"];
 }): Record<string, unknown> {
-  const { wrappers, sessionOnly, unusedWrappers, wrapperProvenance } = args;
+  const { sessionOnly, unusedWrappers, wrapperProvenance } = args;
   const out: Record<string, unknown> = {};
-  // The surface contract: include `activeNativeWrappers` (and the
-  // provenance block) when ANY wrapper signal is present — effective
-  // allowlist or auto-detect noise (including `assumed` names that
-  // don't reach the allowlist). Without this, a scan that only found
-  // assumed wrappers would look identical to a scan with no wrappers
-  // at all, hiding the "here's what I considered but didn't trust"
-  // signal the agent needs to act on.
-  const bySource = buildWrapperBySource(wrapperProvenance);
-  if (wrappers.length > 0) out["activeNativeWrappers"] = [...wrappers];
-  if (Object.keys(bySource).length > 0) out["activeNativeWrappersBySource"] = bySource;
+  // The surface contract: emit `activeNativeWrappers` when ANY wrapper
+  // signal is present — including auto-detect `assumed` names that
+  // don't reach the effective allowlist. Without this, a scan that
+  // found only assumed wrappers would look identical to a scan with
+  // none, hiding the "here's what I considered but didn't trust"
+  // signal the agent needs to investigate.
+  const entries = buildActiveWrapperEntries(wrapperProvenance);
+  if (entries.length > 0) out["activeNativeWrappers"] = entries;
   if (sessionOnly.length > 0) {
-    // Split visibility: agents editing ra11y.config.ts need to see when
-    // a session configure() call is layering extras on top of the file.
-    // Without this, an ad-hoc "add Button for this session" persists
-    // silently even after the file is edited to remove it.
-    out["sessionNativeWrappers"] = sessionOnly;
+    // Agents editing ra11y.config.ts need to know when a session
+    // configure() call is layering extras on top of the file — without
+    // this prose, an ad-hoc "add Button for this session" persists
+    // silently even after the file is edited to remove it. The
+    // per-entry `source: "session"` tag in `activeNativeWrappers`
+    // surfaces which names are session-only; this note explains the
+    // operational consequence.
     out["sessionOverridesNote"] =
       `${sessionOnly.length} wrapper${sessionOnly.length === 1 ? "" : "s"} added by this session's configure() call, not in ra11y.config.ts. If you've since removed these from the file, the session additions still apply for this connection — restart the MCP server or call configure() again to sync.`;
   }
@@ -161,43 +194,36 @@ export function wrappersMetaBlock(args: {
 }
 
 /**
- * Builds the `activeNativeWrappersBySource` provenance object.
- * Extracted from `wrappersMetaBlock` so each function stays within
- * Biome's cognitive-complexity cap. Returns `{}` when no source has
- * any names — the caller decides whether to attach the empty object.
+ * Folds the `{fromConfig, fromSession, fromAutoDetect}` provenance
+ * into the unified tagged list. One entry per (name × channel) — a
+ * name declared in both config and session emits two entries so the
+ * agent sees every origin independently. Deterministic order: by
+ * source (`config` < `autoDetect` < `session`), then by name. Within
+ * `autoDetect`, confirmed entries come before assumed so the agent
+ * reads the trusted subset first.
  *
- * `fromAutoDetect` is itself a `{ confirmed, assumed }` split (P1-F):
- * confirmed names flow into `activeNativeWrappers` and silence
- * findings; assumed names are surfaced here so the agent sees the
- * candidate but the scanner does NOT silently trust it. Each
- * sub-list is omitted when empty to keep the shape terse (CLAUDE.md
- * §1 "Ambiguous field shapes are dishonest").
+ * `confirmed` rides along only for `autoDetect` entries (P1-F — the
+ * probe is the only channel that can produce this flag). Config and
+ * session entries omit the field entirely per CLAUDE.md §1 "Ambiguous
+ * field shapes are dishonest": `confirmed` on an author-supplied name
+ * would be noise at best and a silent lie at worst.
  */
-function buildWrapperBySource(
+function buildActiveWrapperEntries(
   provenance: ResolvedWrapperSources["bySource"],
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (provenance.fromConfig.length > 0) out["fromConfig"] = provenance.fromConfig;
-  if (provenance.fromSession.length > 0) out["fromSession"] = provenance.fromSession;
-  const autoDetect = buildAutoDetectBlock(provenance.fromAutoDetect);
-  if (autoDetect !== null) out["fromAutoDetect"] = autoDetect;
-  return out;
-}
-
-/**
- * Builds the `fromAutoDetect` sub-block or returns null when both
- * sub-lists are empty. Empty sub-lists are omitted individually so
- * `{}` never ships — a field that's present must carry signal.
- */
-function buildAutoDetectBlock(
-  autoDetect: AutoDetectedWrappers,
-): Record<string, readonly string[]> | null {
-  const confirmedHas = autoDetect.confirmed.length > 0;
-  const assumedHas = autoDetect.assumed.length > 0;
-  if (!(confirmedHas || assumedHas)) return null;
-  const out: Record<string, readonly string[]> = {};
-  if (confirmedHas) out["confirmed"] = autoDetect.confirmed;
-  if (assumedHas) out["assumed"] = autoDetect.assumed;
+): readonly ActiveNativeWrapper[] {
+  const out: ActiveNativeWrapper[] = [];
+  for (const name of [...provenance.fromConfig].sort()) {
+    out.push({ name, source: "config" });
+  }
+  for (const name of [...provenance.fromAutoDetect.confirmed].sort()) {
+    out.push({ name, source: "autoDetect", confirmed: true });
+  }
+  for (const name of [...provenance.fromAutoDetect.assumed].sort()) {
+    out.push({ name, source: "autoDetect", confirmed: false });
+  }
+  for (const name of [...provenance.fromSession].sort()) {
+    out.push({ name, source: "session" });
+  }
   return out;
 }
 

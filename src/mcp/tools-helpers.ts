@@ -548,7 +548,7 @@ export async function runScanAndFormat(
       rulesEvaluated: activeRules.length,
       durationMs: Math.round(result.durationMs),
       standards: [...result.enabledStandards].sort(),
-      ...wrappersMetaBlock({ wrappers, sessionOnly, unusedWrappers, wrapperProvenance }),
+      ...wrappersMetaBlock({ sessionOnly, unusedWrappers, wrapperProvenance }),
       // Honest meta about what static analysis couldn't reach, so the
       // agent can calibrate confidence in "automated clean." Each entry
       // is a structural gap, not a heuristic guess — the fields are

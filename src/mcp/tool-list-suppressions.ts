@@ -54,6 +54,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { type ActiveNativeWrapper, resolveWrapperSources } from "./wrappers-meta.ts";
 
 /**
  * One pragma hit. Emitted one entry per (line × named token); a
@@ -113,9 +114,16 @@ export const listSuppressionsTool: McpTool = {
     const effective = session.effectiveRules(projectConfig);
     const rulesEvaluated = applyRuleSettings(BUILTIN_RULES, effective).length;
 
-    const activeNativeWrappers = [
-      ...new Set([...projectConfig.nativeWrappers, ...session.config.nativeWrappers]),
-    ];
+    // Unified tagged list (Q2R2-WRAPPER-SOURCES). `list_suppressions`
+    // doesn't run the auto-detect pass, so fromAutoDetect stays empty
+    // — every entry carries `source: "config"` or `"session"` (the
+    // `confirmed` flag is omitted for these channels per the
+    // wrappers-meta contract).
+    const { bySource } = resolveWrapperSources(
+      { fromFile: projectConfig.nativeWrappers, fromSession: session.config.nativeWrappers },
+      session,
+    );
+    const activeNativeWrappers = buildListSuppressionsWrappers(bySource);
 
     return textResult({
       suppressions: entries,
@@ -124,14 +132,39 @@ export const listSuppressionsTool: McpTool = {
         configSource: projectConfig.sourcePath,
         filesScanned: files.length,
         rulesEvaluated,
-        ...(activeNativeWrappers.length > 0
-          ? { activeNativeWrappers: [...activeNativeWrappers].sort() }
-          : {}),
+        ...(activeNativeWrappers.length > 0 ? { activeNativeWrappers } : {}),
       },
       nextStep: buildNextStep(entries),
     });
   },
 };
+
+/**
+ * Builds the tagged-entry list for `list_suppressions`. Config entries
+ * come first (alphabetical), then session entries (alphabetical). No
+ * `confirmed` field on either — the flag is auto-detect only (P1-F),
+ * and this tool never auto-detects. Per CLAUDE.md §1 "Ambiguous field
+ * shapes are dishonest," `confirmed` is omitted entirely for
+ * author-supplied sources.
+ */
+function buildListSuppressionsWrappers(bySource: {
+  readonly fromConfig: readonly string[];
+  readonly fromSession: readonly string[];
+}): readonly ActiveNativeWrapper[] {
+  const out: ActiveNativeWrapper[] = [];
+  const seen = new Set<string>();
+  for (const name of [...bySource.fromConfig].sort()) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, source: "config" });
+  }
+  for (const name of [...bySource.fromSession].sort()) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, source: "session" });
+  }
+  return out;
+}
 
 /**
  * Walks each parsed file's source for pragma declarations and flattens

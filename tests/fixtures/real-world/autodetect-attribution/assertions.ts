@@ -4,8 +4,9 @@
  * Guards the channel separation between auto-detected wrappers and the
  * session-override audit. When `autoDetectWrappers: true` is set, detected
  * component names must arrive via `fromAutoDetect` — not `fromSession` —
- * so `sessionNativeWrappers` stays absent and agents are not misled into
- * thinking a configure() call registered them.
+ * so no entry in the unified `activeNativeWrappers` tagged list carries
+ * `source: "session"` and the `sessionOverridesNote` prose stays absent,
+ * avoiding a false implication that a configure() call registered them.
  *
  * Source: first surfaced as a real-world gap during harness wiring of the
  * autoDetectWrappers flag (ADR 0006 follow-up). The fixture is minimal
@@ -17,11 +18,11 @@ import type { FixtureAssertions } from "../runner.ts";
 
 export const assertions: FixtureAssertions = {
   description:
-    "autoDetectWrappers: true registers Button and Link via fromAutoDetect, not fromSession, so sessionNativeWrappers stays absent",
+    "autoDetectWrappers: true registers Button and Link via the autoDetect channel (not session), so activeNativeWrappers entries carry source: 'autoDetect' and sessionOverridesNote stays absent",
 
   origin: {
     notes:
-      "Harness wiring follow-up for ADR 0006: the fixture guards that detected wrappers use the fromAutoDetect channel and never contaminate the session-override audit (sessionNativeWrappers).",
+      'Harness wiring follow-up for ADR 0006: the fixture guards that detected wrappers use the fromAutoDetect channel and never contaminate the session-override audit (sessionOverridesNote + `source: "session"` entries in activeNativeWrappers).',
   },
 
   toolInput: {
@@ -33,7 +34,10 @@ export const assertions: FixtureAssertions = {
     // files before we make any behavioral assertions.
     { kind: "zero-parse-errors" },
 
-    // Button and Link must be active for this scan (the detector found them).
+    // Button and Link must be active for this scan. The unified tagged
+    // list carries entries shaped `{ name, source, confirmed? }`; the
+    // fixture harness's `contains` predicate treats an object entry as
+    // a match when its `name` equals the needle.
     {
       kind: "meta-field",
       path: ["activeNativeWrappers"],
@@ -45,28 +49,30 @@ export const assertions: FixtureAssertions = {
       predicate: { contains: "Link" },
     },
 
-    // Provenance: both names must land in fromAutoDetect.confirmed
-    // (they render real <button> / <a> roots), not fromSession or
-    // fromConfig. The probe is a one-hop AST check (P1-F): Button.tsx
-    // and Link.tsx whose JSX root is a native interactive element
-    // confirm; anything non-native stays in `assumed`.
+    // The session-override prose MUST be absent. If it were present it
+    // would falsely imply a configure() call registered these names
+    // and that restarting the MCP server would remove them.
     {
       kind: "meta-field",
-      path: ["activeNativeWrappersBySource", "fromAutoDetect", "confirmed"],
-      predicate: { contains: "Button" },
-    },
-    {
-      kind: "meta-field",
-      path: ["activeNativeWrappersBySource", "fromAutoDetect", "confirmed"],
-      predicate: { contains: "Link" },
+      path: ["sessionOverridesNote"],
+      predicate: "absent",
     },
 
-    // The session-override audit field MUST be absent. If it were present
-    // it would falsely imply a configure() call registered these names and
-    // that restarting the MCP server would remove them.
+    // The legacy `sessionNativeWrappers` field must also be absent — it
+    // was collapsed into the unified tagged list in Q2R2-WRAPPER-SOURCES.
+    // Callers relying on the old shape must migrate to reading
+    // `activeNativeWrappers` entries tagged `source: "session"`.
     {
       kind: "meta-field",
       path: ["sessionNativeWrappers"],
+      predicate: "absent",
+    },
+
+    // The legacy `activeNativeWrappersBySource` provenance object must
+    // also be absent under the collapse — same migration note as above.
+    {
+      kind: "meta-field",
+      path: ["activeNativeWrappersBySource"],
       predicate: "absent",
     },
   ],

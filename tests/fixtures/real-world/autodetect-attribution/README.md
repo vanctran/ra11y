@@ -19,19 +19,22 @@ When auto-detection runs, the detected component names must travel through
 the `fromAutoDetect` channel inside `NativeWrapperSources`, not through
 `fromSession`. This distinction matters because:
 
-- `sessionNativeWrappers` in the meta output is derived from `fromSession`
-  names that are NOT in the config file.
-- Agents reading `sessionNativeWrappers` expect to see names registered by
-  a prior `configure()` call — something that persists until the MCP server
-  is restarted.
+- Entries in the unified `activeNativeWrappers` tagged list are tagged
+  `source: "session"` when they came from a prior `configure()` call,
+  and `sessionOverridesNote` is emitted alongside them.
+- Agents reading `source: "session"` entries (or the `sessionOverridesNote`
+  prose) expect to see names registered by a prior `configure()` call —
+  something that persists until the MCP server is restarted.
 - Auto-detected names are **scan-scoped**: they apply for one scan only and
-  never touch session or project config.
+  never touch session or project config. They must appear as
+  `source: "autoDetect"` entries with a `confirmed` flag from the P1-F
+  AST probe.
 
 If the harness wired auto-detected names through `fromSession` instead of
-`fromAutoDetect`, the meta would show a spurious `sessionNativeWrappers`
-field, causing agents to believe a configure() call is in play and that
-restarting the server would unregister the wrappers — neither of which is
-true.
+`fromAutoDetect`, the meta would show spurious `source: "session"` entries
+and the `sessionOverridesNote` prose, causing agents to believe a
+configure() call is in play and that restarting the server would
+unregister the wrappers — neither of which is true.
 
 ## Why existing tools miss it
 
@@ -39,10 +42,11 @@ axe-core, jsx-a11y, and Pa11y do not model the native-wrapper concept at
 all. The attribution bug is entirely internal to ra11y's wrapper metadata
 plumbing and has no analog in those tools.
 
-ra11y catches the correctness invariant by asserting that `sessionNativeWrappers`
-is absent and that `activeNativeWrappersBySource.fromAutoDetect` contains
-the detected names — a structural check on the MCP response shape that
-agents actually consume.
+ra11y catches the correctness invariant by asserting that no entry in
+`activeNativeWrappers` carries `source: "session"`, that
+`sessionOverridesNote` is absent, and that the detected names appear in
+the tagged list (implicitly tagged `source: "autoDetect"`) — a structural
+check on the MCP response shape that agents actually consume.
 
 ## Fixture structure
 
@@ -51,6 +55,6 @@ source/
   Button.tsx   — native <button> wrapper, PascalCase, ButtonHTMLAttributes
   Link.tsx     — native <a> wrapper, PascalCase, AnchorHTMLAttributes
   App.tsx      — consumer; uses both with onClick (triggering detection)
-assertions.ts  — expects fromAutoDetect populated, sessionNativeWrappers absent
+assertions.ts  — expects autoDetect entries present, sessionOverridesNote + legacy fields absent
 README.md      — this file
 ```

@@ -256,8 +256,9 @@ export async function loadAndScanFixture(
   // detector on the already-parsed files, classify via the one-hop
   // AST probe (P1-F), and pass results as a
   // `{ confirmed, assumed }` split so the session-override audit
-  // (sessionNativeWrappers) is not mis-attributed and only confirmed
-  // names flow into the effective allowlist.
+  // (sessionOverridesNote + `source: "session"` entries in the
+  // unified `activeNativeWrappers` tagged list) is not mis-attributed
+  // and only confirmed names flow into the effective allowlist.
   const autoDetectedNames =
     toolInput.autoDetectWrappers === true
       ? collectWrapperCandidates(files).map((c) => c.component)
@@ -856,10 +857,25 @@ function lookupPath(
   return { found: true, value: cursor };
 }
 
-/** `contains` semantics: substring for strings, `.includes` for arrays. */
+/**
+ * `contains` semantics: substring for strings, `.includes` for arrays
+ * of primitives. For arrays of tagged objects (e.g. the unified
+ * `activeNativeWrappers` list shaped like `{ name, source, confirmed? }`),
+ * matches an entry whose `name` equals the needle — so fixture
+ * assertions can keep using the `{ contains: "Button" }` predicate
+ * after the Q2R2-WRAPPER-SOURCES shape collapse.
+ */
 function containsValue(value: unknown, needle: string): boolean {
   if (typeof value === "string") return value.includes(needle);
-  if (Array.isArray(value)) return value.some((item) => item === needle);
+  if (Array.isArray(value)) {
+    return value.some((item) => {
+      if (item === needle) return true;
+      if (item !== null && typeof item === "object" && "name" in item) {
+        return (item as { readonly name: unknown }).name === needle;
+      }
+      return false;
+    });
+  }
   return false;
 }
 

@@ -266,10 +266,10 @@ const scanFileTool: McpTool = {
 
     // Reuse runScanAndFormat so the `meta` envelope matches scan_project
     // verbatim (rulesEvaluated, filesByExtension, activeNativeWrappers,
-    // activeNativeWrappersBySource, analysisCoverage, suppressions,
-    // standards, durationMs). Without this, scan_file's fix-verify loop
-    // couldn't confirm config parity with the scan_project call that
-    // kicked off the work — the canonical Track Q shape-drift bug.
+    // analysisCoverage, suppressions, standards, durationMs). Without
+    // this, scan_file's fix-verify loop couldn't confirm config parity
+    // with the scan_project call that kicked off the work — the
+    // canonical Track Q shape-drift bug.
     const { formatted } = await runScanAndFormat(
       [parsed],
       session,

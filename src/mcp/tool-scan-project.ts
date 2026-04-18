@@ -263,12 +263,14 @@ function classifyIfAutoDetect(
 /**
  * Builds the `NativeWrapperSources` payload handed to
  * `runScanAndFormat`. `fromAutoDetect` rides its own channel — the
- * session-override audit (sessionNativeWrappers) must not
+ * session-override audit (`sessionOverridesNote` + `source: "session"`
+ * entries in the unified `activeNativeWrappers` list) must not
  * mis-attribute scan-scoped auto-detected names to a stale
  * configure() call. Confirmed vs assumed split carries through to
- * `activeNativeWrappersBySource.fromAutoDetect`. The field is
- * omitted entirely when autoDetect produced no candidates, so the
- * shape never ships an empty `{confirmed: [], assumed: []}`.
+ * the tagged list as `source: "autoDetect"` entries with
+ * `confirmed: true|false`. The `fromAutoDetect` key is omitted
+ * entirely when autoDetect produced no candidates, so the shape
+ * never ships an empty `{confirmed: [], assumed: []}`.
  */
 function buildWrapperSources(
   fromFile: readonly string[],
