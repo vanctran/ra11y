@@ -152,6 +152,50 @@ export const y = 2;`;
   });
 });
 
+describe("suppression/no-reason (JSDoc @ra11y-intentional tag)", () => {
+  // Guards the bare-JSDoc-tag case. The JSDoc variant is not honored
+  // without a reason (unlike the comment pragma which IS honored), so
+  // the candidate's message must invite the author to ADD the reason
+  // rather than documenting an already-active silence.
+  it("flags a bare `@ra11y-intentional` JSDoc tag and phrases the message for the JSDoc variant", () => {
+    const source = `/** @ra11y-intentional */
+export function BadDemo() {
+  return <img src="/x.png" />;
+}`;
+    const out = runFinder(finder, source, { filePath: "BadDemo.tsx" });
+    expect(out.length).toBe(1);
+    expect(out[0]?.criterionId).toBe(SUPPRESSION_NO_REASON_CRITERION);
+    expect(out[0]?.reason).toContain("@ra11y-intentional");
+    expect(out[0]?.reason).toContain("not honored");
+    expect(out[0]?.location.line).toBe(1);
+  });
+
+  // Guards that a reasoned `@ra11y-intentional` tag does NOT fire the
+  // finder. Once the reason is documented the accountability bar is
+  // cleared; flagging it would defeat the point of the honor path.
+  it("does NOT flag a reasoned `@ra11y-intentional` tag", () => {
+    const source = `/** @ra11y-intentional demo of missing alt */
+export function BadDemo() {
+  return <img src="/x.png" />;
+}`;
+    const out = runFinder(finder, source, { filePath: "BadDemo.tsx" });
+    expect(out).toEqual([]);
+  });
+
+  // Guards the JSDoc with additional tags case — a block that contains
+  // `@ra11y-intentional <reason>` plus other tags (`@see`, `@param`)
+  // must still recognize the reason and NOT flag.
+  it("does NOT flag when the JSDoc has other tags alongside a reasoned `@ra11y-intentional`", () => {
+    const source = `/**
+ * @ra11y-intentional contrast story
+ * @see https://example.com
+ */
+export function Demo() { return <div />; }`;
+    const out = runFinder(finder, source, { filePath: "Demo.tsx" });
+    expect(out).toEqual([]);
+  });
+});
+
 describe("suppression/no-reason (edge cases)", () => {
   // Guards the empty-after-colon edge case. `parseInlineDisablesDetailed`
   // normalizes a colon with no text after it back to `reason: undefined`,

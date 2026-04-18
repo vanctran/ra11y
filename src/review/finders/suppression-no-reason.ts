@@ -14,6 +14,15 @@
  * reviewing a PR can propose a reason (or decide the suppression is
  * wrong and remove it).
  *
+ * The finder also covers the JSDoc `@ra11y-intentional` tag variant
+ * (Q2R2-INTENTIONAL). Semantics differ slightly: a bare
+ * `@ra11y-intentional` is NOT honored (no disableMap entry is created)
+ * — the reason slot is load-bearing for that tag — so the candidate's
+ * `reason` text invites the author to *add* the reason rather than
+ * documenting an already-active silence. Same finder, different
+ * phrasing; the `tag` field on each SuppressionDeclaration drives the
+ * choice.
+ *
  * Design choices aligned with AI-first doctrine:
  *
  * - **Emit one candidate per bare pragma.** No rate-limiting, no file-
@@ -112,7 +121,7 @@ function findBarePragmas(ctx: FileContext): readonly ReviewCandidate[] {
         line: decl.line,
         column: 1,
       },
-      reason: formatReason(decl.ruleIds),
+      reason: formatReason(decl.ruleIds, decl.tag),
       // Confidence "medium": the missing-reason evidence is
       // deterministic, but the author's intent is not. They may have
       // forgotten the slot, or judged the suppression self-evident,
@@ -124,7 +133,16 @@ function findBarePragmas(ctx: FileContext): readonly ReviewCandidate[] {
   return out;
 }
 
-function formatReason(ruleIds: readonly string[]): string {
+function formatReason(
+  ruleIds: readonly string[],
+  tag: "ra11y-disable" | "ra11y-intentional" | undefined,
+): string {
+  if (tag === "ra11y-intentional") {
+    // The bare JSDoc tag is NOT honored — the scan still sees the
+    // violations on the decorated declaration. Message reflects that:
+    // the author must supply a reason for the tag to take effect.
+    return "@ra11y-intentional JSDoc tag without reason — not honored until you add reason text (e.g. `@ra11y-intentional demo of missing alt`). Until then the decorated declaration is scanned normally.";
+  }
   const target = summarizeTargets(ruleIds);
   return `ra11y-disable pragma without reason (${target}) — add ': <why the suppression is correct>' to keep the suppression auditable`;
 }

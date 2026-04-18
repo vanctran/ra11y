@@ -8,8 +8,7 @@
 
 import { isAbsolute, resolve } from "node:path";
 import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
-import type { ParsedFile } from "../engine/scanner.ts";
-import { runScan } from "../engine/scanner.ts";
+import { type ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
@@ -200,10 +199,7 @@ export function resolveStandards(
  */
 export function firstUnknownStandard(ids: readonly string[]): string | null {
   const known = new Set(BUILTIN_STANDARDS.map((s) => s.id));
-  for (const id of ids) {
-    if (!known.has(id)) return id;
-  }
-  return null;
+  return ids.find((id) => !known.has(id)) ?? null;
 }
 
 export function resolveLevel(level: string | undefined, session: McpSession): "A" | "AA" | "AAA" {
@@ -597,6 +593,8 @@ interface SuppressionAuditEntry {
   readonly kind: "disable" | "disable-next-line" | "enable";
   readonly ruleIds: readonly string[];
   readonly reason?: string;
+  /** `"ra11y-disable"` for comment pragmas; `"ra11y-intentional"` for the JSDoc tag variant. */
+  readonly tag?: "ra11y-disable" | "ra11y-intentional";
 }
 
 /**
@@ -619,6 +617,7 @@ function suppressionAudit(files: readonly ParsedFile[]): readonly SuppressionAud
         kind: d.kind,
         ruleIds: d.ruleIds,
         ...(d.reason === undefined ? {} : { reason: d.reason }),
+        ...(d.tag === undefined ? {} : { tag: d.tag }),
       });
     }
   }
