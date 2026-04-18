@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: LoadedConfig = {
   rules: {},
   exclude: [],
   nativeWrappers: [],
+  nativeWrapperElements: {},
   overrides: [],
   projects: [],
   sourcePath: null,

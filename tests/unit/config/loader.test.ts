@@ -111,4 +111,37 @@ describe("loadConfig precedence", () => {
     expect(loaded.sourcePath).toContain("ra11y.config.json");
     expect(loaded.level).toBe(DEFAULT_CONFIG.level);
   });
+
+  it("accepts nativeWrappers as a string array (legacy shape)", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({ nativeWrappers: ["Button", "Link"] }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.nativeWrappers).toEqual(["Button", "Link"]);
+    expect(loaded.nativeWrapperElements).toEqual({});
+  });
+
+  it("accepts nativeWrappers as an object map and surfaces the element mapping", async () => {
+    writeFileSync(
+      join(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: { Button: "button", Link: "a", Image: "img" },
+      }),
+    );
+    const loaded = await loadConfig({ cwd: dir });
+    expect([...loaded.nativeWrappers].sort()).toEqual(["Button", "Image", "Link"]);
+    expect(loaded.nativeWrapperElements).toEqual({
+      Button: "button",
+      Link: "a",
+      Image: "img",
+    });
+  });
+
+  it("omitted nativeWrappers yields empty name list and empty element map", async () => {
+    writeFileSync(join(dir, "ra11y.config.json"), JSON.stringify({}));
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.nativeWrappers).toEqual([]);
+    expect(loaded.nativeWrapperElements).toEqual({});
+  });
 });

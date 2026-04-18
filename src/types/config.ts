@@ -50,9 +50,24 @@ export interface Config {
    * element (`<button>`, `<a>`, etc.). Rules like `keyboard/handler-missing`
    * use this list to skip emitting low-confidence info notes on them.
    * Project-level acknowledgment that replaces sprinkling inline pragmas at
-   * every call site. Example: `["Button", "ActionButton", "IconButton"]`.
+   * every call site.
+   *
+   * Two accepted shapes:
+   *   - `string[]` — `["Button", "ActionButton", "IconButton"]`. Opaque
+   *     names; rules only know "skip this, it's a wrapper." Legacy shape,
+   *     still the most common.
+   *   - `Record<string, string>` — `{ Button: "button", Link: "a", Image:
+   *     "img" }`. Names mapped to the native element they render. Rules
+   *     that depend on the underlying semantics (link-descriptive-text on
+   *     `"a"`-mapped wrappers, alt-text on `"img"`-mapped wrappers) can
+   *     run through the wrapper as if it were the native tag.
+   *
+   * Both shapes produce the same `LoadedConfig.nativeWrappers: string[]`
+   * for existing consumers. The object form also populates
+   * `LoadedConfig.nativeWrapperElements: Record<string, string>` — new,
+   * optional, consumed only by rules that opt in.
    */
-  readonly nativeWrappers?: readonly string[];
+  readonly nativeWrappers?: readonly string[] | Readonly<Record<string, string>>;
   /** Per-directory overrides (last match wins). */
   readonly overrides?: readonly ConfigOverride[];
   /** Monorepo/workspace projects. */
@@ -66,6 +81,18 @@ export interface LoadedConfig {
   readonly rules: Readonly<Record<string, RuleSetting>>;
   readonly exclude: readonly string[];
   readonly nativeWrappers: readonly string[];
+  /**
+   * Optional mapping from wrapper component name to the native element
+   * it renders (`{ Button: "button", Link: "a" }`). Populated only when
+   * the user supplied the object form of `Config.nativeWrappers`. Rules
+   * that consume element semantics (link-purpose, alt-text) can opt
+   * into running through wrappers by consulting this map; rules that
+   * only need "skip this, it's a wrapper" keep reading `nativeWrappers`.
+   *
+   * Empty object when the user supplied the string-array form — absence
+   * of a mapping is the signal that the wrappers are opaque.
+   */
+  readonly nativeWrapperElements: Readonly<Record<string, string>>;
   readonly overrides: readonly ConfigOverride[];
   readonly projects: readonly ProjectConfig[];
   readonly sourcePath: string | null;

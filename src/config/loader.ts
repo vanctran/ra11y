@@ -124,7 +124,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
 
   const rules: Readonly<Record<string, RuleSetting>> = user.rules ?? DEFAULT_CONFIG.rules;
   const exclude: readonly string[] = user.exclude ?? DEFAULT_CONFIG.exclude;
-  const nativeWrappers: readonly string[] = user.nativeWrappers ?? DEFAULT_CONFIG.nativeWrappers;
+  const { nativeWrappers, nativeWrapperElements } = normalizeNativeWrappers(user.nativeWrappers);
   const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
   const projects = user.projects ?? DEFAULT_CONFIG.projects;
 
@@ -134,8 +134,36 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
     rules,
     exclude,
     nativeWrappers,
+    nativeWrapperElements,
     overrides,
     projects,
     sourcePath,
   };
+}
+
+/**
+ * Accepts either the string-array form (`["Button", "Link"]`) or the
+ * object form (`{ Button: "button", Link: "a" }`) of `Config.nativeWrappers`
+ * and returns the canonical `LoadedConfig` pair: names for the existing
+ * silence-on-wrapper callers, elements for rules that want the mapping.
+ * An un-supplied field falls back to the defaults' empties.
+ */
+function normalizeNativeWrappers(
+  raw: readonly string[] | Readonly<Record<string, string>> | undefined,
+): {
+  readonly nativeWrappers: readonly string[];
+  readonly nativeWrapperElements: Readonly<Record<string, string>>;
+} {
+  if (raw === undefined) {
+    return {
+      nativeWrappers: DEFAULT_CONFIG.nativeWrappers,
+      nativeWrapperElements: DEFAULT_CONFIG.nativeWrapperElements,
+    };
+  }
+  if (Array.isArray(raw)) {
+    return { nativeWrappers: raw, nativeWrapperElements: {} };
+  }
+  const map = raw as Readonly<Record<string, string>>;
+  const names = Object.keys(map).sort();
+  return { nativeWrappers: names, nativeWrapperElements: map };
 }
