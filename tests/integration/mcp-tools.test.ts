@@ -547,6 +547,48 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     expect(body).not.toHaveProperty("referenceGuide");
   });
 
+  it("scan_file populates reviewCandidates from the finders (deduped across standards)", async () => {
+    // Regression test for the silent-miss where scan_file discarded
+    // the raw candidates from runScanAndFormat and a stale placeholder
+    // returned []. A <video> tag deterministically fires the
+    // media-variants finder, which emits one candidate per criterion
+    // it satisfies (1.2.4/1.2.6/1.2.7/1.2.8 + cross-standard echoes).
+    // After dedup we expect a single entry whose `criteria` array
+    // contains the wcag22 video SCs.
+    const dir = await mkdtemp(join(tmpdir(), "ra11y-scan-file-candidates-"));
+    try {
+      const fixturePath = join(dir, "video.html");
+      await writeFile(
+        fixturePath,
+        "<html><body><video src='/intro.mp4' controls></video></body></html>\n",
+      );
+      const responses = await mcpSession([
+        initMsg(1),
+        toolCall(2, "scan_file", { path: fixturePath }),
+      ]);
+      const body = bodyOf(responses[1]) as {
+        reviewCandidates: readonly {
+          criteria: readonly string[];
+          line: number;
+          column: number;
+          reason: string;
+        }[];
+      };
+      expect(body.reviewCandidates.length).toBeGreaterThan(0);
+      const videoCandidate = body.reviewCandidates.find((c) =>
+        c.reason.startsWith("video element"),
+      );
+      expect(videoCandidate).toBeDefined();
+      if (videoCandidate !== undefined) {
+        expect(videoCandidate.line).toBeGreaterThan(0);
+        expect(videoCandidate.column).toBeGreaterThan(0);
+        expect(videoCandidate.criteria.some((id) => id.startsWith("wcag22:1.2"))).toBe(true);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("scan_file hoists suppressPlacement the same way scan_project does", async () => {
     const responses = await mcpSession([
       initMsg(1),

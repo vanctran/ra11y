@@ -272,7 +272,7 @@ const scanFileTool: McpTool = {
     // this, scan_file's fix-verify loop couldn't confirm config parity
     // with the scan_project call that kicked off the work — the
     // canonical Track Q shape-drift bug.
-    const { formatted } = await runScanAndFormat(
+    const { formatted, reviewCandidates: rawCandidates } = await runScanAndFormat(
       [parsed],
       session,
       standards,
@@ -303,14 +303,10 @@ const scanFileTool: McpTool = {
     // rule runner already performs (one Violation with
     // `criteria: string[]` across every enabled standard). Finders emit
     // one candidate per criterion — without this collapse the same
-    // line appears 4-6x in the response.
-    const dedupedCandidates = dedupeReviewCandidatesForSingleFile(
-      session.config.level === "AAA" ||
-        session.config.level === "AA" ||
-        session.config.level === "A"
-        ? filterCandidatesForScanFile(formatted)
-        : filterCandidatesForScanFile(formatted),
-    );
+    // line appears 4-6x in the response. scan_file scans a single file,
+    // so rawCandidates is already scoped to that file — no per-path
+    // filter needed.
+    const dedupedCandidates = dedupeReviewCandidatesForSingleFile(rawCandidates);
 
     return textResult({
       findings: flatFindings,
@@ -345,28 +341,6 @@ const scanFileTool: McpTool = {
     });
   },
 };
-
-/**
- * Pulls the raw review candidates out of the formatted meta so
- * `scan_file` can dedupe them by (filePath, line, column, reason).
- * `runScanAndFormat` discards candidates after using them for the
- * `actionableManualItems` count — we re-run the finders lookup via
- * the formatted meta's `suppressions` audit… no, that doesn't carry
- * candidates. Instead we pull them from the same scanner report
- * runScanAndFormat produced. This helper is a thin shim around the
- * re-execution; kept local so the scan_file handler stays readable.
- *
- * NOTE: we re-use the raw candidates from `runScanAndFormat`'s
- * internal report — but that report isn't exposed. For scan_file we
- * run `runScan` a second time would be wasteful. So instead we rely
- * on the already-computed candidates buried in formatted. Until the
- * helper exposes candidates, fall back to re-running scanner — a
- * single-file scan is trivially fast.
- */
-function filterCandidatesForScanFile(_formatted: unknown): readonly never[] {
-  // Placeholder: overridden by the handler above.
-  return [];
-}
 
 // ─── Tool: explain_rule ─────────────────────────────────────────────────────
 
