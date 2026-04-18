@@ -23,7 +23,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { buildEvidenceLedger } from "../../../src/engine/evidence-ledger.ts";
-import type { EvidenceSource } from "../../../src/types/evidence.ts";
+import type { AttestationRecord, EvidenceSource } from "../../../src/types/evidence.ts";
 import type { ReviewCandidate } from "../../../src/types/review.ts";
 import type { Standard } from "../../../src/types/standard.ts";
 import type { ReportData, ScanResult, Violation } from "../../../src/types/violation.ts";
@@ -100,6 +100,19 @@ function mkReport(candidates: readonly ReviewCandidate[]): ReportData {
     coverage: [],
     manualReviewNeeded: [],
     ...(candidates.length > 0 ? { candidates } : {}),
+  };
+}
+
+function mkAttestation(
+  criterionId: string,
+  overrides: Partial<AttestationRecord> = {},
+): AttestationRecord {
+  return {
+    criterionId,
+    by: "author@example.test",
+    reason: "verified by manual keyboard test",
+    attestedAt: "2026-04-18T00:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -225,5 +238,126 @@ describe("buildEvidenceLedger", () => {
     });
     expect(ledger.meta.generatedAt).toBe(FIXED_TIMESTAMP);
     expect(ledger.meta.enabledStandards).toEqual(["wcag22"]);
+  });
+
+  it("promotes a manual criterion from unknown to pass when attested pass", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:2.4.5")],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("pass");
+    expect(ledger.entries[0]?.sources).toHaveLength(1);
+    expect(ledger.entries[0]?.sources[0]).toMatchObject({ kind: "attested" });
+  });
+
+  it("marks a criterion as fail when attested verdict is fail (no static source)", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "1.4.3", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:1.4.3", { verdict: "fail" })],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("fail");
+  });
+
+  it("keeps fail when static and attested pass collide — static wins", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "1.4.3", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([mkViolation(["wcag22:1.4.3"], "abcd00000000")]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:1.4.3", { verdict: "pass" })],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("fail");
+  });
+
+  it("marks a criterion as n/a when attested verdict is n/a", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "1.2.1", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        mkAttestation("wcag22:1.2.1", {
+          verdict: "n/a",
+          reason: "application has no prerecorded media",
+        }),
+      ],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("n/a");
+  });
+
+  it("silently skips attestations for criteria not in any enabled standard", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "1.4.3", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("section508:7.1.4.3")],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries).toHaveLength(1);
+    expect(ledger.entries[0]?.sources).toEqual([]);
+  });
+
+  it("defaults omitted attested verdict to pass", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        {
+          criterionId: "wcag22:2.4.5",
+          by: "ci-bot",
+          reason: "axe-core reports pass for link-name rule",
+          attestedAt: FIXED_TIMESTAMP,
+        },
+      ],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("pass");
+  });
+
+  it("sorts attested sources per criterion by (attestedAt, by, reason)", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        mkAttestation("wcag22:2.4.5", {
+          attestedAt: "2026-04-18T12:00:00.000Z",
+          by: "second",
+        }),
+        mkAttestation("wcag22:2.4.5", {
+          attestedAt: "2026-04-18T06:00:00.000Z",
+          by: "first",
+        }),
+      ],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    const byValues = ledger.entries[0]?.sources
+      .filter(
+        (s: EvidenceSource): s is Extract<EvidenceSource, { kind: "attested" }> =>
+          s.kind === "attested",
+      )
+      .map((s) => s.by);
+    expect(byValues).toEqual(["first", "second"]);
   });
 });

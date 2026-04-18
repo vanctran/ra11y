@@ -19,6 +19,7 @@
  */
 
 import type {
+  AttestationRecord,
   CriterionEvidence,
   EvidenceLedger,
   EvidenceSource,
@@ -39,6 +40,14 @@ export interface BuildEvidenceLedgerInputs {
   readonly standards: readonly Standard[];
   readonly enabled: ReadonlySet<string>;
   /**
+   * Attestation records from inline pragmas and the durable
+   * `.ra11y/attestations.jsonl` store. Records whose `criterionId` is
+   * not in an enabled standard are silently skipped — standards can
+   * toggle on and off without throwing on stored attestations for
+   * disabled ones. Default empty.
+   */
+  readonly attestations?: readonly AttestationRecord[];
+  /**
    * ISO-8601 stamp for {@link EvidenceLedger.meta.generatedAt}. Default
    * `new Date().toISOString()`. Overridable so tests can pin the value
    * for deterministic assertions.
@@ -54,6 +63,7 @@ export interface BuildEvidenceLedgerInputs {
 export function buildEvidenceLedger(inputs: BuildEvidenceLedgerInputs): EvidenceLedger {
   const staticByCriterion = indexStaticSources(inputs.result.violations);
   const candidateByCriterion = indexCandidateSources(inputs.report.candidates ?? []);
+  const attestedByCriterion = indexAttestedSources(inputs.attestations ?? []);
 
   const entries: CriterionEvidence[] = [];
   for (const standard of inputs.standards) {
@@ -61,12 +71,13 @@ export function buildEvidenceLedger(inputs: BuildEvidenceLedgerInputs): Evidence
     for (const criterion of standard.criteria) {
       const staticSources = staticByCriterion.get(criterion.id) ?? [];
       const candidateSources = candidateByCriterion.get(criterion.id) ?? [];
-      const sources: EvidenceSource[] = [...staticSources, ...candidateSources];
+      const attestedSources = attestedByCriterion.get(criterion.id) ?? [];
+      const sources: EvidenceSource[] = [...staticSources, ...attestedSources, ...candidateSources];
       entries.push({
         criterionId: criterion.id,
         standardId: standard.id,
         automatable: criterion.automatable,
-        status: deriveStatus(criterion.automatable, staticSources.length > 0),
+        status: deriveStatus(criterion.automatable, staticSources, attestedSources),
         sources,
       });
     }
@@ -140,17 +151,79 @@ function indexCandidateSources(
 }
 
 /**
- * Phase 1 status derivation. Strict precedence:
- *
- *   1. Any `static` source → `"fail"`.
- *   2. Automatable (non-manual) criterion, no static source → `"pass"`.
- *   3. Otherwise (manual, with or without candidates) → `"unknown"`.
- *
- * `"n/a"` is reserved for Phase 2+ attestations and has no Phase 1
- * producer.
+ * Indexes `attested` sources by criterion ID. Attestation records are
+ * sorted per-criterion by `attestedAt` (ascending) for determinism;
+ * ties break on `by` then `reason`.
  */
-function deriveStatus(automatable: Automatability, hasStaticFailure: boolean): EvidenceStatus {
-  if (hasStaticFailure) return "fail";
+function indexAttestedSources(
+  attestations: readonly AttestationRecord[],
+): Map<string, EvidenceSource[]> {
+  const byCriterion = new Map<string, EvidenceSource[]>();
+  for (const a of attestations) {
+    let list = byCriterion.get(a.criterionId);
+    if (!list) {
+      list = [];
+      byCriterion.set(a.criterionId, list);
+    }
+    list.push({
+      kind: "attested",
+      by: a.by,
+      reason: a.reason,
+      attestedAt: a.attestedAt,
+      ...(a.scope !== undefined && { scope: a.scope }),
+      ...(a.location !== undefined && { location: a.location }),
+      ...(a.verdict !== undefined && { verdict: a.verdict }),
+    });
+  }
+  for (const list of byCriterion.values()) list.sort(compareAttestedSources);
+  return byCriterion;
+}
+
+function compareAttestedSources(a: EvidenceSource, b: EvidenceSource): number {
+  if (a.kind !== "attested" || b.kind !== "attested") return 0;
+  if (a.attestedAt !== b.attestedAt) return a.attestedAt < b.attestedAt ? -1 : 1;
+  if (a.by !== b.by) return a.by < b.by ? -1 : 1;
+  if (a.reason < b.reason) return -1;
+  if (a.reason > b.reason) return 1;
+  return 0;
+}
+
+/**
+ * Phase 2 status derivation. Strict precedence:
+ *
+ *   1. Any `static` source OR any attested `"fail"` → `"fail"`. Static
+ *      findings are in-tree evidence; they win over any claim to the
+ *      contrary. A fail-attestation with no static finding still
+ *      produces fail (author asserted a runtime failure the scanner
+ *      couldn't see).
+ *   2. Any attested `"n/a"` and no fail-evidence → `"n/a"`.
+ *   3. Any attested `"pass"` (default verdict when omitted) → `"pass"`,
+ *      even for manual criteria.
+ *   4. Automatable (non-manual) criterion with no fail-evidence → `"pass"`.
+ *   5. Otherwise (manual, with only candidate sources or none) → `"unknown"`.
+ *
+ * Candidate sources never move a criterion's status — they point a
+ * reviewer at locations but don't assert.
+ */
+function deriveStatus(
+  automatable: Automatability,
+  staticSources: readonly EvidenceSource[],
+  attestedSources: readonly EvidenceSource[],
+): EvidenceStatus {
+  const hasStaticFail = staticSources.length > 0;
+  let hasAttestedFail = false;
+  let hasAttestedNA = false;
+  let hasAttestedPass = false;
+  for (const s of attestedSources) {
+    if (s.kind !== "attested") continue;
+    const verdict = s.verdict ?? "pass";
+    if (verdict === "fail") hasAttestedFail = true;
+    else if (verdict === "n/a") hasAttestedNA = true;
+    else hasAttestedPass = true;
+  }
+  if (hasStaticFail || hasAttestedFail) return "fail";
+  if (hasAttestedNA) return "n/a";
+  if (hasAttestedPass) return "pass";
   if (automatable !== "manual") return "pass";
   return "unknown";
 }

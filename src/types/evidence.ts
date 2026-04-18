@@ -127,6 +127,40 @@ export interface CriterionEvidence {
 }
 
 /**
+ * A durable attestation record — either inline (emitted by a pragma
+ * with a `reason=` text) or project-level (written to
+ * `.ra11y/attestations.jsonl` by the `attest` MCP tool). Both feed the
+ * same `attested` {@link EvidenceSource} kind on the ledger.
+ *
+ * A pragma without a reason does *not* produce an attestation — the
+ * scanner still silences the matching violation, but no evidence lands
+ * on the ledger. That's why `ra11y:suppression-no-reason` surfaces
+ * bare pragmas as review candidates: the author punted the assertion.
+ *
+ * Validation is lenient: records whose `criterionId` is not present in
+ * any enabled standard are skipped silently by the ledger builder —
+ * mirroring the `equivalentTo` "silently skip missing" pattern so
+ * standards can be toggled without throwing on stored attestations
+ * about disabled criteria.
+ */
+export interface AttestationRecord {
+  /** Criterion this attestation speaks to (`<standardId>:<localId>`). */
+  readonly criterionId: string;
+  /** Who attested — author, bot, runtime-tool-plus-CI, etc. */
+  readonly by: string;
+  /** Human-readable rationale. */
+  readonly reason: string;
+  /** ISO-8601 timestamp the attestation was recorded. */
+  readonly attestedAt: string;
+  /** Attestation scope; defaults to `"project"` when omitted. */
+  readonly scope?: "project" | "file" | "line";
+  /** Location the attestation pins to, when `scope !== "project"`. */
+  readonly location?: Location;
+  /** Verdict the attestation asserts; defaults to `"pass"` when omitted. */
+  readonly verdict?: "pass" | "fail" | "n/a";
+}
+
+/**
  * A per-scan aggregate of every criterion in every enabled standard.
  *
  * `entries` is sorted by `criterionId` for determinism; consumers that

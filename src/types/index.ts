@@ -42,6 +42,7 @@ export type {
   RuleSetting,
 } from "./config.ts";
 export type {
+  AttestationRecord,
   CriterionEvidence,
   EvidenceLedger,
   EvidenceSource,
