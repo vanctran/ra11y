@@ -85,8 +85,8 @@ agent transcripts.
 - `EmittedViolation = Omit<Violation, ... | "groupKey">` — rules cannot set
   it, by construction.
 - Formatters that pass findings through to agents (`agent`, `json`,
-  MCP `formatFinding`, SARIF) surface `groupKey` so consumers can bucket
-  without re-computing.
+  the MCP tools via shared `buildAgentFinding`, SARIF) surface
+  `groupKey` so consumers can bucket without re-computing.
 - Two findings from the same rule firing on AST-equivalent nodes across
   files now share a `groupKey`. Two findings from the same rule firing on
   AST-distinct nodes (different tag, different attribute set, different

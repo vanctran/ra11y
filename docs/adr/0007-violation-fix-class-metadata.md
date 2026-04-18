@@ -46,7 +46,9 @@ export type FixClass =
 
 The field is required on every `Rule`. The engine stamps it onto every
 `Violation` emitted by that rule during `stampViolation` in the rule
-runner. MCP `formatFinding` forwards it verbatim.
+runner. The shared `buildAgentFinding` builder
+(`src/output/agent-response/build-finding.ts`) — consumed by every MCP
+tool response and the CLI agent formatter — forwards it verbatim.
 
 ### Name: `fixClass`, not `fix.kind`
 
@@ -106,9 +108,10 @@ prose-only rule as `mechanical` invites a wrong batch-apply).
   every emitted violation, including the synthetic `internal/rule-crash`
   case (classified as `verify-in-source` — the agent reads the crash
   message and the rule source).
-- `formatFinding` in `src/mcp/tools-helpers.ts` forwards the new field
-  through `fixClass`. `suggest_fix.kind` stays untouched — different axis,
-  different name.
+- `buildAgentFinding` in `src/output/agent-response/build-finding.ts`
+  forwards the new field through `fixClass`. That single builder
+  backs both the MCP tool responses and the CLI agent formatter.
+  `suggest_fix.kind` stays untouched — different axis, different name.
 - Existing `plan.mechanicalEditsAvailable` / `plan.guidanceFixesAvailable`
   counters are unaffected — they count per-finding fix-payload presence,
   not rule-class. They remain the right shape; the new `fixClass` is

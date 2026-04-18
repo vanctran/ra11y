@@ -104,7 +104,15 @@ export interface AgentFinding {
   readonly effort: Effort;
   readonly category: Category;
   readonly suppressWith: string;
-  readonly suppressPlacement: string;
+  /**
+   * Per-file-type guidance on where the `suppressWith` pragma should
+   * land. Emitted inline by default — CLI agent-format consumers read
+   * it per-finding. MCP call sites pass `{ suppressPlacement: "omit" }`
+   * to {@link buildAgentFinding} so the same guidance rides once at
+   * the top level under `referenceGuide.suppressPlacement` instead of
+   * repeating on every finding.
+   */
+  readonly suppressPlacement?: string;
 }
 
 export interface AgentFile {

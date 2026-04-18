@@ -42,6 +42,7 @@ import { writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { parseInlineDisables } from "../config/index.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
+import { buildAgentFinding } from "../output/agent-response/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import {
   buildNextStep,
@@ -57,7 +58,6 @@ import {
 import {
   applyRuleSettings,
   errorResult,
-  formatFinding,
   type McpTool,
   type McpToolResult,
   resolveStandards,
@@ -189,8 +189,12 @@ export const applyFixTool: McpTool = {
       before: formatSlice(before),
       after: formatSlice(after),
       delta: {
-        resolvedViolations: delta.resolvedViolations.map(formatFinding),
-        newViolations: delta.newViolations.map(formatFinding),
+        resolvedViolations: delta.resolvedViolations.map((v) =>
+          buildAgentFinding(v, { suppressPlacement: "omit" }),
+        ),
+        newViolations: delta.newViolations.map((v) =>
+          buildAgentFinding(v, { suppressPlacement: "omit" }),
+        ),
         resolvedCandidates: delta.resolvedCandidates.map(formatCandidate),
         newCandidates: delta.newCandidates.map(formatCandidate),
       },

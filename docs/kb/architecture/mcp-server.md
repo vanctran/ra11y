@@ -46,7 +46,7 @@ The MCP server is the primary way agents interact with ra11y. It's a stdio-based
 - `src/mcp/session.ts` — per-connection state. Holds the session-level config (`standard`, `level`, `exclude`, `rules`, `nativeWrappers`), an AST cache keyed by `(path, mtime)`, and a `loadProjectConfig(cwd)` helper that reads `ra11y.config.ts` fresh every call (no cache — see the notes in `.claude/notes/mcp-iteration.md`).
 - `src/mcp/tools.ts` — the tool registry (`MCP_TOOLS`) and the six tools whose handlers fit in one file: `scan`, `scan_file`, `explain_rule`, `suggest_fix`, `coverage`, `list_rules`, `configure`.
 - `src/mcp/tool-scan-project.ts`, `tool-checklist.ts`, `tool-detect-wrappers.ts`, `tool-explain-standard.ts`, `tool-review-candidates.ts` — each hosts a single tool whose implementation was large enough to warrant its own file.
-- `src/mcp/tools-helpers.ts` — shared utilities: `formatFinding`, `runScanAndFormat`, `parseFiles`, severity filtering, standard/level resolution.
+- `src/mcp/tools-helpers.ts` — shared utilities: `runScanAndFormat`, `parseFiles`, severity filtering, standard/level resolution. The per-finding shape itself is built by `buildAgentFinding` in `src/output/agent-response/` — a single builder consumed by both the MCP tools here and the CLI `--format agent` output, so the two surfaces can't drift.
 
 ## The 12 tools
 

@@ -358,20 +358,18 @@ function filterToHunkFindings(
   files: ScanFormatted["files"],
   hunksByFile: ReadonlyMap<string, readonly HunkRange[]>,
 ): {
-  readonly newFiles: { readonly path: string; readonly findings: readonly unknown[] }[];
+  readonly newFiles: ScanFormatted["files"];
   readonly newCount: number;
 } {
-  const newFiles: { readonly path: string; readonly findings: readonly unknown[] }[] = [];
+  type FileEntry = ScanFormatted["files"][number];
+  type Finding = FileEntry["findings"][number];
+  const newFiles: FileEntry[] = [];
   let newCount = 0;
   for (const file of files) {
-    const kept: unknown[] = [];
-    for (const raw of file.findings) {
-      if (!raw || typeof raw !== "object") continue;
-      const f = raw as Record<string, unknown>;
-      const line = f["line"];
-      if (typeof line !== "number") continue;
-      if (!isInsideHunk(file.path, line, hunksByFile)) continue;
-      kept.push(raw);
+    const kept: Finding[] = [];
+    for (const finding of file.findings) {
+      if (!isInsideHunk(file.path, finding.line, hunksByFile)) continue;
+      kept.push(finding);
     }
     if (kept.length > 0) {
       newFiles.push({ path: file.path, findings: kept });
@@ -442,7 +440,7 @@ function mergeFilesByPath<T extends { readonly filePath: string }>(
  * Walks the formatted `files` output from `runScanAndFormat` and keeps
  * only findings whose `findingId` isn't already in the baseline. Uses
  * the scanner-stamped `findingId` directly — no reconstruction needed
- * because `formatFinding` surfaces the same token the baseline file
+ * because `buildAgentFinding` surfaces the same token the baseline file
  * keyed on when it was written. Returns the filtered files (path +
  * findings), the total new-finding count, and the set of every
  * `findingId` the scan produced — the caller intersects that set with

@@ -18,13 +18,23 @@ import { describe, expect, it } from "bun:test";
 import { buildNextStep } from "../../../src/mcp/next-step.ts";
 import type { ScanFormatted } from "../../../src/mcp/tools-helpers.ts";
 
+// These tests probe `buildNextStep`'s graceful handling of partial or
+// malformed finding shapes — the function reads a few fields with
+// optional chains and falls back cleanly when they're missing. Relax
+// the helper's `files` parameter type so tests can exercise the real
+// defensive code path without synthesizing full `AgentFinding`
+// fixtures. Production call sites always pass `AgentFinding[]` through
+// the strictly-typed `ScanFormatted`.
 function formatted(overrides: {
   plan?: Record<string, unknown>;
-  files?: ScanFormatted["files"];
+  files?: readonly {
+    readonly path: string;
+    readonly findings: readonly Record<string, unknown>[];
+  }[];
 }): ScanFormatted {
   return {
     plan: overrides.plan ?? {},
-    files: overrides.files ?? [],
+    files: (overrides.files ?? []) as unknown as ScanFormatted["files"],
     meta: {},
   };
 }

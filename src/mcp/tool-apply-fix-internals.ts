@@ -21,6 +21,7 @@ import { fingerprintOf } from "../engine/baseline.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { runScan } from "../engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../input/parsers/index.ts";
+import { buildAgentFinding } from "../output/agent-response/index.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import type { Ast, ParseError } from "../types/ast.ts";
@@ -28,7 +29,7 @@ import type { ReviewCandidate } from "../types/review.ts";
 import type { Rule } from "../types/rule.ts";
 import type { Violation } from "../types/violation.ts";
 import type { McpSession } from "./session.ts";
-import { errorResult, formatFinding, type McpToolResult, strParam } from "./tools-helpers.ts";
+import { errorResult, type McpToolResult, strParam } from "./tools-helpers.ts";
 
 export interface ResolvedEdit {
   readonly oldText: string;
@@ -281,7 +282,7 @@ function fingerprintCandidate(c: ReviewCandidate): string {
 
 export function formatSlice(scan: SingleFileScan): Record<string, unknown> {
   return {
-    violations: scan.violations.map(formatFinding),
+    violations: scan.violations.map((v) => buildAgentFinding(v, { suppressPlacement: "omit" })),
     candidates: scan.candidates.map(formatCandidate),
   };
 }

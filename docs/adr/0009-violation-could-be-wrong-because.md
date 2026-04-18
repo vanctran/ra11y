@@ -92,12 +92,12 @@ the same information without the threshold.
 
 Two formatter paths surface findings to agents:
 
-1. `formatFinding` in `src/mcp/tools-helpers.ts` — every MCP tool response
-   that embeds findings (`scan`, `scan_project`, `scan_file`, `scan_diff`,
-   `apply_fix`, `baseline`) flows through this one function. Conditional
-   spread added here.
-2. `agent` formatter in `src/output/formatters/agent.ts` — the compact JSON
-   CLI output for agent consumers. Conditional spread added here.
+1. `buildAgentFinding` in `src/output/agent-response/build-finding.ts` —
+   the single Violation→AgentFinding builder. Every MCP tool response
+   that embeds findings (`scan`, `scan_project`, `scan_file`,
+   `scan_diff`, `apply_fix`, `baseline`) flows through this function,
+   and so does the CLI `--format agent` output. Conditional spread
+   added here once; both surfaces inherit it.
 
 The `json` formatter and the SARIF formatter are scoped for human/CI tooling
 rather than agent consumption; reason codes are additive there too but their
@@ -117,9 +117,11 @@ exclude `couldBeWrongBecause` (it remains assignable from rules via
 
 - `Violation` grows by one optional field. Existing producers don't change;
   the field is absent on every Violation until a rule opts in.
-- Two forwarders (MCP `formatFinding`, `agent` formatter) pick up a conditional
-  spread. Consumers that didn't know to look for the field see no change;
-  agents that key off it can begin triaging as soon as the first rule opts in.
+- The single shared `buildAgentFinding` builder (consumed by both the
+  MCP tools and the CLI agent formatter) picks up a conditional spread.
+  Consumers that didn't know to look for the field see no change;
+  agents that key off it can begin triaging as soon as the first rule
+  opts in.
 - Semver: minor bump. New optional output field is additive.
 - Follow-up work (per-rule opt-in) is tracked as discrete tasks under
   Q2R2-CWBB's children, not batched here. First opt-in candidates:

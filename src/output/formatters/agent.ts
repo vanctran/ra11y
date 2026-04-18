@@ -75,7 +75,7 @@ function buildFiles(byFile: Map<string, Violation[]>): readonly AgentFile[] {
   const paths = [...byFile.keys()].sort();
   return paths.map((path) => ({
     path,
-    findings: (byFile.get(path) ?? []).map(buildAgentFinding),
+    findings: (byFile.get(path) ?? []).map((v) => buildAgentFinding(v)),
   }));
 }
 

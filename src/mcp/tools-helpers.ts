@@ -9,6 +9,11 @@
 import { isAbsolute, resolve } from "node:path";
 import { type ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
+import {
+  type AgentFinding,
+  buildAgentFinding,
+  countFixes,
+} from "../output/agent-response/index.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
@@ -363,7 +368,7 @@ function countByExtension(files: readonly ParsedFile[]): Record<string, number> 
  */
 export interface ScanFormatted {
   readonly plan: Record<string, unknown>;
-  readonly files: readonly { readonly path: string; readonly findings: unknown[] }[];
+  readonly files: readonly { readonly path: string; readonly findings: AgentFinding[] }[];
   readonly meta: Record<string, unknown>;
   /**
    * Top-level prose map — findings reference by file extension rather than
@@ -464,25 +469,22 @@ export async function runScanAndFormat(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([path, violations]) => ({
       path,
-      findings: violations.map(formatFinding),
+      findings: violations.map((v) => buildAgentFinding(v, { suppressPlacement: "omit" })),
     }));
 
   const violations = filtered.filter((v) => v.severity !== "info");
   const notes = filtered.filter((v) => v.severity === "info");
-  // Split the former composite `fixSuggestionAvailable` counter into
-  // mechanical-edit + guidance buckets. Both are deterministic from the
-  // Violation shape (`fixPaths?.primary.edit` present → mechanical; a
-  // `suggestion` string without a mechanical edit → guidance), so the
-  // labels are honest per CLAUDE.md §1 "Composite headline counts are
-  // dishonest." Agents budgeting batch-apply vs route-to-rewrite pick
-  // the right lane at plan time without a second round-trip.
-  const mechanicalEdits = violations.filter((v) => v.fixPaths?.primary.edit !== undefined).length;
-  const guidanceFixes = violations.filter(
-    (v) =>
-      v.fixPaths?.primary.edit === undefined &&
-      typeof v.suggestion === "string" &&
-      v.suggestion.length > 0,
-  ).length;
+  // Honest split counters for the plan headline, computed from the
+  // source violations via the shared `countFixes` helper — same recipe
+  // the CLI agent formatter uses through `buildAgentPlan`. Both labels
+  // are provable from the Violation shape alone (`fixPaths?.primary.
+  // edit` present → mechanical; a non-empty `suggestion` without a
+  // mechanical edit → guidance), so the split is honest per CLAUDE.md
+  // §1 "Composite headline counts are dishonest." Agents budgeting
+  // batch-apply vs route-to-rewrite pick the right lane at plan time
+  // without a second round-trip.
+  const { mechanicalEditsAvailable: mechanicalEdits, guidanceFixesAvailable: guidanceFixes } =
+    countFixes(violations);
   const violationsWithoutAnyFix = violations.length - mechanicalEdits - guidanceFixes;
 
   const manualIds = collectManualCriteria(enabled, session.config.level, files);
@@ -711,81 +713,6 @@ export function buildSourceContext(source: string, line: number): string {
   const start = Math.max(0, line - 1 - contextRadius);
   const end = Math.min(lines.length, line + contextRadius);
   return lines.slice(start, end).join("\n");
-}
-
-// ─── Finding formatter ──────────────────────────────────────────────────────
-
-function severityToConfidence(severity: string): "high" | "medium" | "low" {
-  if (severity === "error") return "high";
-  if (severity === "warning") return "medium";
-  return "low";
-}
-
-export function formatFinding(v: Violation): Record<string, unknown> {
-  return {
-    // Stable identity — lets agents verify "did my edit close finding
-    // X?" by exact ID rather than (file, line, ruleId) fuzzy match
-    // that breaks on line-number drift.
-    findingId: v.findingId,
-    // Stable group identity — same rule firing on AST-equivalent nodes
-    // in N files all share this key, so "fix every finding with
-    // groupKey X the same way" is a one-line agent loop. See
-    // docs/adr/0008-violation-group-key.md. Conditional spread absorbs
-    // synthetic test fixtures that pass a partial Violation literal —
-    // the Violation type requires this field, but the formatter stays
-    // forgiving at runtime.
-    ...(v.groupKey !== undefined && { groupKey: v.groupKey }),
-    ruleId: v.ruleId,
-    // Per-finding remediation lane stamped from the rule's `fixClass`
-    // metadata. Lets agents batch-route at scan time without a per-
-    // finding `suggest_fix` round-trip — see Violation.fixClass docs
-    // and docs/adr/0007-violation-fix-class-metadata.md. Distinct axis
-    // from `suggest_fix.kind` ("what does the payload contain") — do
-    // not conflate.
-    fixClass: v.fixClass,
-    severity: v.severity,
-    confidence: severityToConfidence(v.severity),
-    line: v.location.line,
-    column: v.location.column,
-    message: v.message,
-    ...(v.suggestion ? { fix: v.suggestion } : {}),
-    criteria: [...v.criteria],
-    // Aligned index-for-index with `criteria`. Conditional-spread so
-    // agents can distinguish "titles not supplied" (engine built this
-    // finding without a standards registry — rare; unit-test path)
-    // from "titles are `[]`" (criteria is also `[]`).
-    ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
-    // Named reason codes describing known escape hatches that could
-    // make this finding a false positive in context. Strictly
-    // informational — agents investigate, never auto-suppress. Omitted
-    // when empty per AI-first doctrine (docs/adr/0009-violation-could-
-    // be-wrong-because.md); `couldBeWrongBecause: []` would be a
-    // dishonest empty-vs-unpopulated sentinel.
-    ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
-      ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
-      : {}),
-    suppressWith: suppressPragma(v.location.filePath, v.ruleId),
-  };
-}
-
-/**
- * Comment syntax depends on the file.
- *
- * For TSX/JSX we emit the JSX-safe `{/* … *\/}` form — a bare `//` line
- * comment is invalid inside a JSX element, which is where most ra11y
- * violations actually live. The `{…}` wrapper is a valid expression
- * both inside JSX and at module scope, so one form works everywhere.
- */
-function suppressPragma(filePath: string, ruleId: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".css")) return `/* ra11y-disable-next-line ${ruleId} */`;
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    return `<!-- ra11y-disable-next-line ${ruleId} -->`;
-  }
-  if (lower.endsWith(".tsx") || lower.endsWith(".jsx")) {
-    return `{/* ra11y-disable-next-line ${ruleId} */}`;
-  }
-  return `// ra11y-disable-next-line ${ruleId}`;
 }
 
 export { buildReferenceGuide };

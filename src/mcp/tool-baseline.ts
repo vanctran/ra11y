@@ -33,6 +33,7 @@ import {
   writeBaseline,
 } from "../engine/baseline.ts";
 import { runScan } from "../engine/scanner.ts";
+import { type AgentFinding, buildAgentFinding } from "../output/agent-response/index.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
@@ -41,7 +42,6 @@ import type { McpSession } from "./session.ts";
 import {
   applyRuleSettings,
   errorResult,
-  formatFinding,
   groupViolationsByFile,
   type McpTool,
   type McpToolResult,
@@ -252,11 +252,13 @@ async function handleCheck(
 
   const diff = diffAgainstBaseline(result, baseline);
   const grouped = groupViolationsByFile(diff.newViolations);
-  const files = [...grouped.entries()]
+  const files: readonly { readonly path: string; readonly findings: readonly AgentFinding[] }[] = [
+    ...grouped.entries(),
+  ]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([path, violations]) => ({
       path,
-      findings: violations.map(formatFinding),
+      findings: violations.map((v) => buildAgentFinding(v, { suppressPlacement: "omit" })),
     }));
 
   return textResult({
@@ -321,7 +323,7 @@ function buildUpdateNextStep(
 
 function buildCheckNextStep(
   diff: BaselineDiff,
-  files: readonly { readonly path: string; readonly findings: readonly unknown[] }[],
+  files: readonly { readonly path: string; readonly findings: readonly AgentFinding[] }[],
 ): string {
   if (diff.newViolations.length > 0) {
     const noun = diff.newViolations.length === 1 ? "violation" : "violations";
@@ -346,17 +348,11 @@ interface FirstFinding {
 }
 
 function firstFinding(
-  files: readonly { readonly path: string; readonly findings: readonly unknown[] }[],
+  files: readonly { readonly path: string; readonly findings: readonly AgentFinding[] }[],
 ): FirstFinding | null {
   for (const file of files) {
-    for (const raw of file.findings) {
-      if (!raw || typeof raw !== "object") continue;
-      const f = raw as Record<string, unknown>;
-      const ruleId = f["ruleId"];
-      const line = f["line"];
-      if (typeof ruleId === "string" && typeof line === "number") {
-        return { path: file.path, line, ruleId };
-      }
+    for (const finding of file.findings) {
+      return { path: file.path, line: finding.line, ruleId: finding.ruleId };
     }
   }
   return null;

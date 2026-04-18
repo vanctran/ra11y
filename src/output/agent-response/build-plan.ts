@@ -66,13 +66,19 @@ function buildSummary(
   return summary;
 }
 
-interface FixCounts {
+export interface FixCounts {
   readonly mechanicalEditsAvailable: number;
   readonly guidanceFixesAvailable: number;
 }
 
-/** Count mechanical vs guidance fixes from source violations. */
-function countFixes(violations: readonly Violation[]): FixCounts {
+/**
+ * Count mechanical vs guidance fixes from source violations. Exported so
+ * the MCP layer can reuse the same split-counter accounting without
+ * rebuilding a full {@link AgentPlan} — its plan wrapper carries
+ * MCP-specific fields (actionableManualItems, untargetedCriteria,
+ * limitations, etc.) that the CLI plan deliberately doesn't.
+ */
+export function countFixes(violations: readonly Violation[]): FixCounts {
   let mechanicalEditsAvailable = 0;
   let guidanceFixesAvailable = 0;
   for (const v of violations) {

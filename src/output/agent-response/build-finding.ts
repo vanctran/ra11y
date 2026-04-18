@@ -87,24 +87,43 @@ function buildSuppressPlacement(filePath: string): string {
 }
 
 /**
+ * Options for {@link buildAgentFinding}.
+ */
+export interface BuildAgentFindingOptions {
+  /**
+   * Whether to include per-finding `suppressPlacement` guidance.
+   *
+   * `"inline"` (default) — emit the file-type-specific placement string on
+   * every finding. CLI agent-format consumers read it per-finding.
+   *
+   * `"omit"` — drop the field. MCP responses hoist the same guidance once
+   * into `referenceGuide.suppressPlacement` keyed by file extension, so
+   * repeating identical text on every finding would just inflate the payload.
+   */
+  readonly suppressPlacement?: "inline" | "omit";
+}
+
+function categorize(v: Violation): Category {
+  if (v.fixPaths?.primary.edit !== undefined) return "auto-fix";
+  if (v.severity === "info") return "review";
+  if (typeof v.suggestion === "string" && v.suggestion.length > 0) return "auto-fix";
+  return "review";
+}
+
+/**
  * Convert a single {@link Violation} into an {@link AgentFinding}.
  *
  * The `category` field uses `"auto-fix"` when there is a mechanical edit,
  * `"review"` for guidance-only or no-suggestion findings at non-info severity,
  * and `"review"` for info-severity findings.
  */
-export function buildAgentFinding(v: Violation): AgentFinding {
-  const hasMechanicalEdit = v.fixPaths?.primary.edit !== undefined;
-  const hasSuggestion = typeof v.suggestion === "string" && v.suggestion.length > 0;
-  const category: Category = hasMechanicalEdit
-    ? "auto-fix"
-    : v.severity === "info"
-      ? "review"
-      : hasSuggestion
-        ? "auto-fix"
-        : "review";
-
+export function buildAgentFinding(v: Violation, opts?: BuildAgentFindingOptions): AgentFinding {
+  const category = categorize(v);
   const fix = buildFix(v);
+  const placement =
+    (opts?.suppressPlacement ?? "inline") === "inline"
+      ? buildSuppressPlacement(v.location.filePath)
+      : undefined;
 
   return {
     findingId: v.findingId,
@@ -128,6 +147,6 @@ export function buildAgentFinding(v: Violation): AgentFinding {
     effort: "trivial",
     category,
     suppressWith: buildSuppressPragma(v.location.filePath, v.ruleId),
-    suppressPlacement: buildSuppressPlacement(v.location.filePath),
+    ...(placement !== undefined && { suppressPlacement: placement }),
   };
 }

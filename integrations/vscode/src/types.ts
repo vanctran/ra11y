@@ -16,8 +16,10 @@ export type Ra11ySeverity = "error" | "warning" | "info";
 
 /**
  * A single finding as returned under `files[].findings[]` by the MCP
- * `scan_project` tool. Built by {@link formatFinding} in
- * `src/mcp/tools-helpers.ts`. `line` / `column` are 1-based.
+ * `scan_project` tool. Built by `buildAgentFinding` in
+ * `src/output/agent-response/build-finding.ts` (the shared builder
+ * consumed by every MCP tool and the CLI agent formatter). `line` /
+ * `column` are 1-based.
  */
 export interface Ra11yFinding {
   readonly ruleId: string;

@@ -3,19 +3,20 @@
  *
  * See docs/adr/0007-violation-fix-class-metadata.md. Every shipped rule
  * declares a `fixClass`, the engine stamps it onto every Violation via
- * `stampViolation`, and the MCP `formatFinding` helper forwards it.
+ * `stampViolation`, and the shared `buildAgentFinding` builder forwards
+ * it to every MCP tool response and the CLI agent formatter.
  *
  * This test locks in three invariants:
  *   1. Every built-in rule declares a valid `fixClass`.
  *   2. The value round-trips through a real scan end-to-end.
- *   3. `formatFinding` surfaces `fixClass` on the MCP payload so an
+ *   3. `buildAgentFinding` surfaces `fixClass` at the top level so an
  *      agent can batch-route without a `suggest_fix` round-trip.
  */
 
 import { describe, expect, it } from "bun:test";
 import { runScan } from "../../src/engine/scanner.ts";
 import { parseTsx } from "../../src/input/parsers/index.ts";
-import { formatFinding } from "../../src/mcp/tools-helpers.ts";
+import { buildAgentFinding } from "../../src/output/agent-response/index.ts";
 import { BUILTIN_RULES } from "../../src/rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../src/standards/index.ts";
 import type { Ast } from "../../src/types/ast.ts";
@@ -53,7 +54,7 @@ describe("Violation.fixClass", () => {
     expect(hit?.fixClass).toBe("mechanical");
   });
 
-  it("MCP formatFinding forwards fixClass so agents can batch-route", () => {
+  it("buildAgentFinding forwards fixClass so agents can batch-route", () => {
     const source = `export default function App() { return <img src="chart.png" />; }\n`;
     const parsed = parseTsx(source);
     const ast: Ast = { language: "tsx", root: parsed.root, errors: parsed.errors };
@@ -65,8 +66,8 @@ describe("Violation.fixClass", () => {
     });
     const hit = result.violations.find((v) => v.ruleId === "media/alt-text-missing");
     if (!hit) throw new Error("expected a media/alt-text-missing violation");
-    const formatted = formatFinding(hit);
-    expect(formatted["fixClass"]).toBe("mechanical");
+    const formatted = buildAgentFinding(hit);
+    expect(formatted.fixClass).toBe("mechanical");
   });
 
   it("synthetic internal/rule-crash findings route into verify-in-source", () => {

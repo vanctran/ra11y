@@ -6,8 +6,10 @@
  *      invariant documented on `Violation.criteriaTitles` — consumers
  *      zip the two arrays).
  *   2. Forwarded through the JSON and agent formatters.
- *   3. Forwarded through the MCP `formatFinding` helper so every
- *      MCP tool response benefits without per-handler wiring.
+ *   3. Forwarded through `buildAgentFinding` (the shared
+ *      `src/output/agent-response/` builder every MCP tool and the CLI
+ *      agent formatter consumes) so every tool response benefits
+ *      without per-handler wiring.
  *
  * The test uses a real rule (`media/alt-text-missing`) scanned against a
  * real standard (WCAG 2.2) so the title lookup resolves against live
@@ -19,7 +21,7 @@
 import { describe, expect, it } from "bun:test";
 import { type ParsedFile, runScan } from "../../src/engine/scanner.ts";
 import { parseHtml } from "../../src/input/parsers/index.ts";
-import { formatFinding } from "../../src/mcp/tools-helpers.ts";
+import { buildAgentFinding } from "../../src/output/agent-response/index.ts";
 import { agentFormatter } from "../../src/output/formatters/agent.ts";
 import { jsonFormatter } from "../../src/output/formatters/json.ts";
 import { BUILTIN_RULES } from "../../src/rules/index.ts";
@@ -141,7 +143,7 @@ describe("criteriaTitles — end-to-end alignment", () => {
     expect(finding!.criteriaTitles![idx]).toBe("Non-text Content");
   });
 
-  it("MCP formatFinding forwards criteriaTitles so every MCP tool response benefits", () => {
+  it("buildAgentFinding forwards criteriaTitles so every MCP tool response benefits", () => {
     const { result } = runScan({
       standards: [wcag22, wcag21],
       rules: BUILTIN_RULES,
@@ -152,14 +154,11 @@ describe("criteriaTitles — end-to-end alignment", () => {
     const altViolation = result.violations.find((v) => v.ruleId === "media/alt-text-missing");
     expect(altViolation).toBeDefined();
 
-    const formatted = formatFinding(altViolation!) as {
-      criteria: string[];
-      criteriaTitles?: string[];
-    };
+    const formatted = buildAgentFinding(altViolation!);
     expect(formatted.criteriaTitles).toBeDefined();
     expect(formatted.criteriaTitles).toHaveLength(formatted.criteria.length);
     const idx = formatted.criteria.indexOf("wcag22:1.1.1");
-    expect(formatted.criteriaTitles![idx]).toBe("Non-text Content");
+    expect(formatted.criteriaTitles?.[idx]).toBe("Non-text Content");
   });
 
   it("a violation with empty criteria has empty criteriaTitles (empty-in → empty-out)", () => {
@@ -167,13 +166,13 @@ describe("criteriaTitles — end-to-end alignment", () => {
     // don't go through the filter (they're constructed directly by the
     // scanner's error path). The invariant is "same cardinality," so
     // criteria: [] must be paired with either absent or empty
-    // criteriaTitles — never a mis-aligned sentinel. formatFinding's
+    // criteriaTitles — never a mis-aligned sentinel. buildAgentFinding's
     // conditional spread absorbs the absent case; the unit test for
     // `titlesForCriteria([])` covers the empty-array branch directly.
     // We assert both observable states here.
 
     // Build a synthetic Violation with criteria: [] and no
-    // criteriaTitles — verify formatFinding omits the field rather
+    // criteriaTitles — verify buildAgentFinding omits the field rather
     // than emitting `criteriaTitles: []` as a lying placeholder.
     const synthetic = {
       findingId: "deadbeef0000",
@@ -185,7 +184,7 @@ describe("criteriaTitles — end-to-end alignment", () => {
       location: { filePath: "input.html", line: 1, column: 1 },
       message: "synthetic",
     };
-    const out = formatFinding(synthetic) as Record<string, unknown>;
+    const out = buildAgentFinding(synthetic);
     expect(out.criteria).toEqual([]);
     expect(Object.hasOwn(out, "criteriaTitles")).toBe(false);
 
@@ -194,7 +193,7 @@ describe("criteriaTitles — end-to-end alignment", () => {
     // criteria), the field is present as an empty array — aligned
     // cardinality, no ambiguity.
     const withEmptyTitles = { ...synthetic, criteriaTitles: [] as readonly string[] };
-    const out2 = formatFinding(withEmptyTitles) as Record<string, unknown>;
+    const out2 = buildAgentFinding(withEmptyTitles);
     expect(out2.criteriaTitles).toEqual([]);
   });
 });

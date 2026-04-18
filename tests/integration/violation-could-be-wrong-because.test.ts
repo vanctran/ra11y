@@ -7,9 +7,10 @@
  * it. This test locks in the forwarder invariants for both populated
  * and unpopulated cases:
  *
- *   1. When the field is absent on the Violation, neither the MCP
- *      `formatFinding` output nor the `agent` formatter emits a
- *      `couldBeWrongBecause` key. This is the load-bearing shape
+ *   1. When the field is absent on the Violation, neither the shared
+ *      `buildAgentFinding` output (consumed by every MCP tool) nor the
+ *      `agent` formatter emits a `couldBeWrongBecause` key. This is
+ *      the load-bearing shape
  *      hygiene — `couldBeWrongBecause: []` would be a dishonest
  *      empty-vs-unpopulated sentinel per CLAUDE.md §1.
  *   2. When the field is populated, both forwarders surface it with
@@ -21,7 +22,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { formatFinding } from "../../src/mcp/tools-helpers.ts";
+import { buildAgentFinding } from "../../src/output/agent-response/index.ts";
 import { agentFormatter } from "../../src/output/formatters/agent.ts";
 import type { ReportData, ScanResult, Violation } from "../../src/types/violation.ts";
 import { withFindingId } from "../helpers/make-violation.ts";
@@ -61,8 +62,8 @@ describe("Violation.couldBeWrongBecause", () => {
   describe("when absent on the Violation", () => {
     const v = makeViolation();
 
-    it("MCP formatFinding omits the key entirely", () => {
-      const out = formatFinding(v);
+    it("buildAgentFinding omits the key entirely", () => {
+      const out = buildAgentFinding(v);
       expect("couldBeWrongBecause" in out).toBe(false);
     });
 
@@ -78,8 +79,8 @@ describe("Violation.couldBeWrongBecause", () => {
     // []` must never reach the agent.
     const v = makeViolation({ couldBeWrongBecause: [] });
 
-    it("MCP formatFinding omits the key", () => {
-      const out = formatFinding(v);
+    it("buildAgentFinding omits the key", () => {
+      const out = buildAgentFinding(v);
       expect("couldBeWrongBecause" in out).toBe(false);
     });
 
@@ -93,9 +94,9 @@ describe("Violation.couldBeWrongBecause", () => {
     const codes = ["replacement_indicator_in_sibling_file", "tailwind_class_on_consumer"] as const;
     const v = makeViolation({ couldBeWrongBecause: codes });
 
-    it("MCP formatFinding surfaces the codes in order", () => {
-      const out = formatFinding(v);
-      expect(out["couldBeWrongBecause"]).toEqual([...codes]);
+    it("buildAgentFinding surfaces the codes in order", () => {
+      const out = buildAgentFinding(v);
+      expect(out.couldBeWrongBecause).toEqual([...codes]);
     });
 
     it("agent formatter surfaces the codes in order", () => {
