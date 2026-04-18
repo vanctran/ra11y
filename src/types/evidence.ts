@@ -60,6 +60,17 @@ export type EvidenceStatus = "pass" | "fail" | "unknown" | "n/a";
  *
  * Phase 2+ producers have no implementation yet but their shapes are
  * locked in so future code never has to migrate the discriminant.
+ *
+ * A note on runtime evidence: there is deliberately no `"runtime"`
+ * source kind. Vendor runtime scanners (axe-core, Lighthouse, WAVE,
+ * Pa11y) produce JSON with vendor-specific schemas and vendor-specific
+ * rule-to-WCAG mappings. In the AI-first consumer model the agent
+ * reads that JSON with its existing tools and calls `attest` — the
+ * resulting `attested` source carries the provenance in its `by` and
+ * `reason` fields, without ra11y committing to any vendor's schema.
+ * `sampled` is kept as its own kind because ra11y itself owns the
+ * sampling-tool contract (Track S); `runtime` is not distinguishable
+ * from `attested` in a way ra11y can defend without picking a vendor.
  */
 export type EvidenceSource =
   | {
@@ -77,7 +88,7 @@ export type EvidenceSource =
     }
   | {
       readonly kind: "attested";
-      /** Who attested (author identifier, bot ID, commit author, …). */
+      /** Who attested (author identifier, bot ID, commit author, runtime-tool-plus-CI, …). */
       readonly by: string;
       /** Human-readable reason the author asserts the criterion is satisfied. */
       readonly reason: string;
@@ -87,16 +98,8 @@ export type EvidenceSource =
       readonly scope?: "project" | "file" | "line";
       /** Location the attestation pins to, when `scope !== "project"`. */
       readonly location?: Location;
-    }
-  | {
-      readonly kind: "runtime";
-      /** Tool name that produced this result (e.g., `"axe-core"`). */
-      readonly tool: string;
-      /** ISO-8601 timestamp the runtime scan completed. */
-      readonly scannedAt: string;
-      readonly outcome: "pass" | "fail";
-      /** Tool-specific payload; opaque to the ledger builder. */
-      readonly details?: unknown;
+      /** Verdict the attestation asserts; defaults to `"pass"` when omitted. */
+      readonly verdict?: "pass" | "fail" | "n/a";
     }
   | {
       readonly kind: "sampled";

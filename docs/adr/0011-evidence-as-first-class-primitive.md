@@ -1,6 +1,6 @@
 # 0011 — Evidence as a first-class primitive
 
-- Status: Accepted
+- Status: Accepted (amended 2026-04-18: dropped `runtime` source kind)
 - Date: 2026-04-18
 - Supersedes: none
 - Superseded by: none
@@ -15,13 +15,15 @@ reconciling multiple sources of evidence per criterion:
 1. **Static findings** — `Violation[]` from the rule runner.
 2. **Review candidates** — `ReviewCandidate[]` from manual-review
    finders; unresolved pointers, not assertions.
-3. **Attestations** — an author (or CI bot) asserting "this criterion
-   is satisfied here for this reason." Today encoded as
-   `<!-- ra11y-disable … -->` / `{/* ra11y-disable … */}` pragmas,
-   filtered out at scan time rather than recorded as evidence.
-4. **Runtime results** — axe-core (or other DOM-level scanners) emit
-   findings the static scanner cannot produce. No ingest path today.
-5. **Sampling verdicts** — LLM-backed MCP sampling tools (ADR 0005
+3. **Attestations** — an author, CI bot, *or runtime-scanner-via-CI*
+   asserting "this criterion is satisfied (or not) for this reason."
+   Today encoded as `<!-- ra11y-disable … -->` / `{/* ra11y-disable … */}`
+   pragmas, filtered out at scan time rather than recorded as evidence.
+   Runtime-tool results (axe-core, Lighthouse, WAVE, Pa11y) also ride
+   on this kind — an agent runs the tool in its CI harness, reads the
+   vendor JSON, and calls `attest` with a reason citing the run. ra11y
+   does not ingest any vendor JSON schema directly.
+4. **Sampling verdicts** — LLM-backed MCP sampling tools (ADR 0005
    follow-ups: `tool-verdict-candidate`, `tool-resolve-component`) emit
    per-candidate verdicts. No storage shape today.
 
@@ -54,8 +56,7 @@ type EvidenceStatus = "pass" | "fail" | "unknown" | "n/a";
 type EvidenceSource =
   | { readonly kind: "static";    readonly findingId: string }
   | { readonly kind: "candidate"; readonly location: Location; readonly reason: string; readonly confidence: ReviewConfidence; readonly finderId?: string }
-  | { readonly kind: "attested";  readonly by: string; readonly reason: string; readonly attestedAt: string; readonly scope?: "project" | "file" | "line"; readonly location?: Location }
-  | { readonly kind: "runtime";   readonly tool: string; readonly scannedAt: string; readonly outcome: "pass" | "fail"; readonly details?: unknown }
+  | { readonly kind: "attested";  readonly by: string; readonly reason: string; readonly attestedAt: string; readonly scope?: "project" | "file" | "line"; readonly location?: Location; readonly verdict?: "pass" | "fail" | "n/a" }
   | { readonly kind: "sampled";   readonly verdict: "pass" | "fail" | "n/a"; readonly reasoning: string; readonly samplerId: string; readonly sampledAt: string };
 
 interface CriterionEvidence {
@@ -88,12 +89,11 @@ Applied per criterion in strict precedence:
 `n/a` is reserved. No producer in Phase 1 — becomes reachable when
 attestations with a "not applicable" assertion land (Phase 2).
 
-Later phases refine: a non-`fail`-tagged criterion with a
-`runtime.outcome === "pass"` promotes to `pass`; an `attested` source
-with `reason` can promote an `unknown` manual criterion to `pass`; a
-`sampled.verdict === "n/a"` promotes to `n/a`. The derivation stays a
-pure function over `sources[]`; adding a producer never forces an API
-change.
+Later phases refine: an `attested` source with `verdict: "pass"` can
+promote an `unknown` manual criterion to `pass` (and vice versa for
+`"fail"` / `"n/a"`); a `sampled.verdict === "n/a"` promotes to `n/a`.
+The derivation stays a pure function over `sources[]`; adding a
+producer never forces an API change.
 
 ### Equivalence fan-out is free
 
@@ -124,20 +124,20 @@ export interface ScanProducts {
 
 **Phase 1 — this ADR.** Shape + builder + ScanProducts integration
 + unit tests. Zero MCP shape changes. `static` and `candidate`
-sources have producers; `attested`/`runtime`/`sampled` slots exist
-but produce nothing yet.
+sources have producers; `attested` / `sampled` slots exist but
+produce nothing yet.
 
-**Phase 2 — attestations.** `ra11y-disable` pragmas emit
-`attested` sources instead of silencing violations outright. A new
-`attest` MCP tool writes durable entries to
+**Phase 2 — attestations.** `ra11y-disable` pragmas with a captured
+`reason` emit `attested` sources alongside the existing silence. A
+new `attest` MCP tool writes durable entries to
 `.ra11y/attestations.jsonl`. `C-ATTEST-*` items close here.
 
-**Phase 3 — runtime + sampling.** `axe-ingest` accepts axe-core JSON
-and emits `runtime` sources. Track S's speculative sampling tools
-emit `sampled` sources. The conformance statement report (`C-CONFORM-
-STATEMENT`) becomes implementable — refuses to emit unless every
-criterion in the profile has at least one non-`candidate` source and
-`status !== "unknown"`.
+**Phase 3 — conformance statement.** The conformance-statement report
+(`C-CONFORM-STATEMENT`) becomes implementable — refuses to emit
+unless every criterion in the configured profile has at least one
+non-`candidate` source and `status !== "unknown"`. Sampling verdicts
+(`sampled` kind) become available once Track S's speculative
+sampling tools ship.
 
 Each phase is a ≤400-LOC net-diff commit set per CLAUDE.md § 9. The
 shape in § "Shapes" above is the Phase 3 shape; Phase 1 ships it
@@ -162,6 +162,26 @@ whole so later phases never touch consumers.
 
 No breaking changes. No churn to rule authors, formatter authors, or
 MCP handlers in Phase 1.
+
+## Amendment — 2026-04-18
+
+Dropped the `"runtime"` source kind from the union before any
+producer shipped. Vendor runtime scanners (axe-core, Lighthouse,
+WAVE, Pa11y) each have vendor-specific JSON schemas and
+vendor-specific rule-to-WCAG mappings; building an ingest adapter
+for any of them commits ra11y to that vendor's continued existence
+and shape. In the AI-first consumer model the agent is the
+integration layer — it runs the runtime tool in its CI harness,
+reads the output JSON with its existing tools, and calls `attest`
+with a descriptive `by` + `reason`. The resulting `attested` source
+carries full provenance without ra11y taking a vendor bet.
+
+`attested` gained an optional `verdict: "pass" | "fail" | "n/a"`
+field so an attestation can assert a failure state (e.g., "axe-core
+reported two violations") rather than being implicitly pass-only.
+
+See `feedback_no_vendor_ingest_adapters` in auto-memory for the
+durable rule.
 
 ## Alternatives considered
 

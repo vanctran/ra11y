@@ -177,7 +177,7 @@ This is the data behind `--coverage`, `--vpat`, `--certification`, and `--checkl
 
 ## Evidence ledger
 
-After `buildReportData()`, `buildEvidenceLedger()` in `src/engine/evidence-ledger.ts` folds violations and review candidates into a per-criterion `EvidenceLedger` on `ScanProducts.ledger`. It's the substrate for conformance claims — a shape that reconciles multiple sources (static findings today; attestations, runtime ingests, and sampling verdicts in later phases) per criterion instead of leaving them as parallel arrays on `ScanResult` and `ReportData`.
+After `buildReportData()`, `buildEvidenceLedger()` in `src/engine/evidence-ledger.ts` folds violations and review candidates into a per-criterion `EvidenceLedger` on `ScanProducts.ledger`. It's the substrate for conformance claims — a shape that reconciles multiple sources (static findings today; attestations and sampling verdicts in later phases) per criterion instead of leaving them as parallel arrays on `ScanResult` and `ReportData`.
 
 Each entry carries the criterion ID, its automatability, every source that spoke to it, and a derived `status`:
 
