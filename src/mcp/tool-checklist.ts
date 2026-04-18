@@ -32,6 +32,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField } from "./warnings.ts";
 
 interface ChecklistCandidateOut {
   readonly path: string;
@@ -294,6 +295,16 @@ export const checklistTool: McpTool = {
     };
 
     const showUntargeted = params["showUntargeted"] === true;
+    // Doctrine (CLAUDE.md §1 "Zero-output success is ambiguous failure"):
+    // a `checklist` response shaped like `{ items: [], untargetedCriteria: 0 }`
+    // is indistinguishable from "tool never ran" unless we surface the
+    // honest "scanned_zero_files" code on a real-but-empty scan root.
+    // checklist has no root-resolution step (it takes `paths` directly,
+    // defaulting to `[cwd]`), mirroring `scan`; pass `rootSource: null`.
+    // Config resolution isn't part of this handler, so `configSource:
+    // undefined` suppresses `no_config_found`. analysisCoverage /
+    // filesByExtension aren't computed here — the other codes will
+    // simply not fire until the tool plumbs that signal through.
     return textResult({
       summary,
       items: page.items,
@@ -301,6 +312,13 @@ export const checklistTool: McpTool = {
       ...page.paginationFields,
       ...(showUntargeted ? { untargetedCriteriaList: untargeted } : {}),
       likelyIrrelevant: filteredIrrelevant,
+      ...warningsField({
+        filesScanned: files.length,
+        rootSource: null,
+        configSource: undefined,
+        analysisCoverage: undefined,
+        filesByExtension: undefined,
+      }),
     });
   },
 };

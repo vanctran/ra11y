@@ -20,6 +20,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField } from "./warnings.ts";
 
 export const suggestFixTool: McpTool = {
   def: {
@@ -99,6 +100,10 @@ export const suggestFixTool: McpTool = {
     const match = result.violations.find((v) => v.ruleId === ruleId && v.location.line === line);
     const sourceContext =
       strParam(params, "sourceContext") ?? buildSourceContext(parsed.source, line);
+    const combinedWarnings = composeSuggestFixWarnings({
+      filesScanned: result.filesScanned,
+      usedDeprecatedAlias: filePathResult.usedDeprecatedAlias,
+    });
     const payload = buildSuggestFixPayload({
       ruleId,
       line,
@@ -106,12 +111,36 @@ export const suggestFixTool: McpTool = {
       sourceContext,
       source: parsed.source,
       filePath,
+      ...(combinedWarnings.length > 0 ? { warnings: combinedWarnings } : {}),
     });
-    // Conditional-spread the deprecation signal — omitted on canonical
-    // `file` (CLAUDE.md §1 "Ambiguous field shapes are dishonest").
-    return textResult({
-      ...(payload as Record<string, unknown>),
-      ...(filePathResult.usedDeprecatedAlias ? { warnings: ["deprecated_param_filepath"] } : {}),
-    });
+    return textResult(payload as Record<string, unknown>);
   },
 };
+
+/**
+ * Unified response-level `warnings` for `suggest_fix`. Combines
+ * caller-input warnings (deprecated `filePath` alias) with scan-
+ * confidence codes from the shared helper so both ride a single field
+ * per the AI-first doctrine (CLAUDE.md §1 "Zero-output success is
+ * ambiguous failure"). `suggest_fix` parses one file and hard-errors
+ * when it can't, so `scanned_zero_files` won't fire in practice today —
+ * but plumbing the helper through keeps the doctrine contract
+ * consistent across tools and means future codes appear automatically
+ * without another retrofit. Pass `rootSource: null` (no root-resolution
+ * step) and `configSource: undefined` (the handler doesn't resolve
+ * project config) so those codes stay silent.
+ */
+function composeSuggestFixWarnings(inputs: {
+  readonly filesScanned: number;
+  readonly usedDeprecatedAlias: boolean;
+}): readonly string[] {
+  const scanWarnings =
+    warningsField({
+      filesScanned: inputs.filesScanned,
+      rootSource: null,
+      configSource: undefined,
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+    }).warnings ?? [];
+  return [...(inputs.usedDeprecatedAlias ? ["deprecated_param_filepath"] : []), ...scanWarnings];
+}

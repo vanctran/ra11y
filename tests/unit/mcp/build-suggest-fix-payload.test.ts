@@ -189,3 +189,45 @@ describe("buildSuggestFixPayload — verifyCommand on kind: 'none'", () => {
     });
   });
 });
+
+describe("buildSuggestFixPayload — response-level `warnings` plumbing", () => {
+  // Doctrine (CLAUDE.md §1 "Zero-output success is ambiguous failure"):
+  // suggest_fix unifies caller-input warnings (deprecated `filePath`
+  // alias) and scan-confidence codes under a single response-level
+  // `warnings` field. The payload builder is pure — it forwards the
+  // caller-supplied array verbatim and conditional-spreads so an empty
+  // or undefined input omits the field entirely (never `warnings: []`).
+  it("forwards the caller-supplied warnings array verbatim on kind: 'edit'", () => {
+    const payload = buildSuggestFixPayload(
+      baseArgs(violationWithFixPaths(), { warnings: ["deprecated_param_filepath"] }),
+    );
+    expect(payload["kind"]).toBe("edit");
+    expect(payload["warnings"]).toEqual(["deprecated_param_filepath"]);
+  });
+
+  it("forwards the warnings array on kind: 'guidance'", () => {
+    const payload = buildSuggestFixPayload(
+      baseArgs(violationGuidanceOnly(), { warnings: ["deprecated_param_filepath"] }),
+    );
+    expect(payload["kind"]).toBe("guidance");
+    expect(payload["warnings"]).toEqual(["deprecated_param_filepath"]);
+  });
+
+  it("forwards the warnings array on kind: 'none'", () => {
+    const payload = buildSuggestFixPayload(
+      baseArgs(undefined, { warnings: ["deprecated_param_filepath"] }),
+    );
+    expect(payload["kind"]).toBe("none");
+    expect(payload["warnings"]).toEqual(["deprecated_param_filepath"]);
+  });
+
+  it("omits the `warnings` field entirely when the caller passes undefined", () => {
+    const payload = buildSuggestFixPayload(baseArgs(violationWithFixPaths()));
+    expect(payload).not.toHaveProperty("warnings");
+  });
+
+  it("omits the `warnings` field entirely when the caller passes an empty array (never `warnings: []`)", () => {
+    const payload = buildSuggestFixPayload(baseArgs(violationWithFixPaths(), { warnings: [] }));
+    expect(payload).not.toHaveProperty("warnings");
+  });
+});

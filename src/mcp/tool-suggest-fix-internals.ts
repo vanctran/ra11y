@@ -68,6 +68,15 @@ export interface BuildSuggestFixPayloadArgs {
    * pointer.
    */
   readonly filePath: string;
+  /**
+   * Caller-computed response-level warnings, forwarded verbatim onto
+   * every outcome shape. Closes the zero-output-success ambiguity
+   * documented in CLAUDE.md §1 — the handler knows the scan-confidence
+   * signals (`filesScanned`, deprecated-param alias, future codes) and
+   * passes them here pre-assembled. Omit or pass an empty array to
+   * skip the field entirely (conditional-spread at the assembly site).
+   */
+  readonly warnings?: readonly string[];
 }
 
 /**
@@ -93,15 +102,35 @@ export function buildVerifyCommand(
   };
 }
 
+/**
+ * Conditional-spread wrapper for response-level `warnings` — omitted
+ * when the caller-supplied array is undefined or empty so the field is
+ * never `warnings: []` (CLAUDE.md §1 "Ambiguous field shapes are
+ * dishonest"). Shared by every outcome branch of
+ * `buildSuggestFixPayload`.
+ */
+function warningsSpreadField(warnings: readonly string[] | undefined): {
+  readonly warnings?: readonly string[];
+} {
+  return warnings !== undefined && warnings.length > 0 ? { warnings } : {};
+}
+
 export function buildSuggestFixPayload(args: BuildSuggestFixPayloadArgs): Record<string, unknown> {
-  const { ruleId, line, match, sourceContext, source, filePath } = args;
+  const { ruleId, line, match, sourceContext, source, filePath, warnings } = args;
   const verify = buildVerifyCommand(filePath, ruleId);
+  // Response-level `warnings` for the zero-output-success doctrine
+  // (CLAUDE.md §1). The handler pre-computes scan-confidence codes +
+  // any caller-input warnings (e.g. the deprecated `filePath` alias)
+  // and passes them here; `warningsSpreadField` handles the
+  // conditional-spread so the field is absent when empty.
+  const warningsField = warningsSpreadField(warnings);
   if (!match) {
     return {
       kind: "none",
       explanation: `No violation for ${ruleId} at line ${line}.`,
       confidence: "low",
       ...verify,
+      ...warningsField,
     };
   }
   const confidence = match.severity === "error" ? "high" : "medium";
@@ -111,33 +140,16 @@ export function buildSuggestFixPayload(args: BuildSuggestFixPayloadArgs): Record
   // when-populated is the honest shape.
   const snippetField = match.snippet ? { snippet: match.snippet } : {};
   if (match.fixPaths) {
-    const mechanical = match.fixPaths.primary.edit;
-    const widened = mechanical
-      ? widenToUniqueAnchor({
-          source,
-          oldText: mechanical.oldText,
-          newText: mechanical.newText,
-          line,
-        })
-      : null;
-    const primary: FixPath = widened
-      ? {
-          ...match.fixPaths.primary,
-          edit: { oldText: widened.oldText, newText: widened.newText },
-        }
-      : match.fixPaths.primary;
-    const caveatField = widened?.caveat ? { caveat: widened.caveat } : {};
-    return {
-      kind: mechanical ? "edit" : "guidance",
-      primary,
-      alternatives: match.fixPaths.alternatives,
-      explanation: match.suggestion ?? match.message,
-      ...snippetField,
-      ...caveatField,
+    return buildFixPathsOutcome({
+      match,
+      source,
+      line,
       sourceContext,
       confidence,
-      ...verify,
-    };
+      snippetField,
+      verify,
+      warningsField,
+    });
   }
   const explanation = match.suggestion
     ? match.suggestion
@@ -149,5 +161,62 @@ export function buildSuggestFixPayload(args: BuildSuggestFixPayloadArgs): Record
     sourceContext,
     confidence: match.suggestion ? confidence : "low",
     ...verify,
+    ...warningsField,
+  };
+}
+
+/**
+ * Builds the `kind: "edit"` or `kind: "guidance"` outcome when the
+ * violation carries `fixPaths`. Extracted from `buildSuggestFixPayload`
+ * to keep that function's cognitive complexity under the lint cap —
+ * the widen-to-unique-anchor plumbing adds branching this function
+ * absorbs.
+ */
+function buildFixPathsOutcome(inputs: {
+  readonly match: Violation;
+  readonly source: string;
+  readonly line: number;
+  readonly sourceContext: string;
+  readonly confidence: "high" | "medium";
+  readonly snippetField: { readonly snippet?: string };
+  readonly verify: ReturnType<typeof buildVerifyCommand>;
+  readonly warningsField: { readonly warnings?: readonly string[] };
+}): Record<string, unknown> {
+  const { match, source, line, sourceContext, confidence, snippetField, verify, warningsField } =
+    inputs;
+  // `match.fixPaths` is guaranteed non-null at the call site — the
+  // helper is only invoked from the `if (match.fixPaths)` branch of
+  // `buildSuggestFixPayload`.
+  const fixPaths = match.fixPaths;
+  if (fixPaths === undefined) {
+    throw new Error("buildFixPathsOutcome: match.fixPaths must be defined");
+  }
+  const mechanical = fixPaths.primary.edit;
+  const widened = mechanical
+    ? widenToUniqueAnchor({
+        source,
+        oldText: mechanical.oldText,
+        newText: mechanical.newText,
+        line,
+      })
+    : null;
+  const primary: FixPath = widened
+    ? {
+        ...fixPaths.primary,
+        edit: { oldText: widened.oldText, newText: widened.newText },
+      }
+    : fixPaths.primary;
+  const caveatField = widened?.caveat ? { caveat: widened.caveat } : {};
+  return {
+    kind: mechanical ? "edit" : "guidance",
+    primary,
+    alternatives: fixPaths.alternatives,
+    explanation: match.suggestion ?? match.message,
+    ...snippetField,
+    ...caveatField,
+    sourceContext,
+    confidence,
+    ...verify,
+    ...warningsField,
   };
 }

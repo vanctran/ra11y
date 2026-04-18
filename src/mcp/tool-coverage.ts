@@ -23,6 +23,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField } from "./warnings.ts";
 
 export const coverageTool: McpTool = {
   def: {
@@ -136,7 +137,34 @@ export const coverageTool: McpTool = {
       };
     });
 
-    return textResult(entries.length === 1 ? entries[0] : entries);
+    // Doctrine (CLAUDE.md §1 "Zero-output success is ambiguous failure"):
+    // a coverage response with `criteriaAutomatable: 0` etc. is
+    // indistinguishable from "tool never ran" unless we surface the
+    // honest "scanned_zero_files" code on a real-but-empty scan root.
+    // `coverage` has no root-resolution step (takes `paths` directly,
+    // defaulting to `[cwd]`) and doesn't load project config in this
+    // handler; mirror the `scan` tool's inputs for the other codes.
+    const warnings = warningsField({
+      filesScanned: files.length,
+      rootSource: null,
+      configSource: undefined,
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+    });
+    // Historical shape: single object when one standard is enabled,
+    // array-of-entries when multiple. Warnings ride at the top level of
+    // the response per doctrine. For the single-standard path (by far
+    // the common case) we spread warnings alongside the entry fields;
+    // the multi-standard path keeps its array shape unchanged, so a
+    // future consumer expecting `Array.isArray(response)` doesn't
+    // regress. Warnings on a zero-file multi-standard scan would also
+    // need the per-response envelope, but adding it conditionally here
+    // would split the wire shape on a signal invisible to the schema —
+    // we leave that path unchanged until a concrete consumer needs it.
+    if (entries.length === 1) {
+      return textResult({ ...entries[0], ...warnings });
+    }
+    return textResult(entries);
   },
 };
 

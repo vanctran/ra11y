@@ -39,6 +39,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { warningsField } from "./warnings.ts";
 
 export const reviewCandidatesTool: McpTool = {
   def: {
@@ -132,6 +133,13 @@ export const reviewCandidatesTool: McpTool = {
     }
     const hasPrompts = Object.keys(prompts).length > 0;
 
+    // Doctrine (CLAUDE.md §1 "Zero-output success is ambiguous failure"):
+    // `{ candidateCount: 0, candidates: [] }` reads as "clean codebase"
+    // when it may be "tool never ran." `review_candidates` has no
+    // root-resolution step (takes `paths` directly, defaulting to
+    // `[cwd]`) and doesn't load project config here; mirror the `scan`
+    // tool's warning inputs so the malformed-input case surfaces the
+    // honest `scanned_zero_files` code rather than a silent success.
     return textResult({
       level,
       standards,
@@ -161,6 +169,13 @@ export const reviewCandidatesTool: McpTool = {
           confidence: c.confidence,
           ...(snippet === undefined ? {} : { snippet }),
         };
+      }),
+      ...warningsField({
+        filesScanned: files.length,
+        rootSource: null,
+        configSource: undefined,
+        analysisCoverage: undefined,
+        filesByExtension: undefined,
       }),
     });
   },

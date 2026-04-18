@@ -139,6 +139,45 @@ describe("scan_project emits top-level `warnings` for silent-failure modes (P0-E
   });
 });
 
+describe("checklist emits top-level `warnings` for silent-failure modes", () => {
+  // Doctrine: CLAUDE.md §1 "Zero-output success is ambiguous failure."
+  // `checklist` has no root-resolution step and never hard-errors on a
+  // nonexistent cwd — the discover pass simply returns zero files. Without
+  // the soft signal, a response shaped like `{ items: [],
+  // untargetedCriteria: 0 }` reads as "clean codebase" when the tool
+  // actually never saw parseable input.
+  it("scanned_zero_files fires on a nonexistent cwd", async () => {
+    const bogus = join("/path/that/does/not/exist", "ra11y-checklist-no-such-dir");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "checklist", { cwd: bogus })]);
+    const body = bodyOf(responses[1]) as { warnings?: readonly string[] };
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(body.warnings).toContain("scanned_zero_files");
+  });
+});
+
+describe("coverage emits top-level `warnings` for silent-failure modes", () => {
+  it("scanned_zero_files fires on a nonexistent cwd", async () => {
+    const bogus = join("/path/that/does/not/exist", "ra11y-coverage-no-such-dir");
+    const responses = await mcpSession([initMsg(1), toolCall(2, "coverage", { cwd: bogus })]);
+    const body = bodyOf(responses[1]) as { warnings?: readonly string[] };
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(body.warnings).toContain("scanned_zero_files");
+  });
+});
+
+describe("review_candidates emits top-level `warnings` for silent-failure modes", () => {
+  it("scanned_zero_files fires on a nonexistent cwd", async () => {
+    const bogus = join("/path/that/does/not/exist", "ra11y-review-cand-no-such-dir");
+    const responses = await mcpSession([
+      initMsg(1),
+      toolCall(2, "review_candidates", { cwd: bogus }),
+    ]);
+    const body = bodyOf(responses[1]) as { warnings?: readonly string[] };
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(body.warnings).toContain("scanned_zero_files");
+  });
+});
+
 describe("scan emits top-level `warnings` for silent-failure modes (P0-E)", () => {
   it("scanned_zero_files fires when the paths exist but resolve to zero parseable files", async () => {
     // Nonexistent-path inputs now hard-error with `scan-paths-not-found`
