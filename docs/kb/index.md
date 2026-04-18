@@ -115,6 +115,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [forms/label-for-id-mismatch](./rules/forms__label-for-id-mismatch.md)
 - [forms/labels-required](./rules/forms__labels-required.md)
 - [forms/non-empty-label](./rules/forms__non-empty-label.md)
+- [forms/required-indicator-missing](./rules/forms__required-indicator-missing.md)
 - [keyboard/accesskey-duplicate](./rules/keyboard__accesskey-duplicate.md)
 - [keyboard/character-shortcuts](./rules/keyboard__character-shortcuts.md)
 - [keyboard/handler-missing](./rules/keyboard__handler-missing.md)

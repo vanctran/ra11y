@@ -1,14 +1,13 @@
 ---
 title: "focus/outline-visible"
 severity: "error"
-scope: "document"
+scope: "project"
 satisfies: ["wcag22:2.4.7", "wcag21:2.4.7"]
 ---
 # `focus/outline-visible`
 - **Severity:** error
-- **Scope:** document
+- **Scope:** project
 - **Satisfies:** `wcag22:2.4.7`, `wcag21:2.4.7`
-- **Applies to:** .css
 ## What it checks
 CSS rules on :focus/:focus-visible must not remove the outline without providing a replacement focus indicator.
 ## Why it matters
