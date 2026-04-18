@@ -5,7 +5,7 @@ audience: plugin authors
 
 # Authoring a ra11y rule plugin
 
-A **rule** is a pure function over a single file's AST that emits zero or more violations. ra11y ships 41 built-in rules; plugins let you add your own for organization-specific conventions, emerging WCAG techniques, or framework-specific patterns (e.g. Next.js router constraints, Shopify's Liquid templates).
+A **rule** is a pure function over a single file's AST that emits zero or more violations. ra11y ships a growing set of built-in rules covering the auto-detectable WCAG 2.2/2.1 criteria (see `src/rules/index.ts` for the current inventory); plugins let you add your own for organization-specific conventions, emerging WCAG techniques, or framework-specific patterns (e.g. Next.js router constraints, Shopify's Liquid templates).
 
 See the runnable reference at [`examples/plugin-rule/`](../../examples/plugin-rule/).
 

@@ -46,7 +46,7 @@ Use these; do not invent new assertion shapes inline. If you need one the harnes
 3. **Probe live meta.** Before finalizing assertions, scan the fixture via the harness and read the actual `result` / `report` / `formatted.meta` shape. **Never fabricate the shape from the backlog paraphrase** — the backlog is written ahead of reality; the live scanner is the source of truth. If the live shape differs from the backlog, assert against live and note the divergence in the README.
 4. **Write `assertions.ts`** against the probed shape. Use the narrowest primitive that captures the invariant — `meta-field { predicate: { contains } }` beats `{ equals }` when the invariant is "has substring X" rather than "looks exactly like Y."
 5. **Sanitize**: strip brand names, URLs, context clues. Avoid pragma-looking text or comment-embedded syntax that the scanner might re-parse (real hazard — pragmas inside a TSDoc comment get picked up).
-6. **`bun run verify`** — all 12 checks green.
+6. **`bun run verify`** — every check green.
 7. **Commit**: single commit per fixture (`test(real-world): add <case> fixture for <criterion>`). If you added a harness primitive, its own `feat(real-world):` commit lands first.
 
 # Hard constraints

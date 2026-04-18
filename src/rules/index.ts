@@ -1,7 +1,8 @@
 /**
  * Built-in rules barrel. Every rule ra11y ships out of the box is
- * registered here. v0.1.0 ships 36 rules covering the auto/partial
- * criteria under WCAG 2.1 A+AA + WCAG 2.2 A+AA additions.
+ * registered here, covering the auto/partial criteria under WCAG 2.1
+ * A+AA + WCAG 2.2 A+AA additions. See `BUILTIN_RULES` below for the
+ * current inventory.
  */
 
 import type { Rule } from "../types/rule.ts";
