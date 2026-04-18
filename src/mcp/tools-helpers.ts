@@ -7,7 +7,6 @@
  */
 
 import { isAbsolute, resolve } from "node:path";
-import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import { type ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
@@ -20,7 +19,9 @@ import { buildAnalysisCoverage } from "./analysis-coverage.ts";
 import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
 import { buildPlanSummary } from "./plan-summary.ts";
 import { buildReferenceGuide } from "./reference-guide.ts";
+import { buildRuleCoverageDerivative } from "./rule-coverage-derivative.ts";
 import type { McpSession } from "./session.ts";
+import { suppressionAudit, suppressionsMetaBlock } from "./suppression-audit.ts";
 import { nameMatchesAnyWrapper } from "./wrapper-matcher.ts";
 import {
   type NativeWrapperSources,
@@ -377,6 +378,22 @@ export interface ScanFormatted {
   readonly referenceGuide?: {
     readonly suppressPlacement: Readonly<Record<string, string>>;
   };
+  /**
+   * Top-level split of rule IDs into "0 findings with high-confidence
+   * coverage" vs "0 findings with low-confidence coverage" — derived
+   * from `meta.perRuleCoverage`. Lets agents branch on "trust the clean
+   * tally for this rule" vs "scan didn't see any eligible sources,
+   * retry with `additionalPaths`" without walking the per-rule rows.
+   *
+   * Only populated when at least one rule produced 0 findings —
+   * omitted entirely on already-flagged scans (CLAUDE.md §1 "Ambiguous
+   * field shapes are dishonest"). See
+   * `src/mcp/rule-coverage-derivative.ts`.
+   */
+  readonly ruleCoverage?: {
+    readonly confidentlyClean: readonly string[];
+    readonly lowConfidenceClean: readonly string[];
+  };
 }
 
 /**
@@ -487,6 +504,16 @@ export async function runScanAndFormat(
   const untargetedCriteria = manualCount - actionableManual;
   const suppressions = suppressionAudit(files);
   const referenceGuide = buildReferenceGuide(fileEntries);
+  // Per-rule trust telemetry (Q2R2-RULE-COV). The underlying rows ride
+  // in `meta.perRuleCoverage`; the top-level `ruleCoverage` derivative
+  // splits the 0-findings rules into "trust the clean tally" vs "scan
+  // didn't see any eligible sources" so agents branch on a two-bucket
+  // headline rather than walking every row. `filtered` is the
+  // post-severity, post-criterion-skip list the consumer actually sees
+  // — matching the plan's `totalFindings` so a rule silenced by the
+  // session's minSeverity filter reads as "0 findings for this
+  // consumer" here too.
+  const ruleCoverageDerivative = buildRuleCoverageDerivative(result.perRuleCoverage, filtered);
   const formatted: ScanFormatted = {
     plan: {
       totalFindings: filtered.length,
@@ -566,8 +593,18 @@ export async function runScanAndFormat(
       // clean scan can see where silence was bought. Omitted when no
       // pragmas exist in any scanned file.
       ...suppressionsMetaBlock(suppressions),
+      // Per-rule evaluation telemetry: for each active rule with an
+      // extension gate, how many eligible files existed and how many
+      // actually ran. Low-confidence rows carry a `reason` +
+      // `remediation` so an agent can act on the gap (canonical case:
+      // Tailwind pre-build where `contrast/minimum` runs on 0 eligible
+      // CSS files and the headline 0 findings is meaningless without
+      // this context). Omitted when the array is empty so clean scans
+      // on non-extension-gated rule sets don't ship an empty field.
+      ...(result.perRuleCoverage.length > 0 ? { perRuleCoverage: result.perRuleCoverage } : {}),
     },
     ...(referenceGuide === undefined ? {} : { referenceGuide }),
+    ...(ruleCoverageDerivative === null ? {} : { ruleCoverage: ruleCoverageDerivative }),
   };
 
   return {
@@ -576,52 +613,6 @@ export async function runScanAndFormat(
     filesScanned: result.filesScanned,
     reviewCandidates: report.candidates ?? [],
   };
-}
-
-function suppressionsMetaBlock(entries: readonly SuppressionAuditEntry[]): Record<string, unknown> {
-  if (entries.length === 0) return {};
-  return {
-    suppressions: entries,
-    suppressionsNote:
-      "Each in-source `ra11y-disable` pragma found across scanned files. Reasons captured from the optional `: reason` or `-- reason` suffix on the pragma itself — e.g. `// ra11y-disable-next-line contrast/minimum: light text on brand gradient`. Entries without a reason indicate an un-justified suppression the agent should consider replacing or documenting.",
-  };
-}
-
-interface SuppressionAuditEntry {
-  readonly path: string;
-  readonly line: number;
-  readonly kind: "disable" | "disable-next-line" | "enable";
-  readonly ruleIds: readonly string[];
-  readonly reason?: string;
-  /** `"ra11y-disable"` for comment pragmas; `"ra11y-intentional"` for the JSDoc tag variant. */
-  readonly tag?: "ra11y-disable" | "ra11y-intentional";
-}
-
-/**
- * Walks each parsed file's source for `ra11y-disable` pragmas and
- * flattens them into a per-file audit list. The reason-capture path
- * of the pragma parser is used so MCP consumers see both the
- * declaration and the justification (when supplied). Entries without
- * a reason surface as "suppression without a stated reason" — the
- * exact thing an agent reviewing a clean scan should flag for
- * follow-up.
- */
-function suppressionAudit(files: readonly ParsedFile[]): readonly SuppressionAuditEntry[] {
-  const out: SuppressionAuditEntry[] = [];
-  for (const file of files) {
-    const { declarations } = parseInlineDisablesDetailed(file.source);
-    for (const d of declarations) {
-      out.push({
-        path: file.filePath,
-        line: d.line,
-        kind: d.kind,
-        ruleIds: d.ruleIds,
-        ...(d.reason === undefined ? {} : { reason: d.reason }),
-        ...(d.tag === undefined ? {} : { tag: d.tag }),
-      });
-    }
-  }
-  return out;
 }
 
 /**
