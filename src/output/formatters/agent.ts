@@ -57,6 +57,13 @@ interface AgentFinding {
    * when the upstream Violation had no `criteriaTitles` field.
    */
   readonly criteriaTitles?: readonly string[];
+  /**
+   * Structured reason codes naming known escape hatches that could
+   * make this finding a false positive in context. Informational only —
+   * the agent reads the cited file and decides. Omitted when empty, per
+   * docs/adr/0009-violation-could-be-wrong-because.md.
+   */
+  readonly couldBeWrongBecause?: readonly string[];
   readonly severity: Severity;
   readonly line: number;
   readonly column: number;
@@ -189,6 +196,12 @@ function buildFinding(v: Violation): AgentFinding {
     // upstream Violation omitted the field (CLAUDE.md §1 "Ambiguous
     // field shapes are dishonest").
     ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
+    // Named reason codes for known escape hatches; informational only,
+    // never auto-suppressing. Omitted when empty — see
+    // docs/adr/0009-violation-could-be-wrong-because.md.
+    ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
+      ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
+      : {}),
     severity: v.severity,
     line: v.location.line,
     column: v.location.column,

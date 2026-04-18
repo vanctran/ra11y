@@ -755,6 +755,15 @@ export function formatFinding(v: Violation): Record<string, unknown> {
     // finding without a standards registry — rare; unit-test path)
     // from "titles are `[]`" (criteria is also `[]`).
     ...(v.criteriaTitles !== undefined && { criteriaTitles: [...v.criteriaTitles] }),
+    // Named reason codes describing known escape hatches that could
+    // make this finding a false positive in context. Strictly
+    // informational — agents investigate, never auto-suppress. Omitted
+    // when empty per AI-first doctrine (docs/adr/0009-violation-could-
+    // be-wrong-because.md); `couldBeWrongBecause: []` would be a
+    // dishonest empty-vs-unpopulated sentinel.
+    ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
+      ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
+      : {}),
     suppressWith: suppressPragma(v.location.filePath, v.ruleId),
   };
 }

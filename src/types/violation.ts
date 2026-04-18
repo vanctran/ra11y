@@ -146,6 +146,35 @@ export interface Violation {
    * See docs/adr/0008-violation-group-key.md.
    */
   readonly groupKey: string;
+  /**
+   * Structured reason codes naming known escape hatches that could
+   * make this finding a false positive in context. Each entry is a
+   * stable snake_case identifier (`replacement_indicator_in_sibling_file`,
+   * `tailwind_class_on_consumer`, …) pointing at a specific pattern an
+   * agent can investigate with one `Read` or `Grep`.
+   *
+   * Strictly **informational**. Per the AI-first consumer doctrine
+   * (docs/kb/architecture/ai-first-consumer.md §"No heuristic
+   * suppression"), the scanner does NOT auto-suppress, downgrade, or
+   * bucket findings based on the presence of codes — the agent reads
+   * the cited file and decides. The scanner's attribute-level evidence
+   * is categorically weaker than the agent's file-level evidence.
+   *
+   * Rules that know their own false-positive axes populate this field
+   * at `ctx.emit()` time. Rules with no known escape hatches omit the
+   * field. Optional: present-when-meaningful. Forwarders MUST NOT emit
+   * `couldBeWrongBecause: []` (CLAUDE.md §1 "Ambiguous field shapes
+   * are dishonest") — use a conditional spread:
+   *
+   * ```ts
+   * ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
+   *   ? { couldBeWrongBecause: v.couldBeWrongBecause }
+   *   : {})
+   * ```
+   *
+   * See docs/adr/0009-violation-could-be-wrong-because.md.
+   */
+  readonly couldBeWrongBecause?: readonly string[];
 }
 
 /**
