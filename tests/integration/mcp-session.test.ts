@@ -100,7 +100,7 @@ describe("MCP session: full agent workflow", () => {
     const list = responses[1];
     expect(list.id).toBe(2);
     const tools = (list.result as { tools: unknown[] }).tools;
-    expect(tools.length).toBe(17);
+    expect(tools.length).toBe(18);
 
     // 3. Scan response — should find violations
     const scan = responses[2];
