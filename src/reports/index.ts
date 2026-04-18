@@ -14,6 +14,13 @@ export type {
 export { buildCertificationScorecard, renderCertificationMarkdown } from "./certification.ts";
 export type { ChecklistItem, ChecklistReport, ChecklistSection } from "./checklist.ts";
 export { buildChecklist, renderChecklistMarkdown } from "./checklist.ts";
+export type {
+  ConformanceBlocker,
+  ConformanceBlockerReason,
+  ConformanceProfile,
+  ConformanceStatement,
+} from "./conformance.ts";
+export { buildConformanceStatement, renderConformanceMarkdown } from "./conformance.ts";
 export type { PerStandardCoverage } from "./coverage.ts";
 export { buildCoverageReport, toEngineCoverageEntry } from "./coverage.ts";
 export type {
