@@ -92,6 +92,23 @@ The programmatic counterpart to `checklist`. Returns tier-1 candidates as a flat
 
 **Use when:** the agent wants to iterate candidates one-by-one, reading source + answering pass/fail per item.
 
+### `suppress`
+
+Writes a source-level `ra11y-disable-next-line` pragma above a target line so a specific finding stops firing on subsequent scans. Required inputs: `file`, `line` (1-based), `ruleId` (rule ID like `keyboard/handler-missing` or criterion ID like `wcag22:2.4.5`), `reason` (non-empty justification).
+
+Like `apply_fix`, this is a mutating tool — the session must have `allowWrite: true` (set via `sessionConfigure`) or the call rejects with `allow-write-disabled`. Reason text is REQUIRED; a missing or whitespace-only reason rejects with `reason-required` rather than silently writing a bare pragma.
+
+Comment shape per extension:
+
+- `.tsx` / `.jsx` → `{/* ra11y-disable-next-line <id>: <reason> */}`
+- `.ts` / `.js` → `// ra11y-disable-next-line <id>: <reason>`
+- `.html` / `.htm` → `<!-- ra11y-disable-next-line <id>: <reason> -->`
+- `.css` → `/* ra11y-disable-next-line <id>: <reason> */`
+
+The pragma is inserted on its own line directly above the target, with indentation matching the target line so the comment stays visually grouped with the code it suppresses. Error envelopes: `file-not-found`, `line-out-of-range`, `file-unsupported`, `path-escapes-cwd`, `allow-write-disabled`, `reason-required`.
+
+**Use when:** an agent has read the finding, determined it's a false positive or intentional exception, and wants a durable source-level dismissal (so the next scan passes without the agent re-justifying it).
+
 ## Session
 
 ### `configure`

@@ -28,6 +28,7 @@ import { reviewCandidatesTool } from "./tool-review-candidates.ts";
 import { scanDiffTool } from "./tool-scan-diff.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import { suggestFixTool } from "./tool-suggest-fix.ts";
+import { suppressTool } from "./tool-suppress.ts";
 import {
   buildConfigureOpts,
   errorResult,
@@ -535,6 +536,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   baselineTool,
   listRulesTool,
   listSuppressionsTool,
+  suppressTool,
   sessionConfigureTool,
 ];
 
