@@ -147,7 +147,7 @@ function htmlFile(path: string, source: string): ParsedFile {
           start: { line: 1, column: 1, offset: 0 },
           end: { line: 1, column: 1, offset: 0 },
         },
-        elements: [],
+        children: [],
       },
       errors: [],
     },

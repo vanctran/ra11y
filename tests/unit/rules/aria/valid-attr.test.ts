@@ -25,7 +25,7 @@ describe("rule aria/valid-attr", () => {
       expect(violations).toHaveLength(1);
       // No nearest-within-2 match for aria-foo — the suggestion should
       // tell the author to remove or replace it.
-      expect(violations[0]?.suggestion.toLowerCase()).toContain("remove");
+      expect(violations[0]?.suggestion?.toLowerCase()).toContain("remove");
     });
 
     it("element has multiple aria attributes and one is invalid", () => {

@@ -348,7 +348,7 @@ function visitDirectory(dir: string, stack: string[], out: string[]): void {
   for (const name of children) {
     const abs = join(dir, name);
     const info = safeStat(abs);
-    if (info === null) continue;
+    if (!info) continue;
     if (info.isDirectory()) {
       stack.push(abs);
       continue;

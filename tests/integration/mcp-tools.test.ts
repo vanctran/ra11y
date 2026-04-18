@@ -832,7 +832,7 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
       const expectedPrincipleNumber = Number(item.criterionId.split(":")[1]?.split(".")[0]);
       expect(item.principle?.number).toBe(expectedPrincipleNumber);
       expect(["Perceivable", "Operable", "Understandable", "Robust"]).toContain(
-        item.principle?.name,
+        item.principle?.name ?? "",
       );
     }
   });

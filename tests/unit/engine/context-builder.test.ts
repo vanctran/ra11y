@@ -20,7 +20,7 @@ function tsxAst(): Ast {
       kind: "TsxModule",
       jsxElements: [],
       range: { start: 0, end: 0 },
-    } as unknown as Ast["root"],
+    } as unknown as Extract<Ast, { language: "tsx" }>["root"],
     errors: [],
   };
 }
