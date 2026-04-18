@@ -60,21 +60,17 @@ interface JsonRpcResponse {
   readonly error?: { readonly code: number; readonly message: string; readonly data?: unknown };
 }
 
-/** Typed view of the tools/call params so dot access satisfies both TS and Biome. */
-interface ToolCallParams {
-  readonly name: string | undefined;
-  readonly arguments: Record<string, unknown> | undefined;
+/** Narrow a bracket-indexed JSON value to a string, or undefined. */
+function asString(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
 }
 
-/** Typed view of the prompts/get params. Arguments are always string-valued per spec. */
-interface PromptGetParams {
-  readonly name: string | undefined;
-  readonly arguments: Record<string, unknown> | undefined;
-}
-
-/** Typed view of the resources/read params. */
-interface ResourcesReadParams {
-  readonly uri: string | undefined;
+/** Narrow a bracket-indexed JSON value to a plain object record, or undefined. */
+function asRecord(v: unknown): Record<string, unknown> | undefined {
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return undefined;
 }
 
 // ─── JSON-RPC error codes ───────────────────────────────────────────────────
@@ -240,15 +236,15 @@ async function handleToolsCall(
   session: McpSession,
   emitLog: LogEmitter,
 ): Promise<JsonRpcResponse> {
-  const callParams = rawParams as unknown as ToolCallParams;
-  const toolName = callParams.name;
-  if (typeof toolName !== "string") {
+  const toolName = asString(rawParams["name"]);
+  if (toolName === undefined) {
     return {
       jsonrpc: "2.0",
       id,
       error: { code: INVALID_PARAMS, message: "Missing or invalid tool name." },
     };
   }
+  const handlerArgs = asRecord(rawParams["arguments"]) ?? {};
   const tool = TOOL_BY_NAME.get(toolName);
   if (!tool) {
     return {
@@ -267,7 +263,7 @@ async function handleToolsCall(
     emitLog("debug", `${toolName}: starting`, { tool: toolName }, LOGGER_SCAN);
   }
   const t0 = performance.now();
-  const rawResult = await tool.handler(callParams.arguments ?? {}, session);
+  const rawResult = await tool.handler(handlerArgs, session);
   const toolResult =
     toolName === SESSION_CONFIGURE_ALIAS.name
       ? layerDeprecationWarning(rawResult, "deprecated_tool_name_configure")
@@ -542,9 +538,8 @@ function handlePromptsGet(
   id: string | number | null,
   rawParams: Record<string, unknown>,
 ): JsonRpcResponse {
-  const params = rawParams as unknown as PromptGetParams;
-  const name = params.name;
-  if (typeof name !== "string") {
+  const name = asString(rawParams["name"]);
+  if (name === undefined) {
     return {
       jsonrpc: "2.0",
       id,
@@ -562,7 +557,7 @@ function handlePromptsGet(
       error: { code: METHOD_NOT_FOUND, message: `Unknown prompt: ${name}` },
     };
   }
-  const stringArgs = coercePromptArgs(params.arguments ?? {});
+  const stringArgs = coercePromptArgs(asRecord(rawParams["arguments"]) ?? {});
   const messages = prompt.render(stringArgs);
   const checksum = checksumForPrompt(prompt.name);
   const result: Record<string, unknown> = {
@@ -590,9 +585,8 @@ async function handleResourcesRead(
   id: string | number | null,
   rawParams: Record<string, unknown>,
 ): Promise<JsonRpcResponse> {
-  const params = rawParams as unknown as ResourcesReadParams;
-  const uri = params.uri;
-  if (typeof uri !== "string") {
+  const uri = asString(rawParams["uri"]);
+  if (uri === undefined) {
     return {
       jsonrpc: "2.0",
       id,
