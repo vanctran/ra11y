@@ -85,6 +85,19 @@ describe("verify-scope predicates", () => {
     expect(hasDepsChange(c)).toBe(false);
   });
 
+  test("tests/tsconfig.json edit fires any-ts — typecheck-tests must re-run", () => {
+    const c = set("tests/tsconfig.json");
+    expect(hasAnyTsChange(c)).toBe(true);
+    expect(hasSrcTsChange(c)).toBe(false);
+    expect(hasTestOrSrcChange(c)).toBe(false);
+  });
+
+  test("scripts/tsconfig.json edit fires any-ts — scripts-local typecheck config", () => {
+    const c = set("scripts/tsconfig.json");
+    expect(hasAnyTsChange(c)).toBe(true);
+    expect(hasSrcTsChange(c)).toBe(false);
+  });
+
   test("bun.lock fires deps", () => {
     expect(hasDepsChange(set("bun.lock"))).toBe(true);
     expect(hasDepsChange(set("bun.lockb"))).toBe(true);

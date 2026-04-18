@@ -25,7 +25,14 @@ export const hasSrcTsChange = (c: ReadonlySet<string>): boolean =>
   anyMatch(c, (p) => p.startsWith("src/") && isTs(p));
 
 export const hasAnyTsChange = (c: ReadonlySet<string>): boolean =>
-  anyMatch(c, (p) => isTs(p) || p === "tsconfig.json" || p === "scripts/tsconfig.json");
+  anyMatch(
+    c,
+    (p) =>
+      isTs(p) ||
+      p === "tsconfig.json" ||
+      p === "scripts/tsconfig.json" ||
+      p === "tests/tsconfig.json",
+  );
 
 export const hasTestOrSrcChange = (c: ReadonlySet<string>): boolean =>
   anyMatch(c, (p) => (p.startsWith("src/") || p.startsWith("tests/")) && isTs(p));

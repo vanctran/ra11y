@@ -37,6 +37,7 @@ import {
 
 const ROOT = join(import.meta.dir ?? process.cwd(), "..");
 const TSBUILDINFO = join(ROOT, "node_modules/.cache/ra11y/tsbuildinfo");
+const TESTS_TSBUILDINFO = join(ROOT, "node_modules/.cache/ra11y/tsbuildinfo-tests");
 
 interface Check {
   readonly name: string;
@@ -63,6 +64,23 @@ const CHECKS: readonly Check[] = [
     name: "typecheck",
     cmd: ["bunx", "tsc", "--noEmit"],
     precommitCmd: ["bunx", "tsc", "--noEmit", "--incremental", "--tsBuildInfoFile", TSBUILDINFO],
+    precommit: true,
+    full: true,
+    affectedBy: hasAnyTsChange,
+  },
+  {
+    name: "typecheck-tests",
+    cmd: ["bunx", "tsc", "-p", "tests/tsconfig.json", "--noEmit"],
+    precommitCmd: [
+      "bunx",
+      "tsc",
+      "-p",
+      "tests/tsconfig.json",
+      "--noEmit",
+      "--incremental",
+      "--tsBuildInfoFile",
+      TESTS_TSBUILDINFO,
+    ],
     precommit: true,
     full: true,
     affectedBy: hasAnyTsChange,
