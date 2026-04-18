@@ -27,6 +27,7 @@ import { rule as fieldsetLegend } from "./forms/fieldset-legend.ts";
 import { rule as labelForIdMismatch } from "./forms/label-for-id-mismatch.ts";
 import { rule as labelsRequired } from "./forms/labels-required.ts";
 import { rule as nonEmptyLabel } from "./forms/non-empty-label.ts";
+import { rule as requiredIndicatorMissing } from "./forms/required-indicator-missing.ts";
 import { rule as accesskeyDuplicate } from "./keyboard/accesskey-duplicate.ts";
 import { rule as characterShortcuts } from "./keyboard/character-shortcuts.ts";
 import { rule as handlerMissing } from "./keyboard/handler-missing.ts";
@@ -96,6 +97,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   pauseStopHide,
   reflowHardcodedWidth,
   requiredAttrs,
+  requiredIndicatorMissing,
   skipLink,
   tabindexPositive,
   tableHeaders,
@@ -148,6 +150,7 @@ export {
   pauseStopHide,
   reflowHardcodedWidth,
   requiredAttrs,
+  requiredIndicatorMissing,
   skipLink,
   tabindexPositive,
   tableHeaders,
