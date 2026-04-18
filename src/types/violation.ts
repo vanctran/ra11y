@@ -148,6 +148,44 @@ export interface Violation {
   readonly groupKey: string;
 }
 
+/**
+ * Per-rule coverage confidence for a single scan. Answers "this rule
+ * produced 0 findings — should I trust that?" for rules whose
+ * `appliesTo.fileExtensions` could mean the scan never saw a matching
+ * source file. The canonical acute case: `contrast/minimum` targets
+ * `.css`, and a Tailwind project pre-build has 0 eligible CSS sources
+ * — a clean tally means nothing.
+ *
+ * Semantics:
+ *   - `filesEligible` — parseable files whose extension matches the
+ *     rule's `appliesTo.fileExtensions`. For rules without an extension
+ *     gate, every scanned file is eligible.
+ *   - `filesEvaluated` — subset of eligible files the rule actually
+ *     ran over (non-eligible files are filtered out before invocation;
+ *     evaluated <= eligible by construction).
+ *   - `coverageConfidence` — `"low"` when `filesEligible === 0` or the
+ *     rule ran on fewer than `MIN_FILES_FOR_HIGH_CONFIDENCE` files;
+ *     `"high"` otherwise.
+ *   - `reason` / `remediation` — populated only on low-confidence
+ *     entries, per CLAUDE.md §1 "Ambiguous field shapes are dishonest"
+ *     (conditional spread at the response-assembly site).
+ *
+ * Rules with `scope: "project"` and no `appliesTo.fileExtensions` (e.g.
+ * `focus/outline-visible`) are not tracked — the concept doesn't apply.
+ *
+ * See also: the top-level `ruleCoverage` derivative on scan responses
+ * (`confidentlyClean` vs `lowConfidenceClean`) assembled by the MCP
+ * layer from this array.
+ */
+export interface PerRuleCoverage {
+  readonly ruleId: string;
+  readonly filesEvaluated: number;
+  readonly filesEligible: number;
+  readonly coverageConfidence: "high" | "low";
+  readonly reason?: string;
+  readonly remediation?: string;
+}
+
 /** Aggregate result of a full scan. */
 export interface ScanResult {
   readonly violations: readonly Violation[];
@@ -155,6 +193,14 @@ export interface ScanResult {
   readonly durationMs: number;
   readonly enabledStandards: readonly string[];
   readonly isTTY: boolean;
+  /**
+   * Per-rule evaluation telemetry for rules with an extension gate.
+   * One entry per active rule whose `appliesTo.fileExtensions` could
+   * fail to match any scanned file. Drives the `perRuleCoverage` field
+   * and the `ruleCoverage` derivative on MCP scan responses — see
+   * {@link PerRuleCoverage}.
+   */
+  readonly perRuleCoverage: readonly PerRuleCoverage[];
 }
 
 /** Structured data produced from a ScanResult, consumed by formatters and reports. */

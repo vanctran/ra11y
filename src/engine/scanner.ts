@@ -34,10 +34,11 @@ import { computeFindingId } from "../utils/finding-id.ts";
 import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
 import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
+import { buildPerRuleCoverage } from "./per-rule-coverage.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
-import { runRulesForFile } from "./rule-runner.ts";
+import { type RuleEvaluationTracker, runRulesForFile } from "./rule-runner.ts";
 import {
   type ConformanceLevel,
   createStandardFilter,
@@ -108,6 +109,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
   const filter = createStandardFilter(enabled, criteriaRegistry, inputs.level);
 
   const allViolations: Violation[] = [];
+  const tracker: RuleEvaluationTracker = { counts: new Map() };
   for (const file of inputs.files) {
     const perFile = runRulesForFile({
       filePath: file.filePath,
@@ -117,6 +119,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
       disableMap: file.disableMap ?? new Map(),
       rules: inputs.rules,
       filter,
+      tracker,
       ...(inputs.nativeWrapperElements !== undefined && {
         nativeWrapperElements: inputs.nativeWrapperElements,
       }),
@@ -131,6 +134,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
   const allCandidates = collectCandidatesFromFiles(inputs, enabled, standardsRegistry);
 
   const durationMs = Math.max(0, now() - start);
+  const perRuleCoverage = buildPerRuleCoverage(tracker, inputs.rules, filter);
 
   const result: ScanResult = {
     violations: allViolations,
@@ -138,6 +142,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     durationMs,
     enabledStandards: [...enabled].sort(),
     isTTY: inputs.isTTY ?? false,
+    perRuleCoverage,
   };
 
   const report: ReportData = buildReportData(

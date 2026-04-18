@@ -19,10 +19,30 @@ import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { buildContext, type ContextInput } from "./context-builder.ts";
 import type { StandardFilter } from "./standard-filter.ts";
 
+/**
+ * Per-rule coverage counters the scanner threads through every
+ * `runRulesForFile` call. Mutated in place: each per-file invocation
+ * bumps `eligible` when the file's extension matches the rule's
+ * `appliesTo.fileExtensions` (unconstrained rules are eligible on every
+ * file), and bumps `evaluated` when the rule actually runs. The
+ * engine folds the resulting map into `ScanResult.perRuleCoverage`
+ * at scan end — see `src/types/violation.ts` for the surface shape.
+ */
+export interface RuleEvaluationTracker {
+  readonly counts: Map<string, { eligible: number; evaluated: number }>;
+}
+
 /** Per-file input to the rule runner. */
 export interface RuleRunnerInput extends ContextInput {
   readonly rules: readonly Rule[];
   readonly filter: StandardFilter;
+  /**
+   * Optional per-rule tracker. When supplied, each active rule's
+   * eligibility (extension match) and evaluation (actual run) is
+   * counted into `tracker.counts`. Undefined in unit-test call sites
+   * that don't care about the coverage shape.
+   */
+  readonly tracker?: RuleEvaluationTracker;
 }
 
 /** Runs every applicable rule against the given file and returns violations. */
@@ -33,11 +53,32 @@ export function runRulesForFile(input: RuleRunnerInput): readonly Violation[] {
 
   for (const rule of input.rules) {
     if (!input.filter.isRuleActive(rule)) continue;
-    if (!applies(rule, fileExt, language)) continue;
+    const eligible = applies(rule, fileExt, language);
+    if (input.tracker) bumpTracker(input.tracker, rule.id, eligible);
+    if (!eligible) continue;
     runOneRule(rule, input, out);
   }
 
   return out;
+}
+
+/**
+ * Mutates `tracker.counts` in place: guarantees a `{ eligible, evaluated }`
+ * entry for every active rule (even rules where no scanned file matches
+ * their extension gate, so the scanner can surface zero-coverage as a
+ * low-confidence signal rather than silently omit the rule). Bumps the
+ * eligible count when the file matches, and — when eligible — the
+ * evaluated count, since eligible files always proceed to
+ * {@link runOneRule}.
+ */
+function bumpTracker(tracker: RuleEvaluationTracker, ruleId: string, eligible: boolean): void {
+  const existing = tracker.counts.get(ruleId);
+  const entry = existing ?? { eligible: 0, evaluated: 0 };
+  if (eligible) {
+    entry.eligible += 1;
+    entry.evaluated += 1;
+  }
+  if (!existing) tracker.counts.set(ruleId, entry);
 }
 
 /**
