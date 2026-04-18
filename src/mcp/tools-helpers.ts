@@ -22,6 +22,7 @@ import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.
 import { buildPlanSummary } from "./plan-summary.ts";
 import { buildReferenceGuide } from "./reference-guide.ts";
 import type { McpSession } from "./session.ts";
+import { nameMatchesAnyWrapper } from "./wrapper-matcher.ts";
 import {
   type NativeWrapperSources,
   resolveUnusedWrappers,
@@ -672,13 +673,12 @@ function dropWrapperNoise(
   if (nativeWrappers.length === 0) {
     return { violations };
   }
-  const allow = new Set(nativeWrappers);
   const filtered = violations.filter((v) => {
     if (v.ruleId !== "keyboard/handler-missing") return true;
     if (v.severity !== "info") return true;
     const match = /^<([A-Z][A-Za-z0-9]*)>/.exec(v.message);
     const name = match?.[1];
-    return !(name && allow.has(name));
+    return !(name && nameMatchesAnyWrapper(name, nativeWrappers));
   });
   return { violations: filtered };
 }

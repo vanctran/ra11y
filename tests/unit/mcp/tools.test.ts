@@ -876,6 +876,77 @@ describe("MCP tool: configure", () => {
     expect(khm.some((v) => v.severity === "error")).toBe(true);
   });
 
+  it("nativeWrappers glob patterns silence findings for every matching component", async () => {
+    // A design-system root can register `*Button` once instead of
+    // enumerating every Icon/Action/Submit/Ghost variant. Each variant
+    // is silenced by `dropWrapperNoise` via the glob match — no need
+    // to keep the config list in lockstep with component renames.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapper-glob-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.ts"),
+      `export default { nativeWrappers: ["*Button", "Icon*"] };\n`,
+    );
+    await writeFile(
+      joinPath(dir, "app.tsx"),
+      [
+        "export function App() {",
+        "  return (",
+        "    <>",
+        "      <ActionButton onClick={a} />",
+        "      <IconBadge onClick={b} />",
+        "      <div onClick={c}>bare</div>",
+        "    </>",
+        "  );",
+        "}",
+      ].join("\n"),
+    );
+
+    const scanTool = findTool("scan");
+    const session = new McpSession();
+    const result = await scanTool.handler({ paths: [dir], cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      files: Array<{ findings: Array<{ ruleId: string; message: string; severity: string }> }>;
+    };
+    const khm = data.files.flatMap((f) =>
+      f.findings.filter((v) => v.ruleId === "keyboard/handler-missing"),
+    );
+    expect(khm.some((v) => v.message.includes("ActionButton"))).toBe(false);
+    expect(khm.some((v) => v.message.includes("IconBadge"))).toBe(false);
+    // Bare `<div onClick>` still errors — wrapper globs only silence
+    // PascalCase component names.
+    expect(khm.some((v) => v.severity === "error")).toBe(true);
+  });
+
+  it("unusedNativeWrappers reports glob patterns that matched nothing in scope", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapper-glob-unused-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.ts"),
+      `export default { nativeWrappers: ["*Button", "Ghost*"] };\n`,
+    );
+    await writeFile(
+      joinPath(dir, "app.tsx"),
+      ["export function App() {", '  return <ActionButton label="Save" />;', "}"].join("\n"),
+    );
+
+    const scanTool = findTool("scan");
+    const session = new McpSession();
+    const result = await scanTool.handler({ paths: [dir], cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { unusedNativeWrappers?: string[] };
+    };
+    // `*Button` matched ActionButton — "used." `Ghost*` matched
+    // nothing — surfaces as unused.
+    expect(data.meta.unusedNativeWrappers).toEqual(["Ghost*"]);
+  });
+
   it("unusedNativeWrappers ignores wrappers that are used via JSX (no suppressed violation)", async () => {
     // Regression: unusedNativeWrappers previously relied on suppressed
     // keyboard/handler-missing info violations to learn which wrappers

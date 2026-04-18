@@ -13,6 +13,7 @@ import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
 import type { McpSession } from "./session.ts";
+import { matchesWrapperPattern, wrapperPatternToTagRegexSource } from "./wrapper-matcher.ts";
 
 /**
  * Auto-detected wrapper candidates split by the one-hop AST probe
@@ -254,8 +255,10 @@ async function findWrappersInExcludedSources(
     }
     for (const name of remaining) {
       // `<Name` followed by whitespace, `/`, or `>` — avoids matching
-      // substrings like `<NameMore>` or `ActionButtonGroup`.
-      const pattern = new RegExp(`<${name}(?=[\\s/>])`);
+      // substrings like `<NameMore>` or `ActionButtonGroup`. `name`
+      // may be a glob like `*Button` / `Icon*`; the helper returns
+      // the regex-safe body that honors the wildcard.
+      const pattern = new RegExp(`<${wrapperPatternToTagRegexSource(name)}(?=[\\s/>])`);
       if (pattern.test(source)) {
         found.add(name);
         remaining.delete(name);
@@ -267,21 +270,30 @@ async function findWrappersInExcludedSources(
 
 /**
  * Walks every parsed TSX module for JSX element tag names matching a
- * configured wrapper. A wrapper is "used" the moment it appears as a
- * JSX element anywhere in the scanned source — independent of whether
- * any rule fired against it.
+ * configured wrapper pattern. A wrapper pattern is "used" the moment
+ * any JSX element tag matches it anywhere in the scanned source —
+ * independent of whether any rule fired against that element. Returns
+ * the set of PATTERNS that matched (not individual tag names), so a
+ * pattern like `*Button` counts as used when `IconButton` or
+ * `BigButton` appears.
  */
 function collectUsedWrappers(
   files: readonly ParsedFile[],
   nativeWrappers: readonly string[],
 ): ReadonlySet<string> {
-  const allow = new Set(nativeWrappers);
-  const used = new Set<string>();
+  const usedPatterns = new Set<string>();
+  const remaining = new Set(nativeWrappers);
   for (const file of files) {
     if (file.ast.language === "html" || file.ast.language === "css") continue;
+    if (remaining.size === 0) break;
     for (const el of walkJsxElements(file.ast.root)) {
-      if (allow.has(el.tagName)) used.add(el.tagName);
+      for (const pattern of remaining) {
+        if (matchesWrapperPattern(el.tagName, pattern)) {
+          usedPatterns.add(pattern);
+          remaining.delete(pattern);
+        }
+      }
     }
   }
-  return used;
+  return usedPatterns;
 }
