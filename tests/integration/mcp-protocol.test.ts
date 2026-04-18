@@ -230,11 +230,15 @@ describe("MCP tools/list: schema shape", () => {
       "checklist",
       "review_candidates",
       "list_rules",
-      "configure",
+      "sessionConfigure",
     ];
     for (const name of expected) {
       expect(names.has(name)).toBe(true);
     }
+    // `configure` is a dispatch-only backward-compat alias (Q2-SESSIONCFG)
+    // and must NOT appear in tools/list — agents should migrate to
+    // `sessionConfigure`, which makes the ephemeral semantics explicit.
+    expect(names.has("configure")).toBe(false);
   });
 });
 

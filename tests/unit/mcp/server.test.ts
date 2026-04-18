@@ -88,7 +88,6 @@ describe("MCP server JSON-RPC", () => {
       "audit",
       "baseline",
       "checklist",
-      "configure",
       "coverage",
       "detect_native_wrappers",
       "explain_rule",
@@ -100,6 +99,7 @@ describe("MCP server JSON-RPC", () => {
       "scan_diff",
       "scan_file",
       "scan_project",
+      "sessionConfigure",
       "suggest_fix",
     ]);
 

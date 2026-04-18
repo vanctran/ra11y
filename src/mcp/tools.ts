@@ -461,13 +461,13 @@ const listRulesTool: McpTool = {
   },
 };
 
-// ─── Tool: configure ────────────────────────────────────────────────────────
+// ─── Tool: sessionConfigure (alias: configure) ──────────────────────────────
 
-const configureTool: McpTool = {
+const sessionConfigureTool: McpTool = {
   def: {
-    name: "configure",
+    name: "sessionConfigure",
     description:
-      'Set session defaults for standard, level, excludes, per-rule severity, and native-wrapper components so subsequent tool calls don\'t repeat these parameters. Prefer `nativeWrappers` over `rules: { "keyboard/handler-missing": "off" }` when you just want to quiet a known-safe design-system component — it keeps the rule firing on real `<div onClick>` bugs.\n\nFor persistent project-level config, drop a `ra11y.config.ts` at the project root with a default export:\n\n  export default {\n    nativeWrappers: ["Button", "ActionButton"],\n    rules: { "media/alt-text-missing": "warning" },\n    exclude: ["packages/legacy/**"],\n  };\n\nThe scan response surfaces `meta.configSource` (path of the file that was loaded, or null if none was found) and `meta.configSearchedFrom` (the directory the loader walked up from). If `configSource` is null, make sure you pass `cwd` so the loader walks up from your project root, not the MCP server\'s spawn directory.',
+      'Set EPHEMERAL session-scoped defaults — standard, level, excludes, per-rule severity, native-wrapper components — so subsequent tool calls on this MCP connection don\'t repeat these parameters. State lives in the session only; nothing is written to disk, and a fresh connection starts clean.\n\nFor durable, committed configuration, drop a `ra11y.config.ts` at the project root:\n\n  export default {\n    nativeWrappers: ["Button", "ActionButton"],\n    rules: { "media/alt-text-missing": "warning" },\n    exclude: ["packages/legacy/**"],\n  };\n\nThe scan response surfaces `meta.configSource` (path of the loaded file, or null) and `meta.configSearchedFrom` (directory the loader walked up from). If `configSource` is null, make sure you pass `cwd` so the loader walks up from your project root, not the MCP server\'s spawn directory.\n\nLegacy name: `configure`. Accepted for backward compatibility for one release; responses emit `warnings: ["deprecated_tool_name_configure"]` when invoked via the old name. Migrate callers to `sessionConfigure`.',
     inputSchema: {
       type: "object",
       properties: {
@@ -534,5 +534,17 @@ export const MCP_TOOLS: readonly McpTool[] = [
   baselineTool,
   listRulesTool,
   listSuppressionsTool,
-  configureTool,
+  sessionConfigureTool,
 ];
+
+/**
+ * Deprecated alias for `sessionConfigure`. Dispatch-only — not listed in
+ * `tools/list`. The handler delegates to the canonical tool and layers
+ * a `warnings: ["deprecated_tool_name_configure"]` onto the structured
+ * content so agents can migrate on their own schedule. Remove one
+ * release after a major version bump.
+ */
+export const SESSION_CONFIGURE_ALIAS: { readonly name: string; readonly tool: McpTool } = {
+  name: "configure",
+  tool: sessionConfigureTool,
+};

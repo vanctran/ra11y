@@ -723,9 +723,9 @@ describe("MCP tool: detect_native_wrappers", () => {
   });
 });
 
-describe("MCP tool: configure", () => {
+describe("MCP tool: sessionConfigure", () => {
   it("sets session defaults and returns active config", async () => {
-    const tool = findTool("configure");
+    const tool = findTool("sessionConfigure");
     const session = new McpSession();
     const result = await tool.handler({ standard: "wcag21", level: "A" }, session);
 
@@ -743,7 +743,7 @@ describe("MCP tool: configure", () => {
   });
 
   it("applies per-rule severity overrides to subsequent scans", async () => {
-    const configureTool = findTool("configure");
+    const configureTool = findTool("sessionConfigure");
     const scanFileTool = findTool("scan_file");
     const session = new McpSession();
 
