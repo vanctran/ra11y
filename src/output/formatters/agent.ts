@@ -15,112 +15,22 @@ import { defineFormatter } from "../../api/plugin.ts";
 import { EVALUATION_PROMPTS } from "../../review/evaluation-prompts.ts";
 import type { ReviewCandidate } from "../../types/review.ts";
 import type { ReportData, ScanResult, Severity, Violation } from "../../types/violation.ts";
+import type {
+  AgentFile,
+  AgentFinding,
+  AgentFix,
+  AgentMeta,
+  AgentOutput,
+  AgentPlan,
+  AgentReviewCandidate,
+  AgentSnippet,
+  Category,
+  Confidence,
+  Effort,
+} from "../agent-response/types.ts";
 
 const TOOL_NAME = "ra11y";
 const TOOL_VERSION = "0.1.0";
-
-// ─── Output types ────────────────────────────────────────────────────────────
-
-type Effort = "trivial" | "moderate" | "significant";
-type Category = "auto-fix" | "review" | "manual";
-type Confidence = "high" | "medium" | "low";
-type Safety = "safe" | "unsafe";
-
-interface AgentFix {
-  readonly oldText: string;
-  readonly newText: string;
-  readonly confidence: Confidence;
-  readonly safety: Safety;
-  readonly description: string;
-}
-
-interface AgentSnippet {
-  readonly before: readonly string[];
-  readonly highlighted: string;
-  readonly after: readonly string[];
-}
-
-interface AgentFinding {
-  readonly id: string;
-  /**
-   * Stable group identity — same rule firing on AST-equivalent nodes
-   * across files all share this key. Lets agents batch one fix across
-   * every finding with the same `groupKey`. See
-   * docs/adr/0008-violation-group-key.md.
-   */
-  readonly groupKey: string;
-  readonly ruleId: string;
-  readonly criteria: readonly string[];
-  /**
-   * Short human titles aligned index-for-index with `criteria`. Present
-   * when the engine stamped them (every real emitted violation); omitted
-   * when the upstream Violation had no `criteriaTitles` field.
-   */
-  readonly criteriaTitles?: readonly string[];
-  /**
-   * Structured reason codes naming known escape hatches that could
-   * make this finding a false positive in context. Informational only —
-   * the agent reads the cited file and decides. Omitted when empty, per
-   * docs/adr/0009-violation-could-be-wrong-because.md.
-   */
-  readonly couldBeWrongBecause?: readonly string[];
-  readonly severity: Severity;
-  readonly line: number;
-  readonly column: number;
-  readonly endLine?: number;
-  readonly endColumn?: number;
-  readonly message: string;
-  readonly snippet: AgentSnippet;
-  readonly fix: AgentFix | null;
-  readonly effort: Effort;
-  readonly category: Category;
-  readonly suppressWith: string;
-  readonly suppressPlacement: string;
-}
-
-interface AgentFile {
-  readonly path: string;
-  readonly findings: readonly AgentFinding[];
-}
-
-interface AgentReviewCandidate {
-  readonly criterionId: string;
-  readonly tier?: 1 | 2 | 3;
-  readonly path: string;
-  readonly line: number;
-  readonly reason: string;
-  readonly snippet?: string;
-  readonly question?: string;
-  readonly passCriteria?: string;
-  readonly failExample?: string;
-  readonly passExample?: string;
-  readonly suggestedFix?: string;
-}
-
-interface AgentPlan {
-  readonly totalFindings: number;
-  readonly fixSuggestionAvailable: number;
-  readonly reviewNeeded: number;
-  readonly manualOnly: number;
-  readonly estimatedEffort: Effort;
-  readonly summary: string;
-}
-
-interface AgentMeta {
-  readonly tool: string;
-  readonly version: string;
-  readonly standards: readonly string[];
-  readonly level: string;
-  readonly filesScanned: number;
-  readonly durationMs: number;
-}
-
-interface AgentOutput {
-  readonly plan: AgentPlan;
-  readonly files: readonly AgentFile[];
-  readonly reviewCandidates: readonly AgentReviewCandidate[];
-  readonly meta: AgentMeta;
-}
 
 // ─── Formatter ───────────────────────────────────────────────────────────────
 
