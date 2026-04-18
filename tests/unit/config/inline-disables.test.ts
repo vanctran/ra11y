@@ -202,4 +202,162 @@ describe("parseInlineDisables", () => {
       });
     });
   });
+
+  describe("JSDoc @ra11y-intentional tag", () => {
+    // Guards that a JSDoc tag WITH a reason scopes a wildcard disable
+    // over the decorated declaration's brace-balanced body. Without
+    // this, Storybook-style bad-example components would still surface
+    // their teaching violations at scan time.
+    it("honors `@ra11y-intentional <reason>` on a function declaration and scopes disables to its body", () => {
+      const src = [
+        "/** @ra11y-intentional demo of missing alt attribute */",
+        "export function BadImage() {",
+        '  return <img src="/logo.png" />;',
+        "}",
+        'const ok = <img src="/logo.png" alt="logo" />;',
+      ].join("\n");
+      const { disableMap, declarations } = parseInlineDisablesDetailed(src);
+      // Lines 2-4 inclusive are the declaration body — they must all
+      // carry a `*` disable so rule violations there are suppressed.
+      expect(disableMap.get(2)?.has("*")).toBe(true);
+      expect(disableMap.get(3)?.has("*")).toBe(true);
+      expect(disableMap.get(4)?.has("*")).toBe(true);
+      // Line 5 (outside the tagged declaration) must NOT carry a
+      // scoped disable — that's the whole point of the subtree scope.
+      expect(disableMap.get(5)?.has("*")).toBeFalsy();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0]).toMatchObject({
+        kind: "disable",
+        line: 1,
+        ruleIds: ["*"],
+        reason: "demo of missing alt attribute",
+        tag: "ra11y-intentional",
+      });
+    });
+
+    // Guards that a bare tag is NOT honored — no disableMap entries
+    // are created — but is still recorded as a declaration so the
+    // suppression/no-reason finder can surface a review candidate.
+    // The reason slot is load-bearing per AI-first doctrine.
+    it("does NOT honor a bare `@ra11y-intentional` tag but still records it", () => {
+      const src = [
+        "/** @ra11y-intentional */",
+        "export function Bare() {",
+        "  return <div />;",
+        "}",
+      ].join("\n");
+      const { disableMap, declarations } = parseInlineDisablesDetailed(src);
+      expect(disableMap.size).toBe(0);
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0]?.reason).toBeUndefined();
+      expect("reason" in (declarations[0] ?? {})).toBe(false);
+      expect(declarations[0]?.tag).toBe("ra11y-intentional");
+    });
+
+    // Guards that arrow/variable declarations work, not just function
+    // statements. Storybook stories often use `export const Story =
+    // () => <Bad />` form.
+    it("honors the tag on a const arrow declaration", () => {
+      const src = [
+        "/** @ra11y-intentional story of contrast violation */",
+        "export const BadStory = () => {",
+        '  return <div style={{ color: "#ccc", background: "#fff" }}>x</div>;',
+        "};",
+      ].join("\n");
+      const { disableMap } = parseInlineDisablesDetailed(src);
+      expect(disableMap.get(2)?.has("*")).toBe(true);
+      expect(disableMap.get(3)?.has("*")).toBe(true);
+      expect(disableMap.get(4)?.has("*")).toBe(true);
+    });
+
+    // Guards scope isolation when the same file has multiple tagged
+    // declarations — each tag must scope only its own body, not the
+    // whole file.
+    it("scopes each decorated declaration independently when multiple are present", () => {
+      const src = [
+        "/** @ra11y-intentional first demo */",
+        "export function First() {",
+        "  return <img src='x' />;",
+        "}",
+        "",
+        "export function Plain() {",
+        "  return <img src='y' />;",
+        "}",
+        "",
+        "/** @ra11y-intentional second demo */",
+        "export function Second() {",
+        "  return <img src='z' />;",
+        "}",
+      ].join("\n");
+      const { disableMap } = parseInlineDisablesDetailed(src);
+      // First() body lines 2–4 suppressed.
+      expect(disableMap.get(2)?.has("*")).toBe(true);
+      expect(disableMap.get(4)?.has("*")).toBe(true);
+      // Plain() body lines 6–8 must NOT be suppressed — no tag.
+      expect(disableMap.get(6)?.has("*")).toBeFalsy();
+      expect(disableMap.get(7)?.has("*")).toBeFalsy();
+      expect(disableMap.get(8)?.has("*")).toBeFalsy();
+      // Second() body lines 11–13 suppressed.
+      expect(disableMap.get(11)?.has("*")).toBe(true);
+      expect(disableMap.get(13)?.has("*")).toBe(true);
+    });
+
+    // Guards the mixed-tag JSDoc case: the @ra11y-intentional reason
+    // must NOT swallow text from an unrelated tag that follows it.
+    it("stops reason capture at the next JSDoc tag", () => {
+      const src = [
+        "/**",
+        " * @ra11y-intentional contrast demo",
+        " * @see https://example.com/style-guide",
+        " */",
+        "export function Demo() {",
+        "  return <div />;",
+        "}",
+      ].join("\n");
+      const { declarations } = parseInlineDisablesDetailed(src);
+      expect(declarations[0]?.reason).toBe("contrast demo");
+    });
+
+    // Guards that `@ra11y-intentional` written inside a string literal
+    // is not picked up by the parser. The parser must match only
+    // within JSDoc block comments.
+    it("does NOT match `@ra11y-intentional` inside a string literal", () => {
+      const src = [
+        'const docs = "@ra11y-intentional is a JSDoc tag";',
+        "export function Plain() {",
+        "  return <div />;",
+        "}",
+      ].join("\n");
+      const { disableMap, declarations } = parseInlineDisablesDetailed(src);
+      expect(disableMap.size).toBe(0);
+      expect(declarations).toHaveLength(0);
+    });
+
+    // Guards that a tag applied to a non-component declaration — a
+    // plain variable, for example — is still honored. Detection is
+    // purely syntactic; we do not attempt a "is this really a React
+    // component?" heuristic.
+    it("honors the tag on a non-component variable declaration", () => {
+      const src = [
+        "/** @ra11y-intentional legacy config retained verbatim */",
+        "export const legacy = { color: '#ccc', background: '#fff' };",
+        "const other = 1;",
+      ].join("\n");
+      const { disableMap } = parseInlineDisablesDetailed(src);
+      expect(disableMap.get(2)?.has("*")).toBe(true);
+      expect(disableMap.get(3)?.has("*")).toBeFalsy();
+    });
+
+    // Guards that `@ra11y-intentionally` (a longer word starting with
+    // the tag) does NOT match — the tag must end at a word boundary.
+    it("does NOT match an extended word like `@ra11y-intentionally`", () => {
+      const src = [
+        "/** @ra11y-intentionally misleading name */",
+        "export function X() { return <div />; }",
+      ].join("\n");
+      const { disableMap, declarations } = parseInlineDisablesDetailed(src);
+      expect(disableMap.size).toBe(0);
+      expect(declarations).toHaveLength(0);
+    });
+  });
 });
