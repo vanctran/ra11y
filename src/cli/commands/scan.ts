@@ -6,7 +6,8 @@
 
 import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { loadConfig, parseInlineDisables } from "../../config/index.ts";
+import { loadConfig } from "../../config/index.ts";
+import { parseInlineDisablesDetailed } from "../../config/inline-disables.ts";
 import {
   BASELINE_FILENAME,
   buildBaselineFile,
@@ -94,11 +95,13 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     const source = await readFile(filePath, "utf8");
     const ast = parseFor(filePath, source);
     if (!ast) continue;
+    const { disableMap, declarations } = parseInlineDisablesDetailed(source);
     parsed.push({
       filePath: relative(cwd, filePath),
       source,
       ast,
-      disableMap: parseInlineDisables(source),
+      disableMap,
+      declarations,
     });
   }
 

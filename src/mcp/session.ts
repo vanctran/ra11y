@@ -9,7 +9,8 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import { loadConfig, parseInlineDisables } from "../config/index.ts";
+import { loadConfig } from "../config/index.ts";
+import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../input/parsers/index.ts";
 import type { Ast } from "../types/ast.ts";
@@ -227,11 +228,13 @@ export class McpSession {
     const ast = parseForExtension(abs, source);
     if (!ast) return null;
 
+    const { disableMap, declarations } = parseInlineDisablesDetailed(source);
     const parsed: ParsedFile = {
       filePath,
       source,
       ast,
-      disableMap: parseInlineDisables(source),
+      disableMap,
+      declarations,
     };
 
     this.cache.set(abs, { parsed, mtimeMs: info.mtimeMs });

@@ -19,8 +19,9 @@
  * end-to-end without needing the real parsers first.
  */
 
+import type { SuppressionDeclaration } from "../config/inline-disables.ts";
 import type { Ast } from "../types/ast.ts";
-import type { EvidenceLedger } from "../types/evidence.ts";
+import type { AttestationRecord, EvidenceLedger } from "../types/evidence.ts";
 import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
 import type {
   EmittedViolation,
@@ -46,6 +47,7 @@ import { buildPerRuleCoverage } from "./per-rule-coverage.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
 import { StandardsRegistry } from "./registry/standards.ts";
+import { resolvePragmaAttestations } from "./resolve-pragma-attestations.ts";
 import { type RuleEvaluationTracker, runRulesForFile } from "./rule-runner.ts";
 import {
   type ConformanceLevel,
@@ -59,6 +61,15 @@ export interface ParsedFile {
   readonly source: string;
   readonly ast: Ast;
   readonly disableMap?: ReadonlyMap<number, ReadonlySet<string>>;
+  /**
+   * Pragma declarations parsed from this file's source. Populated by
+   * callers that run `parseInlineDisablesDetailed`; omitted by the
+   * rest. When present, declarations whose `reason` is non-empty flow
+   * through the pragma-attestation resolver into the evidence ledger.
+   * When absent, only durable attestations (from
+   * `.ra11y/attestations.jsonl`) contribute to the ledger.
+   */
+  readonly declarations?: readonly SuppressionDeclaration[];
 }
 
 /** Inputs to the scanner when called directly (programmatic / integration tests). */
@@ -85,6 +96,14 @@ export interface ScanInputs {
    * additional wrappers, identical to pre-Q2-WRAPMAP-RULES behaviour.
    */
   readonly nativeWrapperElements?: Readonly<Record<string, string>>;
+  /**
+   * Durable attestations from `.ra11y/attestations.jsonl` (the
+   * project-level store). Inline pragma-derived attestations are
+   * assembled by the scanner itself from each file's `declarations`
+   * field; both kinds merge before ledger construction so every
+   * attestation flows through the same evidence path.
+   */
+  readonly attestations?: readonly AttestationRecord[];
 }
 
 export interface ScanProducts {
@@ -183,11 +202,31 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     allCandidates,
   );
 
+  const ledgerGeneratedAt = new Date().toISOString();
+  const pragmaAttestations = resolvePragmaAttestations({
+    files: inputs.files
+      .filter(
+        (f): f is ParsedFile & { declarations: readonly SuppressionDeclaration[] } =>
+          f.declarations !== undefined && f.declarations.length > 0,
+      )
+      .map((f) => ({ filePath: f.filePath, declarations: f.declarations })),
+    rules: inputs.rules,
+    criteria: criteriaRegistry,
+    enabled,
+    attestedAt: ledgerGeneratedAt,
+  });
+  const mergedAttestations: readonly AttestationRecord[] = [
+    ...pragmaAttestations,
+    ...(inputs.attestations ?? []),
+  ];
+
   const ledger = buildEvidenceLedger({
     result,
     report,
     standards: inputs.standards,
     enabled,
+    attestations: mergedAttestations,
+    generatedAt: ledgerGeneratedAt,
   });
 
   return { result, report, perRuleCoverage, ledger };
