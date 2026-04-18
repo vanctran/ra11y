@@ -1,0 +1,12 @@
+/* 4 Hz opacity flash — 250ms cycle, no prefers-reduced-motion guard. */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.alert-banner {
+  background: red;
+  color: white;
+  animation: pulse 250ms infinite;
+}

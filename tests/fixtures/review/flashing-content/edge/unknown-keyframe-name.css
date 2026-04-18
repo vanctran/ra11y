@@ -1,0 +1,7 @@
+/* Short-duration animation references a keyframe defined elsewhere
+   (imported from another stylesheet or not in this file). The finder
+   cannot read what properties the keyframe mutates — it surfaces with
+   the duration alone so the reviewer opens the file and inspects. */
+.particle {
+  animation: externalSpin 200ms infinite;
+}

@@ -1,0 +1,15 @@
+/* Fast opacity pulse gated behind prefers-reduced-motion: reduce — animations
+   only run when the user has NOT requested reduced motion, so the rule
+   lives inside a prefers-reduced-motion-aware pattern and should not
+   surface as a candidate. */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .alert-banner {
+    animation: pulse 200ms infinite;
+  }
+}
