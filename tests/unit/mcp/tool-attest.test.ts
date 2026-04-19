@@ -198,7 +198,7 @@ describe("attest: error envelopes", () => {
   });
 });
 
-describe("attest: ruleIds (ADR 0012)", () => {
+describe("attest: ruleIds (ADR 0013)", () => {
   it("accepts an explicit ruleIds list and writes it to the durable store", async () => {
     await withScratch(async (cwd) => {
       const session = allowWriteSession();

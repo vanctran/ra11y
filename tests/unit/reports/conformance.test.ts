@@ -238,7 +238,7 @@ describe("buildConformanceStatement", () => {
   });
 });
 
-describe("buildConformanceStatement: rule-scoped attestations (ADR 0012)", () => {
+describe("buildConformanceStatement: rule-scoped attestations (ADR 0013)", () => {
   const RULES = ["aria/role-invalid", "aria/required-attrs", "semantics/button-name"];
   const rulesForCriterion = (id: string): readonly string[] => (id === "wcag22:4.1.2" ? RULES : []);
 

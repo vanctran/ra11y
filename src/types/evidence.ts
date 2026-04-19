@@ -39,7 +39,7 @@ import type { Location } from "./violation.ts";
  * - `"partial"` — the criterion has at least one `attested: "pass"`
  *   source but the union of attested `ruleIds` does not cover every
  *   rule that satisfies this criterion. Some slice was verified;
- *   others were not. See ADR 0012.
+ *   others were not. See ADR 0013.
  * - `"unknown"` — the criterion is manual-only, or the ledger has
  *   no source that speaks to it. Candidate sources do not move a
  *   criterion out of `"unknown"` — they point reviewers at locations
@@ -103,7 +103,7 @@ export type EvidenceSource =
        * satisfies the criterion" (criterion-wide claim); present with one
        * or more IDs means the attestation only speaks to those specific
        * rules. Used by the coverage check in {@link EvidenceStatus} —
-       * see ADR 0012.
+       * see ADR 0013.
        */
       readonly ruleIds?: readonly string[];
       /** Attestation scope — defaults to `"project"` when omitted. */
@@ -165,7 +165,7 @@ export interface AttestationRecord {
    * attestation only speaks to those specific rules, which feeds the
    * partial-coverage check in the ledger's status derivation.
    *
-   * See ADR 0012.
+   * See ADR 0013.
    */
   readonly ruleIds?: readonly string[];
   /** Who attested — author, bot, runtime-tool-plus-CI, etc. */

@@ -75,7 +75,7 @@ export type StructuredErrorCode =
   // attest: a ruleId was provided that doesn't satisfy the given
   // criterionId. Distinct from rule-not-found — the rule may exist,
   // but it wouldn't contribute to this criterion's coverage so the
-  // attestation is nonsensical. See ADR 0012.
+  // attestation is nonsensical. See ADR 0013.
   | "rule-not-under-criterion"
   | "mode-invalid"
   // scan/resource IO
@@ -697,7 +697,7 @@ export function findStandard(standardId: string): Standard | undefined {
 /**
  * IDs of every built-in rule that satisfies the given criterion, including
  * equivalence closure across loaded standards. Used by MCP tools that need
- * to disclose or validate per-rule coverage claims (see ADR 0012) — the
+ * to disclose or validate per-rule coverage claims (see ADR 0013) — the
  * `attest` tool fans a criterion-wide attestation across this set, and
  * validates that explicit `ruleIds` actually satisfy the criterion.
  *

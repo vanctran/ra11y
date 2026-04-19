@@ -54,7 +54,7 @@ export interface ConformanceProfile {
  *   - `"partially-attested"` → some rules under this criterion have
  *     been attested but the union of attested `ruleIds` does not cover
  *     every satisfying rule. Call `attest` with the missing `ruleIds`
- *     (see ADR 0012).
+ *     (see ADR 0013).
  */
 export type ConformanceBlockerReason =
   | "no-evidence"
@@ -123,7 +123,7 @@ export interface BuildConformanceStatementInputs {
    * blockers so agents can call `attest` with an actionable ruleIds
    * list. When omitted, `missingRuleIds` is not populated — today's
    * callers that don't have a rules registry still get a correct
-   * statement, just without the drill-down hint. See ADR 0012.
+   * statement, just without the drill-down hint. See ADR 0013.
    */
   readonly rulesForCriterion?: (criterionId: string) => readonly string[];
 }

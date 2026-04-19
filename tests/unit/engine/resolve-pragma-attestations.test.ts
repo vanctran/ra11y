@@ -143,8 +143,8 @@ describe("resolvePragmaAttestations", () => {
     }
   });
 
-  it("preserves rule identity on rule-ID pragmas (ADR 0012)", () => {
-    // The single highest-leverage line in ADR 0012: the one seam that
+  it("preserves rule identity on rule-ID pragmas (ADR 0013)", () => {
+    // The single highest-leverage line in ADR 0013: the one seam that
     // already knew which rule the author named no longer drops it. A
     // later coverage check can tell "the author attested rule X" apart
     // from "the author attested the whole criterion."
@@ -244,7 +244,7 @@ describe("resolvePragmaAttestations", () => {
   it("emits one record per (criterion, rule) pair when two rules target the same criterion", () => {
     // Two rules satisfy wcag22:2.1.1. A pragma that names both emits
     // two attestations — each carrying the rule ID it was derived from.
-    // Criterion identity is the same; rule identity differs. Pre-ADR-0012
+    // Criterion identity is the same; rule identity differs. Pre-ADR-0013
     // this coalesced to a single record because rule identity was
     // dropped at the boundary.
     const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);

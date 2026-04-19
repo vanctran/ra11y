@@ -1,4 +1,4 @@
-# 0012 — Rule-scoped attestations
+# 0013 — Rule-scoped attestations
 
 - Status: Accepted
 - Date: 2026-04-18

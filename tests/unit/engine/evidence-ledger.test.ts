@@ -411,7 +411,7 @@ describe("buildEvidenceLedger", () => {
   });
 
   it("rule-level attested fail dominates criterion-wide attested pass — fail wins", () => {
-    // Conflict resolution rule from ADR 0012: fail is load-bearing, even
+    // Conflict resolution rule from ADR 0013: fail is load-bearing, even
     // when a broader pass-attestation is also present.
     const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
     const ledger = buildEvidenceLedger({

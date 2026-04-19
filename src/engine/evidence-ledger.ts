@@ -49,7 +49,7 @@ export interface BuildEvidenceLedgerInputs {
   readonly attestations?: readonly AttestationRecord[];
   /**
    * Returns the set of rule IDs that satisfy the given criterion. Used
-   * by the partial-coverage check in status derivation (ADR 0012): an
+   * by the partial-coverage check in status derivation (ADR 0013): an
    * attestation with explicit `ruleIds` only clears the criterion when
    * the union of all attested `ruleIds` covers this rule set. Default
    * returns an empty array — safe for tests that don't exercise the
@@ -207,7 +207,7 @@ function compareAttestedSources(a: EvidenceSource, b: EvidenceSource): number {
 }
 
 /**
- * Phase 2 status derivation with ADR-0012 coverage check. Strict
+ * Phase 2 status derivation with ADR-0013 coverage check. Strict
  * precedence:
  *
  *   1. Any `static` source OR any attested `"fail"` → `"fail"`. Static
