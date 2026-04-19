@@ -24,6 +24,7 @@
  * broader evidence model this report sits on top of.
  */
 
+import type { ConformanceProfile as ConfigConformanceProfile } from "../config/profiles.ts";
 import type {
   AttestationRecord,
   CriterionEvidence,
@@ -131,6 +132,23 @@ export interface BuildConformanceStatementInputs {
   readonly profile: ConformanceProfile;
   readonly standards: readonly Standard[];
   /**
+   * Optional named conformance profile (see `src/config/profiles.ts`)
+   * whose `standards` + `level?` tuple narrows the claim's scope:
+   *
+   *   - The in-scope criterion filter keeps only criteria whose
+   *     `standardId` appears in `scope.standards`.
+   *   - When `scope.level` is set, the output statement's
+   *     `profile.level` is overridden to match, and criteria above that
+   *     level are excluded from scope (and blockers). Level-less
+   *     profiles (Section 508, EN 301 549) fall through to the
+   *     caller-supplied `profile.level`.
+   *
+   * When omitted, behavior is unchanged — the claim runs against the
+   * full `profile.standardId` + `profile.level` scope the caller
+   * supplied. Additive by construction; no profile = no filter.
+   */
+  readonly scope?: ConfigConformanceProfile;
+  /**
    * Returns the rule IDs that satisfy the given criterion (via the
    * satisfying-rules index on the scanner's registries). Used by this
    * builder only to populate `missingRuleIds` on `partially-attested`
@@ -168,13 +186,22 @@ export interface BuildConformanceStatementInputs {
 export function buildConformanceStatement(
   inputs: BuildConformanceStatementInputs,
 ): ConformanceStatement {
+  // `scope` (optional named profile from src/config/profiles.ts) narrows
+  // the claim when present: filters the standard gate + overrides the
+  // effective level. Absent → original `inputs.profile` drives scope
+  // exactly as before.
   const standard = inputs.standards.find((s) => s.id === inputs.profile.standardId);
   if (!standard) {
     throw new Error(
       `ra11y: conformance profile references standard '${inputs.profile.standardId}' which is not loaded.`,
     );
   }
-  const inScope = standard.criteria.filter((c) => isInLevel(c.level, inputs.profile.level));
+  const scopeStandards = inputs.scope === undefined ? null : new Set(inputs.scope.standards);
+  const inScopeStandard = scopeStandards === null || scopeStandards.has(inputs.profile.standardId);
+  const effectiveLevel: ConformanceProfile["level"] = inputs.scope?.level ?? inputs.profile.level;
+  const inScope = inScopeStandard
+    ? standard.criteria.filter((c) => isInLevel(c.level, effectiveLevel))
+    : [];
   const ledgerByCriterion = new Map(inputs.ledger.entries.map((e) => [e.criterionId, e] as const));
 
   const blockers: ConformanceBlocker[] = [];
@@ -200,8 +227,9 @@ export function buildConformanceStatement(
           inputs.ledger.meta.generatedAt,
         )
       : undefined;
+  const effectiveProfile: ConformanceProfile = { ...inputs.profile, level: effectiveLevel };
   return {
-    profile: inputs.profile,
+    profile: effectiveProfile,
     generatedAt: inputs.ledger.meta.generatedAt,
     conformant,
     criteriaInScope: inScope.length,
