@@ -305,7 +305,45 @@ export interface ConfigureOpts {
   exclude?: readonly string[];
   rules?: Readonly<Record<string, "error" | "warning" | "info" | "off">>;
   nativeWrappers?: readonly string[];
+  /**
+   * Wrapper → native-element map. Mirrors
+   * `LoadedConfig.nativeWrapperElements` on the file-loaded side so the
+   * object form of `Config.nativeWrappers` can round-trip through MCP.
+   */
+  nativeWrapperElements?: Readonly<Record<string, string>>;
   allowWrite?: boolean;
+}
+
+/**
+ * Reads the `nativeWrappers` param in either the flat array form
+ * (`["Button", "Link"]`) or the flat object form
+ * (`{ Button: "button", Link: "a" }`). Returns a split tuple so the
+ * session `configure()` call receives each branch through its own
+ * typed channel (names accumulate into `nativeWrappers`; the element
+ * map populates `nativeWrapperElements`). The nested `NativeWrapperMap`
+ * form accepted on the file-loader side is deliberately NOT parsed
+ * here — nesting is compile-time ergonomics for authors editing a
+ * config file, not a shape MCP callers need to emit. Agents with a
+ * compound-component map flatten the dotted keys themselves, which
+ * keeps the MCP schema flat and unambiguous.
+ */
+function readNativeWrappersParam(params: Record<string, unknown>): {
+  readonly names?: readonly string[];
+  readonly elements?: Readonly<Record<string, string>>;
+} {
+  const raw = params["nativeWrappers"];
+  if (raw === undefined) return {};
+  if (Array.isArray(raw)) {
+    return { names: raw.filter((v): v is string => typeof v === "string") };
+  }
+  if (typeof raw === "object" && raw !== null) {
+    const elements: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof value === "string") elements[key] = value;
+    }
+    return { names: Object.keys(elements), elements };
+  }
+  return {};
 }
 
 export function buildConfigureOpts(params: Record<string, unknown>): ConfigureOpts {
@@ -314,13 +352,15 @@ export function buildConfigureOpts(params: Record<string, unknown>): ConfigureOp
   const level = strParam(params, "level") as "A" | "AA" | "AAA" | undefined;
   const exclude = strArrayParam(params, "exclude");
   const rules = readRuleSettings(params);
-  const nativeWrappers = strArrayParam(params, "nativeWrappers");
+  const { names: nativeWrappers, elements: nativeWrapperElements } =
+    readNativeWrappersParam(params);
   const allowWrite = params["allowWrite"];
   if (standard !== undefined) opts.standard = standard;
   if (level !== undefined) opts.level = level;
   if (exclude !== undefined) opts.exclude = exclude;
   if (rules !== undefined) opts.rules = rules;
   if (nativeWrappers !== undefined) opts.nativeWrappers = nativeWrappers;
+  if (nativeWrapperElements !== undefined) opts.nativeWrapperElements = nativeWrapperElements;
   if (typeof allowWrite === "boolean") opts.allowWrite = allowWrite;
   return opts;
 }

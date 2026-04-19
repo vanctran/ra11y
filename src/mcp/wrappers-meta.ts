@@ -31,8 +31,24 @@ export interface AutoDetectedWrappers {
 export interface NativeWrapperSources {
   /** From ra11y.config.ts. */
   readonly fromFile: readonly string[];
+  /**
+   * Wrapper → native-element map from ra11y.config.ts. Populated when
+   * the user supplied the object form of `Config.nativeWrappers` — see
+   * `LoadedConfig.nativeWrapperElements`. Empty `{}` when only the flat
+   * array form was supplied. Passed through to the response
+   * `meta.activeNativeWrapperElements` so agents can round-trip the
+   * object form via MCP.
+   */
+  readonly fromFileElements?: Readonly<Record<string, string>>;
   /** Added via configure() calls this session. */
   readonly fromSession: readonly string[];
+  /**
+   * Wrapper → native-element map accumulated this session via
+   * `sessionConfigure`. Parallel to `fromFileElements` on the session
+   * side so the two can be merged at response-assembly time without
+   * losing provenance.
+   */
+  readonly fromSessionElements?: Readonly<Record<string, string>>;
   /**
    * Auto-detected for THIS scan only (e.g. scan_project's
    * `autoDetectWrappers: true`). Tracked separately so the
@@ -64,6 +80,15 @@ export interface ResolvedWrapperSources {
     readonly fromSession: readonly string[];
     readonly fromAutoDetect: AutoDetectedWrappers;
   };
+  /**
+   * Merged wrapper → native-element map across every source that
+   * contributed one. File-loaded entries form the base; session entries
+   * layer on top (session wins on key collision, mirroring the rest of
+   * session-vs-file precedence). Auto-detect does not contribute — the
+   * probe produces names only, not element mappings. Empty `{}` when
+   * no source supplied a mapping.
+   */
+  readonly elements: Readonly<Record<string, string>>;
 }
 
 /**
@@ -87,6 +112,9 @@ export function resolveWrapperSources(
   const sources: NativeWrapperSources = wrapperSources ?? {
     fromFile: [],
     fromSession: session.config.nativeWrappers,
+    ...(Object.keys(session.config.nativeWrapperElements).length > 0
+      ? { fromSessionElements: session.config.nativeWrapperElements }
+      : {}),
   };
   const autoDetect: AutoDetectedWrappers = sources.fromAutoDetect ?? {
     confirmed: [],
@@ -112,7 +140,15 @@ export function resolveWrapperSources(
       assumed: [...autoDetect.assumed].sort(),
     },
   };
-  return { wrappers, sessionOnly, bySource };
+  // File entries form the base; session entries layer on top so a
+  // `sessionConfigure({ nativeWrappers: { Button: "a" } })` call can
+  // refine a file-declared mapping without editing the file. Auto-
+  // detect contributes nothing — the probe produces names only.
+  const elements: Record<string, string> = {
+    ...(sources.fromFileElements ?? {}),
+    ...(sources.fromSessionElements ?? {}),
+  };
+  return { wrappers, sessionOnly, bySource, elements };
 }
 
 /**

@@ -35,6 +35,15 @@ export interface SessionConfig {
    */
   nativeWrappers: readonly string[];
   /**
+   * Wrapper → native-element map accumulated this session when
+   * `sessionConfigure` receives the object form of `nativeWrappers`
+   * (`{ Button: "button", Link: "a" }`). Empty `{}` when only the flat
+   * string-array form has been supplied. Parallel to
+   * `LoadedConfig.nativeWrapperElements` on the file-loaded side so the
+   * two sources can be merged at scan time without ambiguity.
+   */
+  nativeWrapperElements: Readonly<Record<string, string>>;
+  /**
    * When true, tools that mutate user source (`apply_fix`) are permitted to
    * write to disk. Defaults to false: the host must opt-in via `configure`
    * (or the `--allow-write` CLI flag equivalent) before any on-disk edit
@@ -113,6 +122,7 @@ export class McpSession {
       exclude: [],
       rules: {},
       nativeWrappers: [],
+      nativeWrapperElements: {},
       allowWrite: false,
     };
     this.logging = new LoggingState();
@@ -200,6 +210,13 @@ export class McpSession {
     exclude?: readonly string[];
     rules?: Readonly<Record<string, RuleSetting>>;
     nativeWrappers?: readonly string[];
+    /**
+     * Wrapper → native-element map. Additive across calls: later
+     * entries overwrite earlier entries for the same wrapper name,
+     * mirroring the `rules` merge behavior so an agent can refine a
+     * mapping mid-session without re-sending the full object.
+     */
+    nativeWrapperElements?: Readonly<Record<string, string>>;
     allowWrite?: boolean;
   }): SessionConfig {
     if (opts.standard !== undefined) this.config.standard = opts.standard;
@@ -215,8 +232,26 @@ export class McpSession {
         ...new Set([...this.config.nativeWrappers, ...opts.nativeWrappers]),
       ];
     }
+    if (opts.nativeWrapperElements !== undefined) {
+      // Per-key merge: later `configure()` calls can refine the map
+      // for a specific wrapper without having to restate every entry.
+      // Also folds the declared names into `nativeWrappers` so the
+      // silence-on-wrapper callers see them regardless of whether the
+      // caller sent the array form or the object form.
+      this.config.nativeWrapperElements = {
+        ...this.config.nativeWrapperElements,
+        ...opts.nativeWrapperElements,
+      };
+      this.config.nativeWrappers = [
+        ...new Set([...this.config.nativeWrappers, ...Object.keys(opts.nativeWrapperElements)]),
+      ];
+    }
     if (opts.allowWrite !== undefined) this.config.allowWrite = opts.allowWrite;
-    return { ...this.config, rules: { ...this.config.rules } };
+    return {
+      ...this.config,
+      rules: { ...this.config.rules },
+      nativeWrapperElements: { ...this.config.nativeWrapperElements },
+    };
   }
 
   /**
