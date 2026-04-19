@@ -163,7 +163,6 @@ const scanTool: McpTool = {
       cwd,
       params["verboseMeta"] === true,
     );
-
     const nextStep = buildNextStep(formatted);
     const nextStepStructuredField =
       nextStep.structured === undefined ? {} : { nextStepStructured: nextStep.structured };
