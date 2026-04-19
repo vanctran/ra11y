@@ -9,7 +9,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - **v0.1.0 — ready to tag.** Code-complete: 54 rules, 4 standards, 9 formatters, 10 MCP tools, 4 reports, CLI wired, release workflow configured. Remaining work is the demo + the tag + publish (Track D).
 - **v0.2.0 — in flight.** MCP hardening (Track M), review-candidate coverage + focus-ring cross-ref (Track R), real-world fixture corpus (Track F). Target: 3–4 weeks post-0.1.0.
 - **v0.3.0+ — staged, not started.** MCP sampling (Track S), ecosystem integrations + public benchmark (Track E). Phase 20 work is deliberately deferred until after 0.2.0 ships and user feedback tells us which sampling-backed tool matters most. See ADR 0005 for the sampling architecture.
-- **v1.0.0 — readiness (Track V).** Conformance capstone work is done in Track C. Remaining v1.0 gates are coverage-matrix reconciliation, fix-suggestion audit, prompt template discoverability, performance baseline, deferred-decision resolution (rule renames, ADR 0003, ADR 0010, ADR 0005 sampling tools), and a real-world fixture push into rule-territory (forms/nav/dialog/table/live-region). Derived from 2026-04-19 three-agent gap analysis.
+- **v1.0.0 — readiness (Track V).** Conformance capstone work is done in Track C. Remaining v1.0 gates: (a) five **detection gaps** found in the 2026-04-19 four-agent third-pass audit — alt-text walker scope (SVG image / role=img / canvas), button-name SVG `<title>` traversal, `<input type="image">` title recognition, contenteditable labels, `background-image` contrast surfacing; (b) nine **shape-honesty null sentinels** to conditional-spread; (c) eleven **fix-suggestion context-aware rewrites** (V1-FIX-AUDIT `[~]` acceptance gate); (d) **KB final sweep** to drain `GUIDANCE_BY_ID`; (e) **V1-CHANGELOG-V1** date-stamp on ship. Derived from 2026-04-19 three-agent + third-pass four-agent gap analyses.
 
 ## Dispatch model (parallel tracks, not sequential phases)
 
@@ -414,6 +414,53 @@ Source: coverage sweep during second-pass gap scan — MCP surface and several C
 - [x] **V1-README-PLUGIN-LINK** Per-plugin-kind authoring guides now linked inline in the Plugin API section (3379e03). The prior scan's claim of a broken `docs/plugin-authoring.md` link did not match the current README — the three `docs/plugins/authoring-a-*.md` guides are now cross-linked alongside the examples + architecture deep-dive.
 - [x] **V1-DOCS-CLI-COMMANDS** Per-command reference section added to `docs/cli.md` (192cf0d). Each command gets a subsection with purpose + representative invocation + key non-global flags; `baseline prune` + `attestations prune` subcommands now documented; `--profile` flag added; usage synopsis updated to reflect command dispatch.
 - [x] **V1-MIGRATION-0.2-TO-1.0** `docs/migrations/0.2-to-1.0.md` landed (2f9af2e). TL;DR: v1.0 is additive for most consumers. 4 deferred items (from ADR 0018) + 1 breaking change (exit-code freeze) + 2 soft deprecations (`configure` → `sessionConfigure`, `filePath` → `file`). Cross-linked from CHANGELOG.md + docs/getting-started.md.
+
+### v1.0.0 — detection gaps (third-pass scan, 2026-04-19)
+
+Source: "find all violations" bar re-raised 2026-04-19. Four-agent gap audit against WCAG 2.2 A+AA surface. Each item widens detection on an existing rule or adds a small new primitive — none reshape the engine. Gaps are where a real violation on common production patterns walks past our rules undetected. Dispatch in parallel — independent files.
+
+- [ ] **V1-DETECT-ALT-WIDEN** `src/rules/media/alt-text-missing.ts` today only walks `<img>` and `<input type="image">` (line 13 header). Real violation patterns miss: (a) SVG `<image src="…">` inside `<svg>`; (b) `role="img"` on arbitrary elements (`<div role="img">`, `<span role="img">`); (c) `<canvas>` with no fallback text + no aria-label/aria-labelledby. Widen element walk + apply existing `hasAccessibleName*` logic. Satisfies wcag22:1.1.1, wcag21:1.1.1. Fix scope: rule extension; add three walkers with the same accessible-name check that runs today on `<img>`. Tests: `tests/fixtures/{good,bad}/alt-text-missing/` gains svg-image, role-img-div, canvas-no-fallback cases. Effort: small.
+- [ ] **V1-DETECT-BUTTON-NAME-SVG** `src/rules/semantics/button-name.ts:130` uses `htmlTextContent` which walks HtmlElement + HtmlText but does NOT descend into SVG `<text>` / `<title>` children. `<button><svg><title>Close</title></svg></button>` computes as name-less today but is accessibly named in every major AT. Same blind spot for `<a>`/interactive controls. Extend `hasAccessibleNameHtml`/`hasAccessibleNameJsx` to walk SVG `<title>` + `<text>` as direct children of interactive controls. Satisfies wcag22:4.1.2. Effort: small.
+- [ ] **V1-DETECT-BUTTON-NAME-IMAGE-INPUT** `src/rules/semantics/button-name.ts:155-173` filters `["button", "submit", "reset"]` only; `<input type="image" src=... title="Submit">` is never checked. Alt-text rule covers the `alt` path but not the `title`-as-name path — so a `title`-named image input reports no violation correctly, but a name-less one also reports no violation (false negative). Add `type="image"` to the button-name filter and recognize `alt` OR `title` OR `aria-label` as valid name sources. Satisfies wcag22:4.1.2, wcag22:1.1.1. Effort: small.
+- [ ] **V1-DETECT-LABELS-CONTENTEDITABLE** `src/rules/forms/labels-required.ts:38` `LABELABLE_TAGS = ["input","select","textarea"]`. `<div contenteditable="true">` acts as a form control (Slack-style composers, Notion-style editors) and has the same labeling requirement under WCAG 1.3.2 + 3.3.2 but is not checked. Extend the element set to include `contenteditable="true"` (not `false` or `inherit`). Effort: small.
+- [ ] **V1-DETECT-CONTRAST-BG-IMAGE** `src/rules/contrast/_shared.ts:114` resolves only `background-color` and `background` (color-only shorthand). Text over `background-image: url(…)` / `background: linear-gradient(…)` currently skips contrast evaluation silently — no violation, no `couldBeWrongBecause` signal. Two paths: (a) emit `couldBeWrongBecause: "background_image_unresolvable"` as additive signal for affected declarations (honest surfacing, no false positives); (b) defer luminance heuristic for gradients to a follow-up. Path (a) is the v1.0 scope. Effort: small.
+
+### v1.0.0 — shape-honesty sweep (third-pass scan, 2026-04-19)
+
+Source: same audit. Verified file:line hits on shape-honesty violations that survived Q/Q2/Q2R2. Every item below is a null-sentinel that CLAUDE.md §1 "Ambiguous field shapes are dishonest" calls out directly — forcing agents to disambiguate "field unavailable" vs "field empty."
+
+- [ ] **V1-SHAPE-NULL-SWEEP** Replace 9 response-field null/empty sentinels with conditional-spread:
+    - `src/mcp/tool-explain-standard.ts:65` `publisher: standard.publisher ?? null`
+    - `src/mcp/tool-explain-standard.ts:66` `url: standard.url ?? null`
+    - `src/mcp/tool-explain-standard.ts:68` `levelFilterApplied: level ?? null`
+    - `src/mcp/tool-explain-standard.ts:75` `url: c.url ?? null`
+    - `src/mcp/tool-explain-standard.ts:76` `equivalentTo: c.equivalentTo ?? []`
+    - `src/mcp/rule-catalog.ts:77` `normativeQuote: rule.docs.normativeQuote ?? null`
+    - `src/mcp/tool-review-candidates.ts:177` `title: criterion?.title ?? null`
+    - `src/mcp/tool-review-candidates.ts:178` `level: criterion?.level ?? null`
+    - `src/mcp/next-step.ts:147` `singleFilePath: options.singleFilePath ?? null`
+  Exclude `detect-wrappers-core.ts:107` (`definitionFile`) — intentional per Q2-WRAPPATH ("`null` is emitted, not omitted — the attempt is meaningful"). Use conditional-spread: `...(x ? { field: x } : {})`. Audit `tests/integration/mcp-*.test.ts` for any snapshot assertions relying on the null — those are the contract tests to update. Effort: small.
+- [ ] **V1-SHAPE-NULL-AUDIT** Once V1-SHAPE-NULL-SWEEP lands, add a lint check to `scripts/` that fails CI when any `src/mcp/**` response-builder emits `?? null` / `?? []` on fields destined for the response envelope (allowlist: input-param normalization and the Q2-WRAPPATH exception). Prevents regressing the doctrine. Effort: small.
+
+### v1.0.0 — fix-suggestion context-aware sweep (third-pass scan, 2026-04-19)
+
+Source: V1-FIX-AUDIT (`[~]` above) enumerates 11 rules with generic fix text. Acceptance requires zero generic rows before v1.0 tag. Each item is sized for one ≤400-LOC commit per CLAUDE.md §9. Plans derived from fix-suggestion-audit.md. Dispatch in parallel — independent rules.
+
+- [ ] **V1-FIX-DOC-LANG** `src/rules/document/lang-attribute.ts:71-72` — inspect `<meta charset>` + sibling pages' lang values to propose a concrete lang candidate ("Add lang=\"en\" (detected from <meta charset=\"utf-8\">); if the page is French, use lang=\"fr\""). Small.
+- [ ] **V1-FIX-DOC-TITLE** `src/rules/document/page-titled.ts:68-86` — extract `<h1>` text + `<meta name="description">` as title candidate ("`<title>Contact Information — Acme</title>` — candidate from existing `<h1>` text"). Small.
+- [ ] **V1-FIX-TABINDEX-POSITIVE** `src/rules/focus/tabindex-positive.ts:210-223` — inline the offending tabindex value + branch on tag/role ("Remove tabindex=\"5\" from `<div>`; if focus is needed, use tabindex=\"0\" with role=\"button\""). Small.
+- [ ] **V1-FIX-NON-EMPTY-LABEL** `src/rules/forms/non-empty-label.ts:96-129` — read `for`/`htmlFor` + locate matching id ("Label references id=\"email\"; move the email-input description text inside the label"). Small.
+- [ ] **V1-FIX-VIDEO-CAPTIONS** `src/rules/media/video-captions-missing.ts:116-131` — extract video src basename + document lang for a concrete VTT path and srclang ("Add `<track kind=\"captions\" src=\"launch.vtt\" srclang=\"en\">` inside `<video src=\"launch.mp4\">`"). Small.
+- [ ] **V1-FIX-LINK-NO-HREF** `src/rules/navigation/link-no-href.ts:115-117` — inspect onClick expression body for navigation vs mutation keywords (navigate/route/history vs toggle/set/open) and branch the fix. Needs small new helper in `src/engine/ast-helpers.ts` for JSX expression keyword probe. Medium.
+- [ ] **V1-FIX-DUPLICATE-ID** `src/rules/parsing/duplicate-id.ts:64-66` — inline `first.loc` line/tag + propose a numeric suffix candidate ("id=\"mainContent\" duplicates `<main>` at line 12 — use id=\"mainContent2\" or remove"). Small.
+- [ ] **V1-FIX-BUTTON-NAME** `src/rules/semantics/button-name.ts:304-319, 223-239` — detect icon-only child (SVG/img) and extract svg `<title>` / img alt as concrete aria-label candidate ("Button contains only `<svg><title>Close</title></svg>`; add aria-label=\"Close\""). Pairs with V1-DETECT-BUTTON-NAME-SVG — ship after that extension lands so the fix text cites the same helpers. Medium.
+- [ ] **V1-FIX-EMPTY-HEADING** `src/rules/semantics/empty-heading.ts:165-171, 174-180` — walk document for nearest preceding heading at adjacent level ("Empty `<h3>` follows \"Contact Information\" (h2); continue the hierarchy"). Small.
+- [ ] **V1-FIX-LANDMARK-MAIN** `src/rules/semantics/landmark-main.ts:78-91, 95-112` — when multiple `<main>` exist, inline each main's id/class for disambiguation ("Document has `<main id=\"app-main\">` (line 5) and `<main id=\"legacy-main\">` (line 45); demote one to `<section>`"). Small.
+- [ ] **V1-FIX-TABLE-HEADERS** `src/rules/semantics/table-headers.ts:154-157, 212-215` — inspect first-row `<tr>` children, detect header-shaped text (short, title-cased), suggest concrete td→th rewrite. Small.
+
+### v1.0.0 — criterion KB final sweep
+
+- [ ] **V1-KB-FINDER-GUIDANCE** Populate KB entries for the 8 remaining WCAG 2.2 finder-backed criteria whose guidance still lives in `src/reports/checklist.ts:39-59` `GUIDANCE_BY_ID`. Scope: wcag22:1.2.1, 1.2.3, 1.4.1, 2.1.2, 2.3.1, 3.2.1, 3.2.2 + 1 remaining (grep the map). Acceptance: every ID in `GUIDANCE_BY_ID` has a KB file and the map can be deleted. Unblocks the V1-CRITERION-KB `[~]` item's "full acceptance" condition. Small.
 
 ### Considered but not elevated to Track V
 
