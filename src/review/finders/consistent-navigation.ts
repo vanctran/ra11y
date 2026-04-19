@@ -9,21 +9,24 @@
  * static analysis can see the `<nav>` markup across route files and
  * spot divergent orderings without a live site.
  *
- * Strategy: collect every `<nav>` (or `role="navigation"`) across the
- * scanned files, fingerprint each by the *set* of anchor labels, and
- * flag groups where two instances share the set but differ in order.
- * The divergence is the evidence — we don't threshold on how many
- * files participate or how many links match; any provable reorder of
- * the same link set is the surface the agent wants to see. The reason
- * names the counterpart file:line so one read resolves the question.
+ * Two evaluation paths, chosen per invocation:
  *
- * Each `NavInstance` carries its role (`"nav"` vs `"navigation"`) and
- * accessible name so downstream process-aware comparison (added in
- * the follow-up commit) can key on `{ role, accessibleName }` without
- * reshaping the collection pass. Reason text also names the
- * config-primitive upgrade path (`processes: [...]` in
- * `ra11y.config.ts`) so an agent reading a fallback finding can nudge
- * the caller toward declarative evidence.
+ *   1. Process-aware (preferred). When `ctx.processes` is declared
+ *      (see ADR 0016), each named process is the unit of comparison.
+ *      Navigation landmarks on the process's pages are collapsed to a
+ *      signature `{ role, accessibleName, linkCount, linkLabels }` and
+ *      compared against the process's *modal* signature; any page
+ *      whose landmark diverges emits a candidate scoped to that page.
+ *      Deterministic evidence — the caller has told us which pages
+ *      participate in the user journey.
+ *
+ *   2. Heuristic fallback. When `ctx.processes` is absent or empty,
+ *      the finder falls back to whole-project comparison: collect
+ *      every `<nav>` across every scanned file, group by the *set* of
+ *      link labels, and flag groups that share the set but disagree
+ *      on order. The reason text on each candidate notes the
+ *      config-primitive upgrade path so an agent reading the finding
+ *      can nudge the caller toward declarative evidence.
  *
  * AI-first notes (CLAUDE.md §1):
  * - Surface, don't suppress. No filename / identifier filter on navs.
@@ -41,6 +44,7 @@
  * is a checklist of places to verify, not a list of failures.
  */
 
+import { isAbsolute, resolve } from "node:path";
 import { defineCandidateFinder } from "../../api/plugin.ts";
 import {
   getHtmlAttribute,
@@ -57,6 +61,7 @@ import type {
   SourcePosition,
   TsxModule,
 } from "../../types/ast.ts";
+import type { Process } from "../../types/config.ts";
 import type { ProjectFile, ReviewCandidate } from "../../types/review.ts";
 
 const CRITERION_IDS = [
@@ -106,6 +111,10 @@ export const finder = defineCandidateFinder({
     ],
   },
   afterProject(ctx) {
+    const processes = ctx.processes;
+    if (processes !== undefined && processes.length > 0) {
+      return flagViaProcesses(processes, ctx.files);
+    }
     const instances: NavInstance[] = [];
     for (const file of ctx.files) {
       collectNavs(file, instances);
@@ -314,4 +323,203 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Process-aware path
+//
+// When `ctx.processes` is declared, each named process is the unit of
+// comparison. Per process:
+//   1. Collect every nav landmark across the process's declared pages.
+//   2. Key each landmark by `{ role, accessibleName }` — a "primary"
+//      navigation and a "footer" navigation on the same page are
+//      compared only against their own kind across the process.
+//   3. For each key-group that spans ≥2 pages, compute the modal
+//      signature (most common `{ linkCount, linkLabels }`).
+//   4. Any landmark in the group whose signature diverges from the
+//      modal one emits a candidate.
+//
+// Comparison heuristic per the spec of this task: divergence is
+// declared when a landmark's link count differs from the modal count
+// OR when its ordered link labels differ (Hamming distance > 0 on
+// same-length label lists). `<nav>` with no links is skipped — nothing
+// to compare.
+// ---------------------------------------------------------------------------
+
+function flagViaProcesses(
+  processes: readonly Process[],
+  files: readonly ProjectFile[],
+): readonly ReviewCandidate[] {
+  const fileByAbsPath = indexFilesByAbsPath(files);
+  const out: ReviewCandidate[] = [];
+  for (const process of processes) {
+    collectProcessCandidates(process, fileByAbsPath, out);
+  }
+  return out;
+}
+
+/**
+ * Indexes parsed files by both their absolute path and the raw path
+ * from `ProjectFile.filePath`. Scan orchestration pre-resolves process
+ * pages to absolute paths, but fixtures / integration tests often pass
+ * unresolved paths — indexing both forms keeps the finder callable
+ * from either site.
+ */
+function indexFilesByAbsPath(files: readonly ProjectFile[]): ReadonlyMap<string, ProjectFile> {
+  const out = new Map<string, ProjectFile>();
+  for (const f of files) {
+    out.set(f.filePath, f);
+    if (!isAbsolute(f.filePath)) {
+      out.set(resolve(f.filePath), f);
+    }
+  }
+  return out;
+}
+
+function resolveProcessPage(
+  pagePath: string,
+  fileByAbsPath: ReadonlyMap<string, ProjectFile>,
+): ProjectFile | undefined {
+  const direct = fileByAbsPath.get(pagePath);
+  if (direct) return direct;
+  if (!isAbsolute(pagePath)) return fileByAbsPath.get(resolve(pagePath));
+  return undefined;
+}
+
+function collectProcessCandidates(
+  process: Process,
+  fileByAbsPath: ReadonlyMap<string, ProjectFile>,
+  out: ReviewCandidate[],
+): void {
+  const groupsByKey = new Map<string, NavInstance[]>();
+  const pagesSeenByKey = new Map<string, Set<string>>();
+  for (const pagePath of process.pages) {
+    const file = resolveProcessPage(pagePath, fileByAbsPath);
+    if (file === undefined) continue;
+    indexPageLandmarks(file, groupsByKey, pagesSeenByKey);
+  }
+  for (const [key, members] of groupsByKey) {
+    const pageCount = pagesSeenByKey.get(key)?.size ?? 0;
+    if (pageCount < 2) continue;
+    emitProcessDivergences(process, members, out);
+  }
+}
+
+/**
+ * Walks one page's nav landmarks into the cross-page indexes. Split
+ * from `collectProcessCandidates` so the outer function stays under
+ * the cognitive-complexity budget — each index update is independently
+ * simple, the composition is what accumulates complexity.
+ */
+function indexPageLandmarks(
+  file: ProjectFile,
+  groupsByKey: Map<string, NavInstance[]>,
+  pagesSeenByKey: Map<string, Set<string>>,
+): void {
+  const instances: NavInstance[] = [];
+  collectNavs(file, instances);
+  for (const inst of instances) {
+    const key = landmarkKey(inst);
+    const bucket = groupsByKey.get(key);
+    if (bucket) bucket.push(inst);
+    else groupsByKey.set(key, [inst]);
+    const pages = pagesSeenByKey.get(key);
+    if (pages) pages.add(inst.filePath);
+    else pagesSeenByKey.set(key, new Set([inst.filePath]));
+  }
+}
+
+/** Group-key on (role, accessibleName) — separates primary vs footer vs aside navs. */
+function landmarkKey(inst: NavInstance): string {
+  return `${inst.role}\u0001${inst.accessibleName}`;
+}
+
+/**
+ * Signature the modal-match compares against — `count:labels`. Two
+ * landmarks in the same `{ role, accessibleName }` group are equal
+ * when they share this signature. Divergence = count mismatch OR
+ * ordered-label mismatch (Hamming > 0 for same-length lists is
+ * captured by the label-join differing).
+ */
+function signatureOf(inst: NavInstance): string {
+  return `${inst.order.length}\u0001${inst.order.join("\u0001")}`;
+}
+
+/**
+ * For one `{ role, accessibleName }` group inside one process: find
+ * the modal signature, then emit one candidate per member that
+ * diverges from it. Ties broken by first-occurrence order — the
+ * authoritative shape of the nav is whichever signature appeared
+ * earliest across the declared page sequence.
+ */
+function emitProcessDivergences(
+  process: Process,
+  members: readonly NavInstance[],
+  out: ReviewCandidate[],
+): void {
+  const counts = new Map<string, number>();
+  const firstSeen = new Map<string, number>();
+  members.forEach((m, idx) => {
+    const sig = signatureOf(m);
+    counts.set(sig, (counts.get(sig) ?? 0) + 1);
+    if (!firstSeen.has(sig)) firstSeen.set(sig, idx);
+  });
+  const modal = pickModalSignature(counts, firstSeen);
+  if (modal === null) return;
+  const modalExample = members.find((m) => signatureOf(m) === modal);
+  if (modalExample === undefined) return;
+  for (const inst of members) {
+    if (signatureOf(inst) === modal) continue;
+    const reason = buildProcessReason(process, inst, modalExample);
+    for (const criterionId of CRITERION_IDS) {
+      // Confidence "high": the deterministic process config tells us
+      // exactly which pages participate; the landmark-signature
+      // divergence is concrete cross-page evidence. The reviewer's
+      // question is only whether the divergence is user-initiated.
+      out.push({
+        criterionId,
+        location: { filePath: inst.filePath, line: inst.line, column: inst.column },
+        reason,
+        confidence: "high",
+      });
+    }
+  }
+}
+
+function pickModalSignature(
+  counts: ReadonlyMap<string, number>,
+  firstSeen: ReadonlyMap<string, number>,
+): string | null {
+  let bestSig: string | null = null;
+  let bestCount = 0;
+  let bestFirstSeen = Number.POSITIVE_INFINITY;
+  for (const [sig, count] of counts) {
+    const seenAt = firstSeen.get(sig) ?? Number.POSITIVE_INFINITY;
+    if (count > bestCount || (count === bestCount && seenAt < bestFirstSeen)) {
+      bestSig = sig;
+      bestCount = count;
+      bestFirstSeen = seenAt;
+    }
+  }
+  return bestSig;
+}
+
+function buildProcessReason(
+  process: Process,
+  inst: NavInstance,
+  modalExample: NavInstance,
+): string {
+  const landmarkDescriptor =
+    inst.accessibleName === ""
+      ? `<${inst.role === "nav" ? "nav" : `* role="navigation"`}>`
+      : `<${inst.role === "nav" ? "nav" : `* role="navigation"`} aria-label="${inst.accessibleName}">`;
+  const countPhrase =
+    inst.order.length === modalExample.order.length
+      ? `link order [${inst.order.join(", ")}] differs from the process-modal order [${modalExample.order.join(", ")}]`
+      : `link count ${inst.order.length} differs from the process-modal count ${modalExample.order.length}`;
+  return (
+    `Navigation landmark ${landmarkDescriptor} on page \`${inst.filePath}\` diverges from the modal navigation in process \`${process.name}\`: ` +
+    `${countPhrase} (established on \`${modalExample.filePath}\`:${modalExample.line}). ` +
+    `Verify the repeated navigational mechanism appears in the same relative order on every page of the process, unless the user initiated the change.`
+  );
 }
