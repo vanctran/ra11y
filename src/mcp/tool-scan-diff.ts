@@ -36,6 +36,7 @@ import {
   stagedFiles,
 } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
+import { applyMetaCacheMode, metaModeSchema } from "./meta-cache.ts";
 import {
   buildReferenceGuide,
   errorResult,
@@ -105,6 +106,7 @@ export const scanDiffTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into underlying lists (parseErrorFiles, opaqueCustomComponentNames, rulesByExtension).",
         },
+        metaMode: metaModeSchema,
         hunksOnly: {
           type: "boolean",
           description:
@@ -214,6 +216,13 @@ async function handleBaselineMode(
   const resolved = resolvedFromBaseline(baseline.violations, scannedHashes);
 
   const referenceGuide = buildReferenceGuide(newFiles);
+  const fullMeta: Record<string, unknown> = {
+    ...formatted.meta,
+    scannedRoot: cwd,
+    scanMode: describeMode(params),
+    configSource: projectConfig.sourcePath,
+    baselineVersion: baseline.version,
+  };
   return textResult({
     mode: "diff",
     baselinePath,
@@ -231,13 +240,7 @@ async function handleBaselineMode(
     resolvedCount: resolved.length,
     resolved,
     ...(referenceGuide === undefined ? {} : { referenceGuide }),
-    meta: {
-      ...formatted.meta,
-      scannedRoot: cwd,
-      scanMode: describeMode(params),
-      configSource: projectConfig.sourcePath,
-      baselineVersion: baseline.version,
-    },
+    meta: applyMetaCacheMode({ toolName: "scan_diff", params, fullMeta, session }),
     nextStep: buildNextStep(newCount, newFiles, resolved.length),
   });
 }

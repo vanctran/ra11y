@@ -13,6 +13,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import { applyMetaCacheMode, metaModeSchema } from "./meta-cache.ts";
 import { buildNextStep } from "./next-step.ts";
 import { pathExists } from "./path-exists.ts";
 import { dedupeReviewCandidatesForSingleFile } from "./review-candidate-dedup.ts";
@@ -93,6 +94,7 @@ const scanTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
         },
+        metaMode: metaModeSchema,
         includeRuleDetails: includeRuleDetailsSchema,
       },
       required: ["paths"],
@@ -166,6 +168,19 @@ const scanTool: McpTool = {
     const nextStepStructuredField =
       nextStep.structured === undefined ? {} : { nextStepStructured: nextStep.structured };
 
+    const fullMeta: Record<string, unknown> = {
+      ...formatted.meta,
+      scannedPaths: paths,
+      configSource: projectConfig.sourcePath,
+      configSearchedFrom: cwd,
+      ...(projectConfig.sourcePath === null
+        ? {
+            configNote: `No ra11y.config found at ${cwd} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
+          }
+        : {}),
+      nextStep: nextStep.prose,
+      ...nextStepStructuredField,
+    };
     return textResult({
       ...formatted,
       ...ruleCatalogField(params, BUILTIN_RULES, formatted.files),
@@ -174,19 +189,7 @@ const scanTool: McpTool = {
         rootSource: null,
         configSource: projectConfig.sourcePath,
       }),
-      meta: {
-        ...formatted.meta,
-        scannedPaths: paths,
-        configSource: projectConfig.sourcePath,
-        configSearchedFrom: cwd,
-        ...(projectConfig.sourcePath === null
-          ? {
-              configNote: `No ra11y.config found at ${cwd} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
-            }
-          : {}),
-        nextStep: nextStep.prose,
-        ...nextStepStructuredField,
-      },
+      meta: applyMetaCacheMode({ toolName: "scan", params, fullMeta, session }),
     });
   },
 };
@@ -219,6 +222,7 @@ const scanFileTool: McpTool = {
           description:
             "When true, the response includes an `analysisCoverage` block with parse-error and opaque-component details, plus `rulesByExtension` so you can verify which rules ran on this file's type. Off by default.",
         },
+        metaMode: metaModeSchema,
       },
       required: ["path"],
     },
@@ -313,6 +317,20 @@ const scanFileTool: McpTool = {
     // filter needed.
     const dedupedCandidates = dedupeReviewCandidatesForSingleFile(rawCandidates);
 
+    const fullMeta: Record<string, unknown> = {
+      ...formatted.meta,
+      filesScanned: 1,
+      scannedFile: parsed.filePath,
+      configSource: projectConfig.sourcePath,
+      configSearchedFrom: configSearchBase,
+      ...(projectConfig.sourcePath === null
+        ? {
+            configNote: `No ra11y.config found walking up from ${configSearchBase} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
+          }
+        : {}),
+      nextStep: nextStep.prose,
+      ...nextStepStructuredField,
+    };
     return textResult({
       findings: flatFindings,
       reviewCandidates: dedupedCandidates,
@@ -329,20 +347,7 @@ const scanFileTool: McpTool = {
         rootSource: null,
         configSource: projectConfig.sourcePath,
       }),
-      meta: {
-        ...formatted.meta,
-        filesScanned: 1,
-        scannedFile: parsed.filePath,
-        configSource: projectConfig.sourcePath,
-        configSearchedFrom: configSearchBase,
-        ...(projectConfig.sourcePath === null
-          ? {
-              configNote: `No ra11y.config found walking up from ${configSearchBase} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
-            }
-          : {}),
-        nextStep: nextStep.prose,
-        ...nextStepStructuredField,
-      },
+      meta: applyMetaCacheMode({ toolName: "scan_file", params, fullMeta, session }),
     });
   },
 };
