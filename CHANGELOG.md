@@ -4,181 +4,284 @@ All notable changes to ra11y are documented in this file. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0] - YYYY-MM-DD
+
 Migration guide (v0.2 → v1.0): [`docs/migrations/0.2-to-1.0.md`](./docs/migrations/0.2-to-1.0.md)
+
+Public API stability freeze: [ADR 0019](./docs/adr/0019-v1-api-stability.md)
+
+Deferred decisions: [ADR 0018](./docs/adr/0018-v1-deferred-decisions.md)
+
+### Breaking Changes
+
+#### Exit-code table frozen as semver-major surface
+
+The `ExitCode` enum in `src/cli/exit-codes.ts` is now the canonical source of truth for all CLI exit codes. Changes to these values are a semver-major change.
+
+| Code | Constant | Meaning |
+|------|----------|---------|
+| `0` | `ExitCode.OK` | Success; no action required |
+| `1` | `ExitCode.VIOLATIONS` | Violations found, or command-specific failures |
+| `2` | `ExitCode.USER_ERROR` | Invalid arguments, unknown rule/profile, malformed input |
+| `3` | `ExitCode.NEW_VIOLATIONS` | `--diff` / `scan_diff` mode only: new violations absent from baseline |
+
+The observable behavior is unchanged from v0.2.0; the freeze makes the table a semver guarantee going forward. CI scripts that branch on `$?` should verify against the table, in particular that exit code 3 is only reachable via `--diff` (CLI) or `scan_diff` (MCP baseline mode). See [`docs/migrations/0.2-to-1.0.md`](./docs/migrations/0.2-to-1.0.md) for step-by-step migration guidance.
 
 ### Added
 
-#### Configuration
-
-- **`preset: "storybook"` config option** — opt-in framework preset that pairs two behaviors: `*.stories.{tsx,jsx,ts,js}` / `*.story.{…}` / `stories/**` files reach the scanner (they're excluded by default), and Storybook primitives (`Meta`, `StoryObj`, `StoryFn`, `Story`) render transparent in the opaque-component telemetry when they appear inside a story file. Findings on the underlying JSX still surface — the preset removes the wrapper-noise inflation, not the signal. `scan_project` responses carry a `storybook_preset_active` warning code so the agent can tell non-default behavior engaged. Invalid preset values are rejected at load time with a stderr warning; unknown or unsupplied values keep the default behavior. Follow-up (deferred): StoryObj `args` binding onto the underlying component's JSX.
-
 #### MCP server — new tools
 
-- **`scan_diff` tool** — per-scan baseline delta. Returns only violations that are new since the baseline snapshot, giving agents a clean "what regressed?" view without reprocessing unchanged findings.
-- **`baseline` tool** — create/check/update baseline from within an MCP session, mirroring the CLI `--baseline` modes. Uses the same SHA-1 fingerprinting (line-number-independent) as the CLI baseline.
-- **`apply_fix` tool** — write-gated fix-verify loop. Accepts a structured fix instruction, applies it to the source file, and re-scans to confirm the violation is resolved. Disabled by default; the host must set the session-level `allowWrite: true` flag to enable any write to disk.
-- **`audit` meta-tool** — one-call shorthand that runs `scan`, `coverage`, and `checklist` and merges the results into a single response. Intended for "cold start" onboarding where the agent needs the full picture in a single round trip.
-- **`bootstrap` meta-tool** — single-call onboarding that composes `detect_native_wrappers`, `propose_config`, `scan_project`, and (opt-in) `baseline create`, plus a copy-pasteable GitHub Actions snippet wiring `baseline check` into CI. Read-only by default; `writeBaseline: true` grandfathers current violations into `.ra11y-baseline.json`. Partial-failure tolerant via `Promise.allSettled` — a degraded sub-leg surfaces as a `bootstrap_<leg>_failed` warning code without sinking the response.
-- **`autoDetectWrappers` and `additionalPaths`** on `scan` — `autoDetectWrappers: true` runs the wrapper detector inline and registers found components for the scan; `additionalPaths` accepts an explicit list of built CSS/HTML files to include alongside the discovered source tree.
+- **`scan_diff` tool** — per-scan baseline delta. Returns only violations new since a baseline snapshot; supports `hunksOnly` mode for PR-review agents. (Commit: 2690406, ff21fa5.)
+- **`baseline` tool** — create/check/update baseline within an MCP session, mirroring the CLI `--baseline` modes. Uses SHA-1 fingerprinting (line-number-independent). (Commit: aef0e0d.)
+- **`apply_fix` tool** — write-gated fix-verify loop. Accepts a structured fix instruction, applies it to the source file, and re-scans to confirm the violation is resolved. Disabled by default; requires `allowWrite: true` in session config. (Commit: 65f349e.)
+- **`audit` meta-tool** — one-call shorthand that runs `scan`, `coverage`, and `checklist` and merges results into a single response for cold-start onboarding. Partial failures surface as warning codes via `Promise.allSettled`. (Commit: c41832b.)
+- **`bootstrap` meta-tool** — single-call onboarding composing `detect_native_wrappers`, `propose_config`, `scan_project`, and opt-in `baseline create`, plus a copy-pasteable GitHub Actions snippet. `writeBaseline: true` grandfathers current violations into `.ra11y-baseline.json`. Partial-failure tolerant. (Commit: 9337cc4.)
+- **`scan_process` tool** — multi-page process scope; threads process-scoped page sets through `runScan` and per-page finders. (Commit: 9f23018.)
+- **`conformance_statement` tool** — gates a WCAG conformance claim against the evidence ledger; emits a signed conformance bundle with a SHA-256 digest. Refuses or emits per ledger state. (Commit: 4c7ea4d.)
+- **`list_attestations` tool** — lists file-backed attestations with staleness detection. (Commit: 2ad0108.)
+- **`list_suppressions` tool** — pragma audit; lists all inline `ra11y-disable` suppressions across the scanned tree. (Commit: d0a017c.)
+- **`attest` tool** — writes durable attestations to the evidence ledger; accepts `ruleIds` for partial attestations and surfaces missing rules on the conformance report. (Commit: 6e0f9e5.)
+- **`suppress` tool** — adds an inline pragma at a specified location. (Commit: b72eb90.)
+- **`propose_config` tool** — proposes a `ra11y.config.ts` starter based on detected wrappers, framework, and scan findings. (Commit: f043fa5.)
+- **`propose_baseline` tool** — classifies current violations and proposes a baseline snapshot with reason codes. (Commit: 5fb68bd.)
+- **`wrapper_introspect` tool** — AST-based wrapper classification and introspection cache. (Commit: 5bf4c00.)
+- **`autoDetectWrappers` and `additionalPaths`** parameters on `scan` and `scan_project` — `autoDetectWrappers: true` runs the wrapper detector inline; `additionalPaths` includes built CSS/HTML files alongside the source tree. Wrapper provenance annotated per-entry as `source: "config" | "autoDetect" | "session"`. (Commits: 941c54a, 8af966a.)
+- **`skipCriterion` parameter** on `checklist` and `scan_project`. (Commit: ef8062f.)
+- **`includeRuleDetails` parameter** on `scan` and `scan_project`. (Commit: fd045b9.)
 
 #### MCP server — prompt templates
 
-- **`ra11y/triage`** — frames a scan result as a prioritized triage agenda for the calling agent.
-- **`ra11y/fix`** — wraps a single violation with fix-path guidance and a verification checklist.
-- **`ra11y/audit`** — produces a project-level WCAG readiness narrative suitable for a technical lead.
-- **`ra11y/vpat-narrative`** — drafts per-criterion VPAT remarks from checklist output.
+- **`ra11y/triage`** — prioritized triage agenda from a scan result.
+- **`ra11y/fix`** — fix-path guidance and verification checklist for a single violation.
+- **`ra11y/audit`** — project-level WCAG readiness narrative for a technical lead.
+- **`ra11y/vpat-narrative`** — per-criterion VPAT remarks from checklist output.
 
-All four prompts are served via `prompts/list` and `prompts/get`. See [`docs/mcp/prompts.md`](./docs/mcp/prompts.md).
+All four prompts are served via `prompts/list` and `prompts/get`. Prompt templates are referenced in `nextStep` guidance on scan responses. `nextStep` guidance on applicable tools now references the canonical prompt template. See [`docs/mcp/prompts.md`](./docs/mcp/prompts.md). (Commits: a332475, 52f97aa.)
 
 #### MCP server — prompt checksum registry
 
-- `src/mcp/prompts/checksums.ts` computes a stable 16-hex SHA over the canonical serialization of each prompt template. The checksum surfaces as `_meta.checksum` on both `prompts/list` and `prompts/get` responses so agents can pin to a specific prompt version and detect drift without re-reading the full content. (Commits: c141440, 08e5ba0, 9cfc547.)
+`src/mcp/prompts/checksums.ts` computes a stable 16-hex SHA over each prompt template's canonical serialization. The checksum surfaces as `_meta.checksum` on `prompts/list` and `prompts/get` responses so agents can pin to a specific prompt version and detect drift without re-reading the full content. (Commits: 9cfc547.)
 
 #### MCP server — capabilities and resources
 
-- **`logging` capability** — server declares `logging` in the initialize response; hosts that opt in receive structured scan telemetry (start/finish events) via `notifications/message`. Level controlled at runtime via `logging/setLevel`.
-- **`completions` capability** — `completion/complete` dispatch enables argument autocompletion for prompt names and resource URIs.
-- **`roots` capability** — server declares `roots` and reads `params.roots` from the `initialize` call (and from `notifications/roots/list_changed` events) to set the default scan root without requiring the agent to pass an explicit path.
-- **`resources/list` and `resources/read`** — the full `docs/kb/**` tree is exposed as MCP resources, letting agents retrieve architecture docs, rule entries, and gotchas directly via URI without a file read.
+- **`logging` capability** — server declares `logging` in the initialize response; hosts receive structured scan telemetry via `notifications/message`. Level controlled via `logging/setLevel`. (Commit: 4195a11.)
+- **`completions` capability** — `completion/complete` dispatch for prompt names and resource URIs. (Commit: c1b4ca8.)
+- **`roots` capability** — server reads `params.roots` from `initialize` and `notifications/roots/list_changed` to set the default scan root. (Commit: b11d7ba.)
+- **`resources/list` and `resources/read`** — `docs/kb/**` exposed as MCP resources via `ra11y-kb://` URIs; agents retrieve architecture docs, rule entries, and gotchas directly. (Commit: 707dace.)
 
 #### MCP server — structured errors
 
-- Error responses across `scan`, `scan_diff`, `scan_file`, `apply_fix`, and `audit` now carry a `structuredContent` envelope with machine-consumable fields (`code`, `message`, optional `details` and `remediation`). Agents can branch on `code` without parsing prose. (Commit: 19333a1.)
+All error responses across `scan`, `scan_diff`, `scan_file`, `apply_fix`, and `audit` now carry a `structuredContent` envelope with machine-consumable fields (`code`, `message`, optional `details` and `remediation`). Agents can branch on `code` without parsing prose. See [`docs/errors.md`](./docs/errors.md). (Commit: 19333a1.)
 
 #### MCP server — bidirectional outbound rail and sampling
 
-- `src/mcp/outbound.ts` — JSON-RPC rail that lets the server issue requests to the host, not just receive them.
-- `src/mcp/session.ts` — `hostCapabilities` slot captures what the host declared at initialize; `sendRequest` sends a request down the outbound rail.
-- `src/mcp/sampling.ts` — `sample()` helper that calls `sampling/createMessage` on the host. Raises `SamplingNotSupportedError` when the host did not declare the sampling capability; raises `SamplingTransportUnavailableError` on transport failure. Default timeout: 60 s. (Commits: c141440, 08e5ba0.)
+- `src/mcp/outbound.ts` — JSON-RPC rail for server-to-host requests.
+- `src/mcp/session.ts` — `hostCapabilities` slot and `sendRequest` for outbound calls.
+- `src/mcp/sampling.ts` — `sample()` helper calling `sampling/createMessage`. Raises `SamplingNotSupportedError` / `SamplingTransportUnavailableError`; default timeout 60 s. (Commits: c141440.)
+
+#### MCP server — metaMode and sessionRef delta cache
+
+- `metaMode` parameter on `scan`, `scan_file`, `scan_diff`, `checklist`, `coverage`, and `list_suppressions` — controls verbosity of the `meta` block. (Commits: 608cda7, 4ac1cba.)
+- `sessionRef` + meta-delta cache — allows agents to reference a prior scan result to compute a meta diff without retransmitting the full result. (Commit: 14c35a4.)
 
 #### MCP server — additional surface improvements
 
-- Checklist items now carry the WCAG principle name (Perceivable / Operable / Understandable / Robust) alongside the criterion ID, removing a lookup step for agents writing narrative output.
-- `suggest_fix` now returns structured `fixPaths` (primary + alternatives) rather than a single prose string, matching the shape `apply_fix` expects.
-- `scan_project` surfaces `wrapper provenance` — each active native wrapper is annotated with whether it came from `ra11y.config`, `autoDetectWrappers`, or a prior `configure` call.
-- `scan_project` response includes Tailwind-aware CSS coverage hints when Tailwind utilities are detected in the scanned files.
+- Scan responses carry `warnings: string[]` for silent-failure modes (`scanned_zero_files`, `root_source_defaulted`, `no_config_found`, `storybook_preset_active`, `bootstrap_<leg>_failed`, and others).
 - `scan_project` returns a ranked `top-N opaque components` list in `verboseMeta`, ordered by interactive call-site count.
-- `coverage` tool: `manualUntargeted` list is gated behind `showUntargeted: true`; the count is always present. Default-off prevents agents from receiving a large flat list on every call.
-- `checklist` summary leads with a plain-English headline before the structured counts.
-- Per-finding suppression placement guidance: each violation now includes a `suppressionHint` field with the exact pragma to silence it and where to place it (before the element vs. at the file top).
-- `aria/hidden-focus` emits a mechanical `aria-hidden → inert` edit alongside the prose suggestion when the source is JSX.
-- Suppress with reason: inline disable pragmas accept a reason annotation after `:` or `--` (e.g. `ra11y-disable wcag22:1.4.5 -- confirmed logotype`). The reason is captured in `meta.suppressions` for audit output.
+- `scan_project` includes Tailwind-aware CSS coverage hints when Tailwind utilities are detected.
+- `scan_project` surfaces `wrapper provenance` per active native wrapper (`source: "config" | "autoDetect" | "session"`; `confirmed` flag for `autoDetect` entries set by one-hop AST probe).
+- `checklist` summary leads with a plain-English headline before the structured counts; items carry WCAG principle name (Perceivable / Operable / Understandable / Robust).
+- Per-finding suppression placement guidance: each violation includes a `suppressionHint` with the exact pragma and placement.
+- `coverage`: `manualUntargeted` list gated behind `showUntargeted: true`; the count is always present. Gated list emitted as `untargetedCriteriaList`.
+- `scan dir-mode` nextStep parity — directory-mode scans return the same `nextStep` structure as file-mode scans. (Commit: fbe6c56.)
+- Brace-balance snippet walker — `scan` response snippets widen to the enclosing block boundary. (Commit: b0e26cc.)
+- `detect_native_wrappers` now includes `suggestedConfigSnippet` and `definitionFile` on candidates. (Commits: e2d4a2f, 6930fce.)
+- `suggest_fix` returns `verifyCommand` + `verifyCommandStructured` alongside `fixPaths`. (Commit: 100a0fa.)
+- `suggest_fix` suppresses the prose nudge when inline fixes are mechanical. (Commit: 14e3d9a.)
+- `scan_diff` surfaces resolved findings in baseline mode. (Commit: 9d85885.)
+- `scan_project` paginates files with findings via `limit`/`offset`. (Commit: ab23bd5.)
+- `checklist` is paginated with `limit`/`offset`/`perCriterion` caps. (Commit: df8946c.)
 
 #### Engine
 
-- **`afterProject` hook for finders** — `Finder` objects may now implement `afterProject({ files, enabledStandards })` to emit cross-file review candidates after all individual-file passes are complete. The scanner collects per-file candidates first, then invokes `afterProject` on all finders and appends surviving candidates. Required by the consistent-navigation finder (WCAG 3.2.3) and available for future cross-file rules. (Commit: 1c20455.)
-- **Criterion IDs in inline disable pragmas** — `ra11y-disable wcag22:2.4.5` now works alongside rule IDs like `ra11y-disable keyboard/handler-missing`. The candidate runner checks both the full criterion ID and the wildcard `*`.
-- **Conformance level gate** — rules and finders are now skipped end-to-end when their criterion level exceeds the active scan level, eliminating wasted parse work. (Commit: 347e59e.)
-- **Inherited findings at wrapper call sites** — new `Violation.sourceOfFinding?: { filePath, line, column? }` and a fourth `Violation.confidence` value `"inherited"` propagate findings from a wrapper DEFINITION file out to every call site of that wrapper in the scanned files. The post-scan synthesizer (`src/engine/inherited-findings.ts`) reads `LoadedConfig.nativeWrapperElements` as the source of truth (per ADR 0012), skips `wrapper/drift` and already-inherited findings to prevent chain noise, and emits one inherited Violation per call site with `confidence: "inherited"` + `sourceOfFinding` pointing at the definition. Bounded by the parsed files — no transitive import-graph crawl. Forwarders (JSON, SARIF, agent response) pass the fields through; SARIF maps `sourceOfFinding` to `Result.relatedLocations[0]` with role `"origin"` and surfaces `confidence` under `properties.confidence`.
-
-#### Review finders (new since v0.1.0)
-
-Finders produce grounded manual-review candidates (file + line + reason); they do not emit automated violations. All finders below operate in the `afterProject` phase or per-file phase and respect the active standard + level.
-
-- `use-of-color` — wcag22:1.4.1 — flags color-only information signals without a secondary cue.
-- `images-of-text` — wcag22:1.4.5, 1.4.9 — surfaces `<img>` and CSS background-image patterns that may present text as raster graphics; 1.4.9 candidates are annotated separately.
-- `media-variants` — wcag22:1.2.1 through 1.2.6 — flags `<video>` and `<audio>` elements, noting which captions/descriptions/transcripts are statically detectable.
-- `timing` — wcag22:2.2.1, 2.2.2, 2.2.3, 2.2.4, 2.2.6 — surfaces `setTimeout`/`setInterval` call sites with the literal duration in the reason text.
-- `pointer-input` — wcag22:2.5.1, 2.5.6 — flags touch/pointer event handlers that may lack a keyboard or single-pointer alternative.
-- `motion-actuation` — wcag22:2.5.4 — flags `devicemotion`/`deviceorientation` event listeners.
-- `identify-purpose` — wcag22:1.3.6 — surfaces landmark and widget candidates where purpose could be made programmatic.
-- `section-headings` — wcag22:2.4.10 — flags long sections without intervening headings.
-- `multiple-ways` — wcag22:2.4.5 — annotates SPA index-shell routes that have no secondary navigation path.
-- `error-suggestion` — wcag22:3.3.3 — surfaces form validation handlers without visible suggestion text.
-- `error-prevention` — wcag22:3.3.4 — flags form submissions that are irreversible without a confirmation step.
-- `redundant-entry` — wcag22:3.3.7 — flags multi-step forms that re-ask for data the session already has.
-- `error-identification` — wcag22:3.3.1 — surfaces inline error message patterns.
-- `captcha` — wcag22:3.3.8, 3.3.9 — flags CAPTCHA-shaped UI patterns and suggests an accessible alternative.
-- `on-input-change` — wcag22:3.2.1, 3.2.2 — surfaces focus/input change handlers that trigger context changes; annotated with confidence tier based on detectable handler body shape.
-- `headings-and-labels` — wcag22:2.4.6 — flags headings and labels that are present but not descriptive.
-- `consistent-navigation` — wcag22:3.2.3 — cross-file finder; detects navigation components that differ in order or structure across route files. Uses the `afterProject` hook.
-- `sensory-characteristics`, `meaningful-sequence`, `no-keyboard-trap`, `media-alternatives` — additional finders covering remaining WCAG A criteria. See `src/review/finders/` for the full inventory.
-
-**Tailwind focus-ring cross-reference for `focus/outline-visible`**: when a CSS rule suppresses the outline and the same element carries a `focus-visible:ring-*`, `focus-visible:outline-*`, or `focus-visible:shadow-*` Tailwind utility class, the finding is automatically resolved to info-level. Resolution is deterministic — literal class-token prefix match only; no fuzzy inference. (Commit: ddaada4.)
-
-#### Rules
-
-- `aria/hidden-focus` now emits a structured `fixPaths` object (primary: change to `inert`; alternative: remove element from tab order before hiding) in addition to the prose suggestion. (Commit: 5a2f244.)
-- `label-in-name` detects the interleaved-expansion pattern (visible text split across nodes with ARIA expansion in between) and normalizes whitespace before comparison. (Commit: ba80a62.)
-- Six rules — `button-name`, `fieldset-legend`, `labels-required`, `non-empty-label`, `empty-heading`, `list-structure` — now use `hasSpreadProps` to detect JSX components with unknown spread props, avoiding false positives on primitives that receive their label via a spread.
-
-#### Parser
-
-- TSX parser correctly disambiguates TypeScript generic syntax (`<T>`, `<T extends U>`) from JSX open tags. Previously, a generic in an expression position would corrupt the following parse. (Commit: 2f00c1f via fix commit 2968d87.)
+- **Evidence primitive and ledger** — `src/engine/evidence.ts` and `src/engine/ledger.ts` establish per-criterion evidence records that aggregate static scan results, file-backed attestations, and pragma-resolved attestations. Coverage and conformance reports consume the ledger. (Commits: e87347f, 6b2778c.)
+- **Rule-scoped attestations** — `attest` accepts `ruleIds` for partial criterion coverage; `conformance_statement` surfaces missing rules. (Commit: f9e2f33.)
+- **`afterProject` hook for finders** — `Finder` objects may implement `afterProject({ files, enabledStandards })` to emit cross-file review candidates after all per-file passes. (Commit: 1c20455.)
+- **Inherited findings** — `Violation.confidence: "inherited"` + `Violation.sourceOfFinding` propagate wrapper-definition findings to call sites. Post-scan synthesizer in `src/engine/inherited-findings.ts`; SARIF maps `sourceOfFinding` to `relatedLocations[0]` with role `"origin"`. (Commit: 2eae9ea.)
+- **Criterion IDs in inline disable pragmas** — `ra11y-disable wcag22:2.4.5` works alongside rule IDs. (Commit: 9b9a2f9.)
+- **Bare pragma attestations** — `@ra11y-intentional` pragma-reason → attestation resolver wires pragma evidence into the ledger. (Commits: 93619b4, 701f452.)
+- **Conformance level gate** — rules and finders skipped end-to-end when their criterion level exceeds the active scan level. (Commit: 347e59e.)
+- **`wrapperTreatsAsElement` opt-in** — rules may declare element-mapping semantics to skip false positives on wrapper components. (Commits: 3f7a07f, 7c7e43b.)
+- **Polymorphic `as`/`asChild` resolution** — rules may opt in to resolving the rendered element from `as` or `asChild` props. (Commits: 0b130dd, b07455b.)
+- **`Violation.groupKey`** — stable SHA derived from rule + AST shape for grouping duplicate findings in PR comments. (Commit: 9184f6d.)
+- **`Violation.findingId`** — stable per-finding ID, line-number-independent. (Commit: 49f9227.)
+- **`Violation.fixClass`** — inline discriminator (`"mechanical"` | `"guidance"` | `"none"`) on every violation. (Commit: bbbecf1.)
+- **`Violation.couldBeWrongBecause`** — additive context for findings that may have lower confidence due to framework-specific patterns (e.g. Tailwind class on consumer). (Commits: 2df787a.)
+- **Per-rule coverage confidence** — scanner tracks per-rule file evaluation counts to derive coverage confidence ratios. (Commit: 93dfb72.)
 
 #### Configuration
 
-- Inline disable pragmas accept a reason annotation: `ra11y-disable wcag22:1.4.5 -- confirmed logotype` or `ra11y-disable focus/outline-visible: reviewed, Tailwind provides indicator`. The reason text is captured in the parsed suppression record and surfaced in `meta.suppressions` for audit tooling.
+- **`profiles` primitive** — eight built-in scan profiles (`wcag21-a`, `wcag21-aa`, `wcag22-a`, `wcag22-aa`, `section508`, `en301549`, `strict`, `lenient`). `--profile` CLI flag and `scan_project` parameter. (Commits: 4d217e3, bd73f3d.)
+- **`processes` primitive** — multi-page process scope for page-set finders and conformance claims; enables consistent-navigation and consistent-identification finders to operate cross-page. (Commit: 1893410.)
+- **`preset: "storybook"` option** — opt-in framework preset: story files reach the scanner, Storybook primitives (`Meta`, `StoryObj`, `StoryFn`, `Story`) render transparent in opaque-component telemetry. `storybook_preset_active` warning code emitted on scan responses. (Commit: 6dfa231.)
+- **`@ra11y-intentional` JSDoc tag** — scoped disable recognized as pragma evidence. (Commit: 5b1d54f.)
+- **Inline disable reason annotation** — `ra11y-disable wcag22:1.4.5 -- confirmed logotype` or `: reviewed` suffix; reason captured in `meta.suppressions`. (Commit: d820186.)
+- **Glob patterns on `nativeWrappers`** — wrapper names may include glob patterns. (Commit: 560d015.)
+- **Object-form `nativeWrappers`** — compound component support with per-member element mapping. (Commits: 4e40f10, e1ca368.)
+- **`pruneAttestations` / `rewriteAttestations` config primitives**. (Commit: 45b754a.)
+- **`attestations prune` CLI subcommand**. (Commit: 0489ba5.)
+- **`baseline prune` CLI subcommand**. (Commit: ebbe753.)
+
+#### Rules
+
+- **`aria/conflicting-role`** (wcag22:4.1.2) — flags elements where an explicit ARIA role contradicts the host element's implicit role. Requires the implicit-roles table added to the engine. (Commits: 6937cf3, bddbd40.)
+- **`wrapper/drift`** (wcag22:4.1.2) — flags wrapper components that re-implement interactive behavior already present in the wrapped element, creating two parallel interaction models. (Commit: b645b81.)
+- **`forms/required-indicator-missing`** (wcag22:3.3.2) — flags form controls marked required without a visible required indicator. (Commit: 2b48123.)
+
+#### Review finders (new since v0.1.0)
+
+Finders produce grounded manual-review candidates (file + line + reason); they do not emit automated violations. All finders respect the active standard, level, and `processes` config.
+
+- `use-of-color` — wcag22:1.4.1
+- `images-of-text` — wcag22:1.4.5, 1.4.9 (1.4.9 candidates annotated separately)
+- `media-variants` — wcag22:1.2.1 through 1.2.6
+- `timing` — wcag22:2.2.1, 2.2.2, 2.2.3, 2.2.4, 2.2.6; literal duration in reason text
+- `pointer-input` — wcag22:2.5.1, 2.5.6
+- `motion-actuation` — wcag22:2.5.4
+- `identify-purpose` — wcag22:1.3.6
+- `section-headings` — wcag22:2.4.10
+- `multiple-ways` — wcag22:2.4.5; SPA index-shell route annotation
+- `error-suggestion` — wcag22:3.3.3
+- `error-prevention` — wcag22:3.3.4
+- `redundant-entry` — wcag22:3.3.7
+- `error-identification` — wcag22:3.3.1
+- `server-error-untied` — wcag22:3.3.1; server-side error messages not tied to form fields
+- `captcha` — wcag22:3.3.8, 3.3.9
+- `on-input-change` — wcag22:3.2.1, 3.2.2; confidence tiers based on detectable handler body shape
+- `headings-and-labels` — wcag22:2.4.6
+- `consistent-navigation` — wcag22:3.2.3; cross-file `afterProject` finder
+- `consistent-identification` — wcag22:3.2.4; cross-file `afterProject` finder
+- `flashing-content` — wcag22:2.3.1
+- `suppression/no-reason` — surfaces bare `@ra11y-disable` pragmas without a reason annotation
+- `validation-timing` — wcag22:3.3.3, 3.3.4; validation event timing relative to submission
+- `sensory-characteristics`, `meaningful-sequence`, `no-keyboard-trap`, `media-alternatives` — additional finders covering remaining WCAG A criteria
+
+**Tailwind focus-ring cross-reference for `focus/outline-visible`**: when a CSS rule suppresses the outline and the same element carries a `focus-visible:ring-*`, `focus-visible:outline-*`, or `focus-visible:shadow-*` Tailwind utility class, the finding resolves to info-level. Deterministic literal class-token prefix match only. (Commit: ddaada4.)
+
+#### Parser
+
+- TSX parser correctly disambiguates TypeScript generic syntax (`<T>`, `<T extends U>`) from JSX open tags. A generic in expression position previously corrupted subsequent parse state. (Commit: 2968d87.)
+- `JsxElement` AST node preserves `hasSpreadProps` flag; rules use this to suppress false positives on spread-prop primitives. (Commit: e480644.)
+- StoryObj `args` synthesis pass — TSX parser synthesizes JSX elements from `StoryObj` story argument bindings for Storybook story files when the `storybook` preset is active. (Commits: 55ba1f7, 0fa523d.)
+
+#### Reports
+
+- **Conformance statement report** — `src/reports/conformance-statement.ts` gates a WCAG conformance claim by evidence level; emits a signed bundle with SHA-256 digest. (Commits: 6dd297e, 68f5b6d.)
+- **Profile-scoped coverage report** — coverage report accepts a `profile` argument and filters criteria accordingly. (Commit: 96275bb.)
+- **Per-criterion attestation on checklist items** — checklist items carry their evidence status from the ledger. (Commit: 70a5e4e.)
+- **VPAT location injection** — `scan`-level candidate locations injected into VPAT manual remarks. (Commit: e612435.)
+
+#### CLI
+
+- **`--profile` flag** — profile-scoped scans against one of the eight built-in profiles. (Commit: bd73f3d.)
+- **`attestations prune` subcommand** — removes stale attestation records. (Commit: 0489ba5.)
+- **`baseline prune` subcommand** — removes stale baseline entries. (Commit: ebbe753.)
+- Per-command reference section in [`docs/cli.md`](./docs/cli.md). (Commit: 192cf0d.)
 
 #### Scripts and developer tooling
 
-- **`scripts/scaffold-rule.ts`** — generates a complete rule skeleton: source file, unit test file, good/bad fixture directories, and an alphabetically-inserted registry entry. The output typechecks out of the box. Run: `bun scripts/scaffold-rule.ts <domain>/<slug> --satisfies wcag22:X.Y.Z`. (Commit: f1226ed.)
-- **400-LOC reviewable-size cap** in `scripts/check-commit.ts` — staged diffs (excluding generated KB, fixtures, and lockfiles) exceeding 400 net lines cause `bun run verify:precommit` to fail. The `chore(kb):` prefix is exempt. (Commit: c9016c4.)
+- **`scripts/scaffold-rule.ts`** — generates a complete rule skeleton: source file, unit test, fixture directories, and alphabetically-inserted registry entry. Run: `bun scripts/scaffold-rule.ts <domain>/<slug> --satisfies wcag22:X.Y.Z`. (Commit: f1226ed.)
+- **400-LOC reviewable-size cap** in `scripts/check-commit.ts` — staged diffs exceeding 400 net lines (excluding generated KB, fixtures, lockfiles) fail `bun run verify:precommit`. `chore(kb):` prefix is exempt. (Commit: c9016c4.)
+- **Scope-filtered precommit mode** — `verify:precommit` filters checks to staged files only. (Commit: a2c5816.)
+- **Tests typecheck gated in `verify`** — `tests/` directory is typechecked as part of the full verify sequence. (Commit: 20631f6.)
+
+#### CI
+
+- Windows (`windows-latest`) added to the verify matrix. (Commit: b0b07cc.)
+- Self-scan SARIF uploaded to GitHub Security tab on every push. (Commit: 6315a06.)
+- Dependency-review soft gate on PRs. (Commit: 914d4f1.)
+- Performance baseline locked for v1.0; bench budget enforced in CI. (Commit: 8e8a564.)
 
 #### Real-world fixture corpus
 
-- `tests/integration/real-world-fixtures.test.ts` — harness that discovers every subdirectory under `tests/fixtures/real-world/`, loads its `assertions.ts`, and verifies the scanner output matches the declared invariants. Fixtures survive internal API refactors that would break unit tests tied to AST shapes.
-- `tests/fixtures/real-world/runner.ts` — shared fixture runner with typed `assertions.ts` contract.
-- Sanitized fixtures (see `tests/fixtures/real-world/` for the full source trees):
-  - `tsx-generics` — generics-in-JSX parse regression
-  - `spa-shell-vite` — WCAG 2.4.5 multiple-ways on a Vite SPA shell
-  - `tailwind-coverage` — CSS coverage meta hints with Tailwind classes
-  - `logotype-annotation` — WCAG 1.4.5 / 1.4.9 logotype candidate + reason text
-  - `timing-role-hints` — WCAG 2.2.1 timing candidates with filename role hints
-  - `template-directives` — `template-directive` meta-field telemetry
-  - `opaque-components-top` — opaque-component ranking cap
-  - `suppression-reason-slot` — reason annotation on inline disable pragmas
-  - `autodetect-attribution` — wrapper provenance from `autoDetectWrappers`
+- `tests/integration/real-world-fixtures.test.ts` — harness that discovers every subdirectory under `tests/fixtures/real-world/`, loads its `assertions.ts`, and verifies scanner output against declared invariants. Fixtures survive internal API refactors.
+- Sanitized fixtures added since v0.1.0: `tsx-generics`, `spa-shell-vite`, `tailwind-coverage`, `logotype-annotation`, `timing-role-hints`, `template-directives`, `opaque-components-top`, `suppression-reason-slot`, `autodetect-attribution`, `storybook-args-binding`, `dialog-modal`, `data-tables`, `nav-landmarks`, `forms-validation`, `attest-lighthouse-bridge`.
 
 ADR: [`docs/adr/0006-real-world-fixture-harness.md`](./docs/adr/0006-real-world-fixture-harness.md).
 
 #### Prompt evaluations
 
-- `tests/evals/` — scripted-host harness that replays prompt templates against a deterministic host stub and asserts on the rendered output. Each eval declares the arguments, the expected prompt messages, and structural invariants. See `tests/evals/README.md` for the fixture contract.
+- `tests/evals/` — scripted-host harness replaying prompt templates against a deterministic host stub and asserting on rendered output. See `tests/evals/README.md`.
 
 #### VS Code extension scaffold
 
-- `integrations/vscode/` — extension skeleton that wraps the ra11y MCP server. Isolated toolchain; no runtime dependency on `@ra11y/core` in the extension host process. The extension launches the MCP server as a subprocess and registers it with the VS Code language server client.
+- `integrations/vscode/` — extension skeleton wrapping the ra11y MCP server as a subprocess; registered with the VS Code language server client. No runtime dependency on `@ra11y/core` in the extension host process.
 
 #### Docs and knowledge base
 
-- [`docs/mcp/prompts.md`](./docs/mcp/prompts.md) — prompt library user guide: available prompts, argument reference, checksum pinning, and how to call each prompt from an agent.
-- [`docs/kb/architecture/mcp-sampling.md`](./docs/kb/architecture/mcp-sampling.md) — architecture entry for the bidirectional outbound rail and sampling client: sequence diagram, error types, and agent guidance.
-- [`benchmarks/a11y-tool-comparison.md`](./benchmarks/a11y-tool-comparison.md) — scaffolded benchmark comparison against reference tools (numeric values to be filled from a dedicated benchmarking pass).
-- ADR 0006 — `docs/adr/0006-real-world-fixture-harness.md` — records the decision to maintain a real-world sanitized fixture corpus alongside unit tests, the fixture contract, and the naming conventions.
-- CLAUDE.md §7a — "Bug-fix workflow — real-world fixture first" — codifies the fixture-before-fix cadence for regression bugs.
-- CLAUDE.md §17 — new gotcha entries: numeric-threshold heuristics as suppression, ambiguous-field-shape antipattern (`newText: ""`, `snippet: ""`), behavior-rehearsal unit tests as the wrong vehicle for real-world bugs, hardcoded inventory counts in docs.
+- [`docs/migrations/0.1-to-0.2.md`](./docs/migrations/0.1-to-0.2.md) — MCP shape migration guide for the v0.2.0 breaking changes.
+- [`docs/migrations/0.2-to-1.0.md`](./docs/migrations/0.2-to-1.0.md) — v1.0 upgrade guide.
+- [`docs/mcp/prompts.md`](./docs/mcp/prompts.md) — prompt library user guide.
+- [`docs/errors.md`](./docs/errors.md) — canonical error + exit-code index.
+- [`docs/conformance.md`](./docs/conformance.md) — end-to-end conformance guide.
+- [`docs/kb/architecture/mcp-sampling.md`](./docs/kb/architecture/mcp-sampling.md) — bidirectional outbound rail and sampling client.
+- [`docs/kb/standards/coverage.md`](./docs/kb/standards/coverage.md) — authoritative per-criterion automatability coverage matrix.
+- [`docs/kb/patterns/suggest-fix-ranking.md`](./docs/kb/patterns/suggest-fix-ranking.md) — `suggest_fix` ranking and `fixClass` semantics.
+- [`benchmarks/a11y-tool-comparison.md`](./benchmarks/a11y-tool-comparison.md) — benchmark comparison scaffold.
+- ADR 0006 (real-world fixture harness), ADR 0008 (groupKey), ADR 0010 (coverage vs checklist boundary), ADR 0011 (Evidence primitive), ADR 0012 (wrapper introspection), ADR 0013 (rule-scoped attestations), ADR 0014 (inherited findings), ADR 0016 (process-level scope), ADR 0017 (conformance-statement output), ADR 0018 (v1.0 deferred decisions), ADR 0019 (v1.0 public API stability).
 
 ### Changed
 
-- **Breaking (MCP response shape):** `checklist.summary.automatedCoverage` trimmed to a one-field gloss `{ standardId, automatedCriteriaPassRate }` per ADR 0010. The previous per-standard block (`criteriaAutomatable`, `criteriaAutomatablePassing`) is canonical on `coverage` only — agents reading the full shape from `checklist` must migrate to a `coverage` call, or read the headline pass-rate from the surviving gloss. `coverage` and `checklist` now cross-point via `nextStep` + `nextStepStructured` pairs so the agent has a single call for "what next?".
-- **Breaking (MCP response shape):** collapsed the three wrapper-provenance fields on MCP tool responses — `activeNativeWrappers: string[]`, `activeNativeWrappersBySource: { fromConfig?, fromSession?, fromAutoDetect? }`, and `sessionNativeWrappers: string[]` — into a single tagged list `activeNativeWrappers: Array<{ name: string; source: "config" | "autoDetect" | "session"; confirmed?: boolean }>`. The `confirmed` flag (folded in from P1-F) is populated only for `source: "autoDetect"` entries: `true` when the one-hop AST probe matched a native interactive root, `false` when the scanner considered the name but did not trust it. Omitted for `"config"` and `"session"` per the honest-shape doctrine — those are author-supplied. The former `sessionNativeWrappers` list is now readable by filtering entries where `source === "session"`; the `sessionOverridesNote` prose is preserved. Affects `scan`, `scan_project`, `scan_file`, `scan_diff`, `list_suppressions`, and any other tool that emits wrapper meta. Callers reading the removed fields see `undefined` and must migrate.
-- `scan` tool: `autoDetectWrappers` and `additionalPaths` parameters added (previously available only via CLI). Wrapper provenance is now annotated per-entry in `activeNativeWrappers`.
-- `suggest_fix`: response shape changed from `{ suggestion: string }` to `{ fixPaths: { primary: FixPath, alternatives: FixPath[] } }`. Agents relying on the prose-only shape must update to read `fixPaths`.
-- `checklist`: `reviewNeeded` field renamed to a structured array with `priority` and `wcagPrinciple` per item.
-- `coverage`: `manualUntargeted` is no longer returned by default; `manualUntargetedCount` is always present. Pass `showUntargeted: true` to restore the full list.
-- Canonical untargeted-criteria count is now `untargetedCriteria` across all tools: `scan_project` (on `plan`), `checklist` (on `summary`), `coverage` (per-standard). Previous names `untargeted` (checklist) and `manualUntargetedCount` (coverage) removed — callers reading them will see `undefined`. Gated list emitted as `untargetedCriteriaList` when requested.
-- `/continue` skill now fans out up to three parallel agents per turn across active tracks (D/M/R/F). Serial dispatch is no longer used.
-- Pre-commit hook scoped to staged files only; previously it ran on the full working tree, causing false failures on unstaged changes.
-- `list-structure` rule: bare `<li>` outside a list container is now `info` severity (down from `warning`). The element is still surfaced; the level reflects that the most common cause is a template partial that renders correctly at runtime.
+- **MCP response shape:** `checklist.summary.automatedCoverage` trimmed to a one-field gloss `{ standardId, automatedCriteriaPassRate }` per ADR 0010. The previous per-standard block (`criteriaAutomatable`, `criteriaAutomatablePassing`) is canonical on `coverage` only. `coverage` and `checklist` cross-point via `nextStep` + `nextStepStructured` pairs.
+- **MCP response shape:** `activeNativeWrappers` unified into a tagged list `Array<{ name: string; source: "config" | "autoDetect" | "session"; confirmed?: boolean }>`. The former `sessionNativeWrappers` string list is removed; filter by `source === "session"`. Affects `scan`, `scan_project`, `scan_file`, `scan_diff`, `list_suppressions`, and other tools emitting wrapper meta.
+- **MCP response shape:** Canonical untargeted-criteria count renamed to `untargetedCriteria` across all tools. Previous names `untargeted` and `manualUntargetedCount` removed.
+- `suggest_fix` response shape changed from `{ suggestion: string }` to `{ fixPaths: { primary: FixPath, alternatives: FixPath[] } }`. The `suggestion` prose field was removed in v0.2.0.
+- `checklist`: `reviewNeeded` field replaced by a structured array with `priority` and `wcagPrinciple` per item.
+- Pre-commit hook scoped to staged files only; the previous behavior ran on the full working tree.
+- `list-structure` rule: bare `<li>` outside a list container is now `info` severity (down from `warning`). The element is still surfaced.
+- `scan_process` and process-aware finders thread the `processes` config through the project-scoped finder context.
+- `scan_project` response includes `baselineStatus` and opaque-component auto-detect disclosure.
+- `scan_project` response includes `plan.limitations` on every response for runtime-only checks the static scanner cannot perform.
+- `coverage` now includes per-criterion attestation evidence status when the evidence ledger has entries.
+
+### Deprecated
+
+- **`configure` → `sessionConfigure`**: the `configure` MCP tool name was renamed in v0.2.0. In v1.0 the `configure` alias remains but emits `{ "warnings": ["deprecated_tool_name_configure"] }`. Migrate to `sessionConfigure`; parameters are identical.
+- **`filePath` → `file` on `suggest_fix` and `apply_fix`**: the canonical parameter name is `file`. `filePath` is accepted as an alias and emits `{ "warnings": ["deprecated_param_filePath: use 'file' instead"] }`. Passing both returns a `conflicting-file-params` structured error.
 
 ### Fixed
 
 - `scan_project`: manual-review count was inconsistent between `scan`, `checklist`, and `coverage` when the active level filter excluded some finders. All three surfaces now use the same filtered count. (Commit: df26f17.)
-- `scan_project`: empty `snippet` field was emitted alongside a populated `sourceContext` on some `suggest_fix` paths, sending an ambiguous signal to agents. The field is now conditionally spread and omitted when empty. (Commit: 406a28f.)
-- `checklist`: empty-candidate items (criteria with no grounded candidates) were mixed into the primary list. They are now separated and only included when explicitly requested.
+- `scan_project`: empty `snippet` field was emitted alongside a populated `sourceContext` on some `suggest_fix` paths. The field is now conditionally spread and omitted when empty. (Commit: 406a28f.)
+- `scan_file`: `reviewCandidates` was not populated. (Commit: 9d8a274.)
+- `audit`: sub-handler rejections now caught via `allSettled`; a failing sub-leg surfaces as a warning code without sinking the response. (Commit: 048dfcc.)
+- `checklist`: empty-candidate items (criteria with no grounded candidates) were mixed into the primary list; they are now separated and only included when explicitly requested.
 - Engine: conformance level filter was not applied to finders, allowing AA-only finders to fire during A-only scans. (Commit: 347e59e.)
 - Engine: `.js` and `.ts` files were excluded from the JSX rule filter even when they contained JSX syntax. (Commit: 2558bea.)
 - Engine: inline `ra11y-disable` was not applied to review candidates, only to automated violations. (Commit: 1beda8a.)
-- Review: `3.2.1`/`3.2.2` finders were emitting candidates for all focus/input handlers regardless of whether the handler visibly changed context. They now gate on detectable context-change signals. (Commit: 9cac116.)
-- Review: `use-of-color` finder was treating `aria-hidden` colored elements as active color signals; they are now excluded.
-- Review: `1.3.3` finder was matching polysemous words ("view", "press") in noun phrases that carry no directional instruction. Instructional context is now required.
-- Review: page-set finders (multiple-ways, skip-link) were emitting duplicate candidates across root layouts in Next.js / Remix app directories. Deduplication is now applied after `afterProject`. (Commit: e59af58.)
-- Review: timing finder was emitting filename-based role hints in user-facing reason text; those are removed. Filename role is used only as an internal confidence signal. (Commit: adb3976.)
-- Rules: `nested-interactive` was flagging the native `<details>`/`<summary>` nesting pattern, which is spec-correct. Both elements are now allowlisted. (Commits: 0e7a2ce, 99e2616.)
-- Rules: `button-name`, `fieldset-legend`, `labels-required`, `non-empty-label`, `empty-heading` were emitting false positives when the element carried a JSX spread (`{...props}`). `hasSpreadProps` detection now suppresses the finding with an info-level note.
-- Parser: TSX generic disambiguation — a bare `<T>` in an expression position was parsed as a JSX open tag, corrupting subsequent parse state. (Commit: 2968d87.)
-- MCP wrapper detection: usage scan for `autoDetectWrappers` was not reaching paths in the default-excluded list, causing wrappers used only in test or stories directories to be missed. Detection now widens to include those paths. (Commit: 18ec904.)
+- Review: `3.2.1`/`3.2.2` finders emitted candidates for all focus/input handlers regardless of detectable context-change signals; they now gate on those signals. (Commit: 9cac116.)
+- Review: `use-of-color` finder treated `aria-hidden` colored elements as active color signals; they are now excluded. (Commit: 54d9552.)
+- Review: `1.3.3` finder matched polysemous words ("view", "press") in noun phrases without directional instruction. Instructional context is now required. (Commit: 983d3f2.)
+- Review: page-set finders (`multiple-ways`, `skip-link`) emitted duplicate candidates across root layouts in Next.js / Remix app directories; deduplication applied after `afterProject`. (Commit: e59af58.)
+- Review: timing finder emitted filename-based role hints in user-facing reason text; removed. (Commit: adb3976.)
+- Rules: `nested-interactive` flagged the native `<details>`/`<summary>` nesting pattern, which is spec-correct; both elements are now allowlisted. (Commits: 0e7a2ce, 99e2616.)
+- Rules: `button-name`, `fieldset-legend`, `labels-required`, `non-empty-label`, `empty-heading` emitted false positives when the element carried a JSX spread (`{...props}`); `hasSpreadProps` detection suppresses the finding with an info-level note. (Commits: 864a590, c864710.)
+- Parser: TSX generic disambiguation — a bare `<T>` in expression position was parsed as a JSX open tag, corrupting parse state. (Commit: 2968d87.)
+- MCP wrapper detection: usage scan for `autoDetectWrappers` was not reaching default-excluded paths; wrappers used only in test or stories directories were missed. Detection now widens to include those paths. (Commit: 18ec904.)
+- MCP `as-unknown-as` casts in the dispatcher replaced with guards, eliminating a category of unsafe casts. (Commit: 1ac89a1.)
+- Errors: actionable messages on sampling/attestation/fix-internal error paths; previously returned generic "internal error" prose. (Commit: 7979ef8.)
+- Input: root `.gitignore` was not honored on subpath scans. (Commit: 389ba58.)
+- MCP `changedOnly`: previously returned a silent full-scan when nothing was staged; now returns an explicit warning. (Commit: 7824f81.)
+- Standards: hardcoded criterion count in WCAG 2.2 source comment removed to prevent rot. (Commit: 456158d.)
+
+### Deferred (not in v1.0)
+
+These four items were evaluated for v1.0 and explicitly deferred. They are listed here so readers know what is NOT changing at this release. See [ADR 0018](./docs/adr/0018-v1-deferred-decisions.md) for the revisit signals that would revive each.
+
+- **Rule-catalog renames** — the overlap between `parsing/` and `document/` families, and between `semantics/label-in-name` and `forms/labels-required`, is acknowledged but not resolved. No rule IDs change at v1.0.
+- **Coverage + checklist merge** — ADR 0010 boundary is preserved. `coverage` and `checklist` remain separate tools.
+- **`@ra11y/parser-typescript` subpackage** — TSX parsing stays in `@ra11y/core`; the optional `typescript` peer is unchanged.
+- **Sampling-backed speculative tools** (`resolve-component`, `verdict-candidate`, `draft-vpat-narrative`) — blocked on first-user sampling-host evidence.
 
 ## [0.1.0] — 2026-04-13
 
