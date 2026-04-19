@@ -148,6 +148,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 
 ## standards
 
+- [Coverage Matrix](./standards/coverage.md)
 - [EN 301 549](./standards/en301549.md)
 - [Section 508 (2017 refresh)](./standards/section508.md)
 - [WCAG 2.1](./standards/wcag21.md)
@@ -170,7 +171,9 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 ## patterns
 
 - [Adding a fixture](./patterns/adding-a-fixture.md)
+- [Bridging runtime accessibility evidence into the attest ledger](./patterns/bridging-runtime-a11y.md)
 - [The evaluator-optimizer loop](./patterns/evaluator-optimizer-loop.md)
+- [suggest_fix ranking and fixClass semantics](./patterns/suggest-fix-ranking.md)
 - [Using AST helpers](./patterns/using-ast-helpers.md)
 - [Using the ra11y MCP server from an agent](./patterns/using-mcp-from-agents.md)
 - [Writing a formatter](./patterns/writing-a-formatter.md)
@@ -194,6 +197,34 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [Test flakiness](./gotchas/test-flakiness.md)
 - [TypeScript compiler-API gotchas](./gotchas/typescript-compiler-gotchas.md)
 - [WCAG edge cases](./gotchas/wcag-edge-cases.md)
+
+## criteria
+
+- [9.4.1.1 Parsing (EN 301 549)](./criteria/en301549/9.4.1.1-parsing.md)
+- [4.1.1 Parsing (Section 508)](./criteria/section508/4.1.1-parsing.md)
+- [1.4.8 Visual Presentation (WCAG 2.1)](./criteria/wcag21/1.4.8-visual-presentation.md)
+- [2.1.3 Keyboard (No Exception) (WCAG 2.1)](./criteria/wcag21/2.1.3-keyboard-no-exception.md)
+- [2.3.2 Three Flashes (WCAG 2.1)](./criteria/wcag21/2.3.2-three-flashes.md)
+- [2.4.8 Location (WCAG 2.1)](./criteria/wcag21/2.4.8-location.md)
+- [3.1.3 Unusual Words (WCAG 2.1)](./criteria/wcag21/3.1.3-unusual-words.md)
+- [3.1.4 Abbreviations (WCAG 2.1)](./criteria/wcag21/3.1.4-abbreviations.md)
+- [3.1.5 Reading Level (WCAG 2.1)](./criteria/wcag21/3.1.5-reading-level.md)
+- [3.1.6 Pronunciation (WCAG 2.1)](./criteria/wcag21/3.1.6-pronunciation.md)
+- [3.3.5 Help (WCAG 2.1)](./criteria/wcag21/3.3.5-help.md)
+- [3.3.6 Error Prevention (All) (WCAG 2.1)](./criteria/wcag21/3.3.6-error-prevention-all.md)
+- [1.4.8 Visual Presentation](./criteria/wcag22/1.4.8-visual-presentation.md)
+- [2.1.3 Keyboard (No Exception)](./criteria/wcag22/2.1.3-keyboard-no-exception.md)
+- [2.3.2 Three Flashes](./criteria/wcag22/2.3.2-three-flashes.md)
+- [2.4.12 Focus Not Obscured (Enhanced)](./criteria/wcag22/2.4.12-focus-not-obscured-enhanced.md)
+- [2.4.13 Focus Appearance](./criteria/wcag22/2.4.13-focus-appearance.md)
+- [2.4.8 Location](./criteria/wcag22/2.4.8-location.md)
+- [3.1.3 Unusual Words](./criteria/wcag22/3.1.3-unusual-words.md)
+- [3.1.4 Abbreviations](./criteria/wcag22/3.1.4-abbreviations.md)
+- [3.1.5 Reading Level](./criteria/wcag22/3.1.5-reading-level.md)
+- [3.1.6 Pronunciation](./criteria/wcag22/3.1.6-pronunciation.md)
+- [3.2.6 Consistent Help](./criteria/wcag22/3.2.6-consistent-help.md)
+- [3.3.5 Help](./criteria/wcag22/3.3.5-help.md)
+- [3.3.6 Error Prevention (All)](./criteria/wcag22/3.3.6-error-prevention-all.md)
 
 ## glossary.md
 
