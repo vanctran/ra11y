@@ -391,10 +391,10 @@ Each item closes one deferred ADR or semver-major decision. Acceptance for each:
 Source: coverage sweep during second-pass gap scan — MCP surface and several CLI commands have severe coverage deficits that contradict the "find all violations" bar. Every item here lands tests against committed behavior; no behavioral changes.
 
 - [x] **V1-TEST-MCP-SERVER** `src/mcp/server.ts` raised from 8.28% → 96.96% lines / 97.22% funcs (eb6fd73 + cb0da5a + d42c6fb). 36 new in-process dispatch tests via a new shared `tests/helpers/mcp-harness.ts` since integration tests spawn subprocesses and don't cross instrumentation. Remaining uncovered lines are defensive/unreachable branches.
-- [ ] **V1-TEST-MCP-SCAN-DIFF** `src/mcp/tool-scan-diff.ts` at 17.70%. Lines 140–351, 385–406 untested. Target: ≥80%. Owner: `test-author`.
+- [x] **V1-TEST-MCP-SCAN-DIFF** `src/mcp/tool-scan-diff.ts` raised from 18.12% → 96.90% lines / 95% funcs (c3efd95 + 5d0c99b). 21 in-process dispatch tests cover baseline mode, hunks mode, structured errors, symlink normalization, stable `findingId`/`groupKey`. Remaining uncovered branches are impossible-in-practice race cases.
 - [x] **V1-TEST-MCP-APPLY-FIX** `src/mcp/tool-apply-fix.ts` raised from 43.71% → 100% lines / 95.49% branches (120569d + 6f36e30). 26 new unit tests drive the handler in-process (existing integration tests drive the subprocess, which instrumentation doesn't cross). Internals file `tool-apply-fix-internals.ts` rode along to 96.55%/95.91%.
 - [x] **V1-TEST-CLI-CMDS** Six CLI commands lifted from 0% to 100% function coverage (b827dc7 + 30644ea + 4342de4). `certification`, `checklist`, `coverage`, `vpat`, `doctor`, `init` all exercised via in-process handler invocations against tmpdir fixtures; `doctor` line-coverage at 87.93% (remaining branches require mocking `process.version`), all others at 100%.
-- [ ] **V1-TEST-MCP-GLUE** Zero-coverage MCP helper modules: `src/mcp/completions.ts`, `src/mcp/deprecation-warning.ts`, `src/mcp/outbound.ts`, `src/mcp/logging.ts`, `src/mcp/resources/index.ts`. Add unit tests; each file earns its keep only if it's reachable from a tested path. Owner: `test-author`.
+- [x] **V1-TEST-MCP-GLUE** All five target modules raised to 100% lines / 100% branches (235db1a + 28f2224 + 7740a44; logging.test.ts file swept into 5d0c99b by parallel agent). 59 new tests across completions, deprecation-warning, outbound, logging, ra11y-kb resources. Every module confirmed reachable from `src/mcp/server.ts`.
 - [x] **V1-TEST-CONFIG-SCHEMA** `src/config/schema.ts` raised from 6.94% → 100% lines / 100% funcs (4dfd9d6). 42 new tests in `tests/unit/config/schema.test.ts` covering accepted shapes, rejection paths, error-path indices, and output normalization.
 
 ### v1.0.0 — CI + release pipeline gates (second-pass scan, 2026-04-19)
@@ -408,14 +408,10 @@ Source: coverage sweep during second-pass gap scan — MCP surface and several C
 
 ### v1.0.0 — code-quality polish (second-pass scan, 2026-04-19)
 
-- [ ] **V1-TYPE-ESCAPE** `src/config/attestation-store.ts:218` — `record as unknown` cast where the input is already typed `AttestationRecord` per the calling signature. Fix the type or remove the cast; CLAUDE.md §14 "fix the type". Owner: `type-smith`.
-- [ ] **V1-ERROR-MSG-QUALITY** Rewrite three cryptic throw messages surfaced in the second-pass audit to be actionable:
-    - `src/mcp/sampling.ts:140` — "sampling/createMessage: response was not an object" → include host-spec pointer + recovery hint.
-    - `src/mcp/tool-suggest-fix-internals.ts:192` — "buildFixPathsOutcome: match.fixPaths must be defined" → user-facing wrapper or mark as internal-invariant-assertion.
-    - `src/config/attestation-store.ts:220` — "invalid attestation record — criterionId, by, reason, attestedAt are required non-empty strings." → name the specific missing field + show an example.
-  Owner: main session.
-- [ ] **V1-COMMENT-DRIFT** `src/standards/wcag22/criteria.ts:145` — comment says "All 87 WCAG 2.2 rows" but code filters to 86 (78 shared + 9 new − 1 obsolete 4.1.1). Update the comment. Owner: main session.
-- [ ] **V1-README-PLUGIN-LINK** `README.md:197` links to `docs/plugin-authoring.md` which does not exist (real path is `docs/plugins/authoring-a-rule.md`). Either create an index page at the referenced path or fix the link. Owner: `doc-writer`.
+- [x] **V1-TYPE-ESCAPE** Redundant `as unknown` cast dropped (7979ef8); `coerceAttestationRecord` already accepts `unknown`, the cast widened a narrower type to no purpose.
+- [x] **V1-ERROR-MSG-QUALITY** All three throw sites rewritten (7979ef8): sampling.ts now names the actual type returned + links the MCP spec + suggests the host decline the capability; attestation-store.ts enumerates the specific failed field + shows a concrete example record; tool-suggest-fix-internals.ts is marked as an internal invariant with a file-an-issue hint.
+- [x] **V1-COMMENT-DRIFT** Hardcoded count removed (456158d); the comment now describes the contents (excludes 4.1.1, includes the nine new 2.2 criteria) rather than asserting a drifting count.
+- [x] **V1-README-PLUGIN-LINK** Per-plugin-kind authoring guides now linked inline in the Plugin API section (3379e03). The prior scan's claim of a broken `docs/plugin-authoring.md` link did not match the current README — the three `docs/plugins/authoring-a-*.md` guides are now cross-linked alongside the examples + architecture deep-dive.
 - [x] **V1-DOCS-CLI-COMMANDS** Per-command reference section added to `docs/cli.md` (192cf0d). Each command gets a subsection with purpose + representative invocation + key non-global flags; `baseline prune` + `attestations prune` subcommands now documented; `--profile` flag added; usage synopsis updated to reflect command dispatch.
 - [ ] **V1-MIGRATION-0.2-TO-1.0** Author `docs/migrations/0.2-to-1.0.md` capturing every breaking change landing at v1.0 (rule renames if V1-RULE-RENAME-DECIDE accepts renames, coverage/checklist merge if V1-COV-CHECK-MERGE accepts the merge, parser subpackage if V1-PARSER-SUBPKG-DECIDE accepts extraction, exit-code freeze from V1-EXIT-CODES, any sampling-tool public surface from V1-SAMPLING-TOOL-PICK). Owner: `migration-author`. Depends on the four deferred-decision items above.
 
