@@ -139,7 +139,39 @@ describe("resolvePragmaAttestations", () => {
       expect(r.location).toEqual({ filePath: "src/f.tsx", line: 42, column: 1 });
       expect(r.reason).toBe("verified by manual keyboard test");
       expect(r.by).toBe("source-pragma");
+      expect(r.ruleIds).toEqual(["keyboard/handler-missing"]);
     }
+  });
+
+  it("preserves rule identity on rule-ID pragmas (ADR 0012)", () => {
+    // The single highest-leverage line in ADR 0012: the one seam that
+    // already knew which rule the author named no longer drops it. A
+    // later coverage check can tell "the author attested rule X" apart
+    // from "the author attested the whole criterion."
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
+    const rule = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
+    const records = resolvePragmaAttestations({
+      files: [mkFile([mkDecl({ ruleIds: ["keyboard/handler-missing"] })])],
+      rules: [rule],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.ruleIds).toEqual(["keyboard/handler-missing"]);
+  });
+
+  it("emits no ruleIds for a criterion-ID pragma (criterion-wide claim)", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
+    const records = resolvePragmaAttestations({
+      files: [mkFile([mkDecl({ ruleIds: ["wcag22:2.1.1"] })])],
+      rules: [],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.ruleIds).toBeUndefined();
   });
 
   it("fans out a criterion-ID token through equivalence closure", () => {
@@ -209,7 +241,12 @@ describe("resolvePragmaAttestations", () => {
     expect(records[0]?.by).toBe("ci-bot");
   });
 
-  it("coalesces duplicate criterion IDs within one declaration", () => {
+  it("emits one record per (criterion, rule) pair when two rules target the same criterion", () => {
+    // Two rules satisfy wcag22:2.1.1. A pragma that names both emits
+    // two attestations — each carrying the rule ID it was derived from.
+    // Criterion identity is the same; rule identity differs. Pre-ADR-0012
+    // this coalesced to a single record because rule identity was
+    // dropped at the boundary.
     const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
     const ruleA = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
     const ruleB = mkRule("keyboard/no-noninteractive-tabindex", ["wcag22:2.1.1"]);
@@ -224,7 +261,28 @@ describe("resolvePragmaAttestations", () => {
       enabled: new Set(["wcag22"]),
       attestedAt: FIXED_TIMESTAMP,
     });
+    expect(records).toHaveLength(2);
+    expect(records.map((r) => r.criterionId)).toEqual(["wcag22:2.1.1", "wcag22:2.1.1"]);
+    expect(records.map((r) => r.ruleIds?.[0]).sort()).toEqual([
+      "keyboard/handler-missing",
+      "keyboard/no-noninteractive-tabindex",
+    ]);
+  });
+
+  it("coalesces repeated rule-ID tokens within one declaration", () => {
+    // Same (criterion, rule) pair appearing twice collapses to one
+    // record — the dedupe key is the pair, not the criterion alone.
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
+    const rule = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
+    const records = resolvePragmaAttestations({
+      files: [
+        mkFile([mkDecl({ ruleIds: ["keyboard/handler-missing", "keyboard/handler-missing"] })]),
+      ],
+      rules: [rule],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
     expect(records).toHaveLength(1);
-    expect(records[0]?.criterionId).toBe("wcag22:2.1.1");
   });
 });

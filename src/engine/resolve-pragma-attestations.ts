@@ -111,12 +111,15 @@ function appendAttestationsForDeclaration(ctx: AppendContext): void {
   const seen = new Set<string>();
   for (const token of ctx.decl.ruleIds) {
     if (token === "*") continue;
-    for (const criterionId of resolveTokenToCriteria(token, ctx.rulesById, ctx.criteria)) {
+    const resolution = resolveToken(token, ctx.rulesById, ctx.criteria);
+    for (const criterionId of resolution.criterionIds) {
       if (!isEnabled(criterionId, ctx.enabled)) continue;
-      if (seen.has(criterionId)) continue;
-      seen.add(criterionId);
+      const dedupeKey = `${criterionId}\0${resolution.ruleId ?? ""}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
       ctx.out.push({
         criterionId,
+        ...(resolution.ruleId !== undefined && { ruleIds: [resolution.ruleId] }),
         by: ctx.by,
         reason,
         attestedAt: ctx.attestedAt,
@@ -127,21 +130,30 @@ function appendAttestationsForDeclaration(ctx: AppendContext): void {
   }
 }
 
-function resolveTokenToCriteria(
+interface TokenResolution {
+  /** Present when the token was a rule ID; attestations carry this through. */
+  readonly ruleId: string | undefined;
+  /** Criterion IDs the token expands to (via equivalence closure). */
+  readonly criterionIds: readonly string[];
+}
+
+function resolveToken(
   token: string,
   rulesById: ReadonlyMap<string, Rule>,
   criteria: CriteriaRegistry,
-): readonly string[] {
-  if (token.includes(":")) return criteria.equivalenceClosure(token);
+): TokenResolution {
+  if (token.includes(":")) {
+    return { ruleId: undefined, criterionIds: criteria.equivalenceClosure(token) };
+  }
   const rule = rulesById.get(token);
-  if (!rule) return [];
-  const out: string[] = [];
+  if (!rule) return { ruleId: undefined, criterionIds: [] };
+  const criterionIds: string[] = [];
   for (const critId of rule.satisfies) {
     for (const expanded of criteria.equivalenceClosure(critId)) {
-      out.push(expanded);
+      criterionIds.push(expanded);
     }
   }
-  return out;
+  return { ruleId: token, criterionIds };
 }
 
 function isEnabled(criterionId: string, enabled: ReadonlySet<string>): boolean {
