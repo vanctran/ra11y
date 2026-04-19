@@ -105,6 +105,86 @@ describe("formatter: sarif", () => {
     expect(rule?.properties.tags).toContain("accessibility");
     expect(rule?.properties.tags).toContain("wcag22:1.1.1");
   });
+
+  describe("couldBeWrongBecause", () => {
+    it("omits Result.properties.couldBeWrongBecause when absent on the Violation", () => {
+      const output = sarifFormatter.format(RESULT, REPORT);
+      // None of the default fixture violations carry couldBeWrongBecause,
+      // so no Result.properties block referencing it should appear.
+      expect(output).not.toContain("couldBeWrongBecause");
+    });
+
+    it("surfaces the codes on Result.properties when the Violation populates the field", () => {
+      const scan: ScanResult = {
+        violations: withFindingIds([
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 1, column: 1 },
+            message: ".caption has low contrast",
+            couldBeWrongBecause: ["tailwind_class_on_consumer"],
+          },
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 4, column: 1 },
+            message: ".other has low contrast",
+          },
+        ]),
+        filesScanned: 1,
+        durationMs: 0,
+        enabledStandards: ["wcag22"],
+        isTTY: false,
+      };
+      const output = sarifFormatter.format(scan, REPORT);
+      const parsed = JSON.parse(output) as {
+        runs: Array<{
+          results: Array<{
+            message: { text: string };
+            properties?: { couldBeWrongBecause?: readonly string[] };
+          }>;
+        }>;
+      };
+      const results = parsed.runs[0]?.results ?? [];
+      const withCode = results.find((r) => r.message.text.includes(".caption"));
+      const without = results.find((r) => r.message.text.includes(".other"));
+      expect(withCode?.properties?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+      expect(without && "properties" in without).toBe(false);
+    });
+
+    it("treats an empty array as unpopulated and omits the properties bag entirely", () => {
+      const scan: ScanResult = {
+        violations: withFindingIds([
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 1, column: 1 },
+            message: ".caption",
+            couldBeWrongBecause: [],
+          },
+        ]),
+        filesScanned: 1,
+        durationMs: 0,
+        enabledStandards: ["wcag22"],
+        isTTY: false,
+      };
+      const output = sarifFormatter.format(scan, REPORT);
+      // No Result-level properties at all — a present-but-empty
+      // `properties: {}` would be the sentinel-shape bug CLAUDE.md §1
+      // forbids.
+      const parsed = JSON.parse(output) as {
+        runs: Array<{ results: Array<Record<string, unknown>> }>;
+      };
+      const first = parsed.runs[0]?.results[0];
+      expect(first && "properties" in first).toBe(false);
+    });
+  });
 });
 
 describe("formatter: junit", () => {

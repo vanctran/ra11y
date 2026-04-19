@@ -71,6 +71,16 @@ interface SarifResult {
   readonly message: { readonly text: string };
   readonly locations: readonly SarifLocation[];
   readonly partialFingerprints: Readonly<Record<string, string>>;
+  /**
+   * SARIF `properties` is an open, untyped bag (spec-compliant). We surface
+   * the Violation's `couldBeWrongBecause` codes here so SARIF consumers
+   * (GitHub code scanning, ingesters) can render the escape-hatch hints
+   * alongside the finding without a schema change. Informational only —
+   * see docs/adr/0009-violation-could-be-wrong-because.md.
+   */
+  readonly properties?: {
+    readonly couldBeWrongBecause?: readonly string[];
+  };
 }
 
 interface SarifLocation {
@@ -193,6 +203,16 @@ function violationToSarifResult(violation: Violation): SarifResult {
       // across files for the same kind of problem.
       groupKey: violation.groupKey,
     },
+    // Surface the Violation's `couldBeWrongBecause` reason codes in
+    // SARIF's open `properties` bag. Omitted entirely when the field is
+    // absent or empty on the Violation — per CLAUDE.md §1 "Ambiguous
+    // field shapes are dishonest," a present-but-empty properties
+    // object would be indistinguishable from "rule emitted codes" vs
+    // "rule stayed silent." See docs/adr/0009-violation-could-be-
+    // wrong-because.md.
+    ...(violation.couldBeWrongBecause && violation.couldBeWrongBecause.length > 0
+      ? { properties: { couldBeWrongBecause: [...violation.couldBeWrongBecause] } }
+      : {}),
   };
 }
 

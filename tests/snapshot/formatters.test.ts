@@ -145,4 +145,73 @@ describe("formatter: json", () => {
     const b = jsonFormatter.format(RESULT, REPORT);
     expect(a).toBe(b);
   });
+
+  describe("couldBeWrongBecause", () => {
+    it("omits the field when absent on every violation", () => {
+      const output = jsonFormatter.format(RESULT, REPORT);
+      // The fixture violations at the top of this file never set
+      // couldBeWrongBecause, so no finding in the JSON should carry it.
+      expect(output).not.toContain("couldBeWrongBecause");
+    });
+
+    it("surfaces the codes when present, and omits on neighbours without them", () => {
+      const scan: ScanResult = {
+        violations: withFindingIds([
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 1, column: 1 },
+            message: ".caption has low contrast",
+            couldBeWrongBecause: ["tailwind_class_on_consumer"],
+          },
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 4, column: 1 },
+            message: ".other has low contrast",
+          },
+        ]),
+        filesScanned: 1,
+        durationMs: 0,
+        enabledStandards: ["wcag22"],
+        isTTY: false,
+      };
+      const output = jsonFormatter.format(scan, REPORT);
+      const parsed = JSON.parse(output) as {
+        result: {
+          violations: Array<{ message: string; couldBeWrongBecause?: readonly string[] }>;
+        };
+      };
+      const withCode = parsed.result.violations.find((v) => v.message.includes(".caption"));
+      const without = parsed.result.violations.find((v) => v.message.includes(".other"));
+      expect(withCode?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+      expect(without && "couldBeWrongBecause" in without).toBe(false);
+    });
+
+    it("treats an empty array as unpopulated and omits the key", () => {
+      const scan: ScanResult = {
+        violations: withFindingIds([
+          {
+            ruleId: "contrast/minimum",
+            fixClass: "guidance",
+            criteria: ["wcag22:1.4.3"],
+            severity: "error",
+            location: { filePath: "src/styles.css", line: 1, column: 1 },
+            message: ".caption",
+            couldBeWrongBecause: [],
+          },
+        ]),
+        filesScanned: 1,
+        durationMs: 0,
+        enabledStandards: ["wcag22"],
+        isTTY: false,
+      };
+      const output = jsonFormatter.format(scan, REPORT);
+      expect(output).not.toContain("couldBeWrongBecause");
+    });
+  });
 });

@@ -316,38 +316,56 @@ function invokeOneProjectRule(
     const dm = disableMaps.get(em.location.filePath);
     const disabled = dm?.get(em.location.line);
     if (disabled?.has("*") || disabled?.has(rule.id)) continue;
-    const source = sourcesByPath.get(em.location.filePath) ?? "";
-    const findingId = computeFindingId({
-      ruleId: rule.id,
-      filePath: em.location.filePath,
-      source,
-      line: em.location.line,
-    });
-    const groupKey = computeGroupKey({
-      ruleId: rule.id,
-      shape: shapeAtEmission(
-        astsByPath,
-        em.location.filePath,
-        em.location.line,
-        em.location.column,
-      ),
-    });
-    out.push({
-      ruleId: rule.id,
-      fixClass: rule.fixClass,
-      criteria,
-      criteriaTitles,
-      severity: em.severity,
-      location: em.location,
-      message: em.message,
-      findingId,
-      groupKey,
-      ...(em.suggestion !== undefined && { suggestion: em.suggestion }),
-      ...(em.fix !== undefined && { fix: em.fix }),
-      ...(em.fixPaths !== undefined && { fixPaths: em.fixPaths }),
-      ...(em.snippet !== undefined && { snippet: em.snippet }),
-    });
+    out.push(stampProjectEmission(em, rule, criteria, criteriaTitles, sourcesByPath, astsByPath));
   }
+}
+
+/**
+ * Builds the final {@link Violation} from a project-rule emission.
+ * Split out of {@link invokeOneProjectRule} so the outer function stays
+ * under the cognitive-complexity budget — the stamp logic and
+ * conditional-spread block push it over otherwise.
+ */
+function stampProjectEmission(
+  em: EmittedViolation,
+  rule: Rule,
+  criteria: readonly string[],
+  criteriaTitles: readonly string[],
+  sourcesByPath: ReadonlyMap<string, string>,
+  astsByPath: ReadonlyMap<string, Ast>,
+): Violation {
+  const source = sourcesByPath.get(em.location.filePath) ?? "";
+  const findingId = computeFindingId({
+    ruleId: rule.id,
+    filePath: em.location.filePath,
+    source,
+    line: em.location.line,
+  });
+  const groupKey = computeGroupKey({
+    ruleId: rule.id,
+    shape: shapeAtEmission(astsByPath, em.location.filePath, em.location.line, em.location.column),
+  });
+  return {
+    ruleId: rule.id,
+    fixClass: rule.fixClass,
+    criteria,
+    criteriaTitles,
+    severity: em.severity,
+    location: em.location,
+    message: em.message,
+    findingId,
+    groupKey,
+    ...(em.suggestion !== undefined && { suggestion: em.suggestion }),
+    ...(em.fix !== undefined && { fix: em.fix }),
+    ...(em.fixPaths !== undefined && { fixPaths: em.fixPaths }),
+    ...(em.snippet !== undefined && { snippet: em.snippet }),
+    // Named reason codes for known escape hatches. Conditional
+    // spread per docs/adr/0009-violation-could-be-wrong-because.md
+    // — `couldBeWrongBecause: []` must never reach the agent.
+    ...(em.couldBeWrongBecause && em.couldBeWrongBecause.length > 0
+      ? { couldBeWrongBecause: em.couldBeWrongBecause }
+      : {}),
+  };
 }
 
 /**

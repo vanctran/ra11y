@@ -128,6 +128,9 @@ function shapeViolation(
     ...(v.fix !== undefined && { fix: v.fix }),
     ...(v.fixPaths !== undefined && { fixPaths: v.fixPaths }),
     ...(v.snippet !== undefined && { snippet: v.snippet }),
+    ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
+      ? { couldBeWrongBecause: v.couldBeWrongBecause }
+      : {}),
   };
 }
 

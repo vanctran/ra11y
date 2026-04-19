@@ -35,6 +35,13 @@ export const jsonFormatter = defineFormatter({
           message: v.message,
           ...(v.suggestion !== undefined && { suggestion: v.suggestion }),
           ...(v.snippet !== undefined && { snippet: v.snippet }),
+          // Named reason codes for known escape hatches. Informational
+          // only — consumers investigate; we never auto-suppress. Omit
+          // when empty per docs/adr/0009-violation-could-be-wrong-
+          // because.md and CLAUDE.md §1.
+          ...(v.couldBeWrongBecause && v.couldBeWrongBecause.length > 0
+            ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
+            : {}),
         })),
       },
       report: {

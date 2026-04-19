@@ -178,6 +178,14 @@ function stampViolation(
     ...(emitted.fix !== undefined && { fix: emitted.fix }),
     ...(emitted.fixPaths !== undefined && { fixPaths: emitted.fixPaths }),
     ...(emitted.snippet !== undefined && { snippet: emitted.snippet }),
+    // Named reason codes for known escape hatches. Conditional spread
+    // so `couldBeWrongBecause: []` (defensive: empty array from a rule)
+    // collapses to absent on the stamped Violation — per
+    // docs/adr/0009-violation-could-be-wrong-because.md + CLAUDE.md §1
+    // ("Ambiguous field shapes are dishonest").
+    ...(emitted.couldBeWrongBecause && emitted.couldBeWrongBecause.length > 0
+      ? { couldBeWrongBecause: emitted.couldBeWrongBecause }
+      : {}),
   };
 }
 
