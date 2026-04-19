@@ -644,6 +644,67 @@ describe("MCP tool: scan_project", () => {
       expect(data.meta.additionalPathsScanned?.filesAdded).toBe(0);
     });
   });
+
+  describe("processes config threading", () => {
+    // Guards the wiring fix: when a project config declares `processes`,
+    // scan_project must thread them into `runScan` so project-scoped
+    // finders (WCAG 3.2.3 Consistent Navigation, 3.2.4 Consistent
+    // Identification) fire. Without threading, those finders see no
+    // page-set evidence and emit zero candidates even when the files
+    // actually diverge. The consistent-identification finder is the
+    // clearest probe: it emits candidates ONLY when processes are
+    // declared AND pages diverge, so comparing `actionableManualItems`
+    // between a processes-declared scan and a no-processes scan on the
+    // same files isolates the threading delta from sibling finders
+    // that fire regardless.
+    it("routes wcag22:3.2.4 to actionable when declared processes have divergent identical-key buttons", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { realpathSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      async function scratch(withProcesses: boolean) {
+        const raw = await mkdtemp(joinPath(tmpdir(), "ra11y-proc-"));
+        const dir = realpathSync(raw);
+        // Two pages with the SAME data-testid but divergent visible
+        // labels — the canonical 3.2.4 divergence the finder flags.
+        await writeFile(
+          joinPath(dir, "cart.html"),
+          '<!doctype html><html><body><button data-testid="primary">Save</button></body></html>',
+        );
+        await writeFile(
+          joinPath(dir, "checkout.html"),
+          '<!doctype html><html><body><button data-testid="primary">Submit</button></body></html>',
+        );
+        const cfg = withProcesses
+          ? { processes: [{ name: "checkout", pages: ["cart.html", "checkout.html"] }] }
+          : {};
+        await writeFile(joinPath(dir, "ra11y.config.json"), JSON.stringify(cfg));
+        return dir;
+      }
+
+      const tool = findTool("scan_project");
+      const withDir = await scratch(true);
+      const withoutDir = await scratch(false);
+      const withResult = await tool.handler({ cwd: withDir }, new McpSession());
+      const withoutResult = await tool.handler({ cwd: withoutDir }, new McpSession());
+      const withData = JSON.parse(withResult.content[0].text) as {
+        plan: { actionableManualItems: number };
+      };
+      const withoutData = JSON.parse(withoutResult.content[0].text) as {
+        plan: { actionableManualItems: number };
+      };
+      // Threading the processes config causes the
+      // consistent-identification finder to ground 3.2.4, pushing it
+      // from the untargeted bucket into actionable. The exact baseline
+      // value isn't pinned — sibling finders that don't consume
+      // processes fire identically in both runs, so the delta isolates
+      // the threading fix.
+      expect(withData.plan.actionableManualItems).toBeGreaterThan(
+        withoutData.plan.actionableManualItems,
+      );
+    });
+  });
 });
 
 describe("MCP tool: scan_file", () => {

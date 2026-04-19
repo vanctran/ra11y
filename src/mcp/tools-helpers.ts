@@ -515,6 +515,13 @@ export async function runScanAndFormat(
   // don't inflate the opaque-component count). Undefined = default
   // behavior, story files — if present — scan as plain TSX.
   preset?: import("../types/config.ts").ConfigPreset,
+  // Declared process page-sets from `LoadedConfig.processes` (ADR
+  // 0016). Threaded to project-scoped finders via
+  // `ProjectCandidateContext.processes` so WCAG 3.2.3 / 3.2.4 run
+  // against the full page set a scan has in hand. Omitted when the
+  // user declared no processes; empty/absent = no process-level
+  // evidence, finders emit nothing rather than guess.
+  processes?: readonly import("../types/config.ts").Process[],
 ): Promise<{
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
@@ -539,6 +546,7 @@ export async function runScanAndFormat(
     finders: BUILTIN_CANDIDATE_FINDERS,
     level: session.config.level,
     ...(attestations.length > 0 && { attestations }),
+    ...(processes !== undefined && processes.length > 0 && { processes }),
   });
 
   const {

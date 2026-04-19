@@ -5,6 +5,7 @@
  */
 
 import { existsSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
@@ -169,6 +170,15 @@ export const scanProjectTool: McpTool = {
       params["verboseMeta"] === true,
       skipCriterion,
       projectConfig.preset,
+      // Thread declared process page-sets through so project-scoped
+      // finders (WCAG 3.2.3 Consistent Navigation, 3.2.4 Consistent
+      // Identification) key off the full page set when the user has
+      // a `processes` config. Pages are pre-resolved to absolute paths
+      // so the finders' `indexFilesByAbsPath` match against
+      // `ParsedFile.filePath` (which the discovery pass carries as
+      // absolute). The helper internally conditional-spreads onto
+      // `runScan` when the array is non-empty.
+      resolveProcessesForScan(projectConfig.processes, projectConfig.sourcePath, root),
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
@@ -260,6 +270,28 @@ function discoverOptionsFor(projectConfig: import("../types/config.ts").LoadedCo
   readonly includeStoryFiles?: boolean;
 } {
   return projectConfig.preset === "storybook" ? { includeStoryFiles: true } : {};
+}
+
+/**
+ * Pre-resolves `projectConfig.processes` page paths to absolute form
+ * so project-scoped finders (WCAG 3.2.3 / 3.2.4) match them against
+ * `ParsedFile.filePath` — which the discovery pass stores as absolute.
+ * Relative pages resolve against the config file's directory when the
+ * config was found on disk, else against the scan root. Absolute pages
+ * pass through unchanged. Empty input returns an empty array so the
+ * call site can forward unconditionally.
+ */
+function resolveProcessesForScan(
+  processes: readonly import("../types/config.ts").Process[],
+  configSourcePath: string | null,
+  root: string,
+): readonly import("../types/config.ts").Process[] {
+  if (processes.length === 0) return processes;
+  const base = configSourcePath === null ? root : dirname(configSourcePath);
+  return processes.map((p) => ({
+    ...p,
+    pages: p.pages.map((pagePath) => (isAbsolute(pagePath) ? pagePath : resolve(base, pagePath))),
+  }));
 }
 
 /**
