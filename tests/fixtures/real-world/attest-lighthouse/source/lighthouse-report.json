@@ -1,0 +1,116 @@
+{
+  "lighthouseVersion": "11.4.0",
+  "requestedUrl": "http://localhost:3000/",
+  "finalUrl": "http://localhost:3000/",
+  "fetchTime": "2026-04-19T10:00:00.000Z",
+  "categories": {
+    "accessibility": {
+      "id": "accessibility",
+      "title": "Accessibility",
+      "score": 0.76,
+      "auditRefs": [
+        { "id": "color-contrast", "weight": 3, "group": "a11y-color-contrast" },
+        { "id": "image-alt", "weight": 10, "group": "a11y-names-labels" },
+        { "id": "label", "weight": 10, "group": "a11y-names-labels" },
+        { "id": "document-title", "weight": 3, "group": "a11y-navigation" },
+        { "id": "html-has-lang", "weight": 3, "group": "a11y-language" },
+        { "id": "link-name", "weight": 3, "group": "a11y-names-labels" }
+      ]
+    }
+  },
+  "audits": {
+    "color-contrast": {
+      "id": "color-contrast",
+      "title": "Background and foreground colors have a sufficient contrast ratio",
+      "description": "Low-contrast text is difficult or impossible for many users to read.",
+      "score": 0,
+      "scoreDisplayMode": "binary",
+      "details": {
+        "type": "table",
+        "items": [
+          {
+            "node": {
+              "type": "node",
+              "lhId": "9-23-SPAN",
+              "path": "1,HTML,1,BODY,1,MAIN,3,SECTION,0,P,0,SPAN",
+              "selector": "section > p > span.status-label",
+              "boundingRect": { "top": 120, "bottom": 136, "left": 16, "right": 72 },
+              "snippet": "<span class=\"status-label\">Draft</span>",
+              "nodeLabel": "Draft"
+            },
+            "contrastRatio": 2.5,
+            "thresholdAA": 4.5
+          }
+        ]
+      }
+    },
+    "image-alt": {
+      "id": "image-alt",
+      "title": "Image elements have `[alt]` attributes",
+      "description": "Informative elements should aim for short, descriptive alternate text.",
+      "score": 0,
+      "scoreDisplayMode": "binary",
+      "details": {
+        "type": "table",
+        "items": [
+          {
+            "node": {
+              "type": "node",
+              "lhId": "9-15-IMG",
+              "path": "1,HTML,1,BODY,0,HEADER,1,IMG",
+              "selector": "header > img",
+              "snippet": "<img src=\"/banner.png\">",
+              "nodeLabel": "/banner.png"
+            }
+          }
+        ]
+      }
+    },
+    "label": {
+      "id": "label",
+      "title": "Form elements have associated labels",
+      "description": "Labels ensure that form controls are announced properly by assistive technologies.",
+      "score": 0,
+      "scoreDisplayMode": "binary",
+      "details": {
+        "type": "table",
+        "items": [
+          {
+            "node": {
+              "type": "node",
+              "lhId": "9-42-INPUT",
+              "path": "1,HTML,1,BODY,1,MAIN,0,FORM,3,INPUT",
+              "selector": "form > input[type='email']",
+              "snippet": "<input type=\"email\" placeholder=\"Enter email\">",
+              "nodeLabel": "Enter email"
+            }
+          }
+        ]
+      }
+    },
+    "document-title": {
+      "id": "document-title",
+      "title": "Document has a `<title>` element",
+      "description": "The title gives screen reader users an overview of the page.",
+      "score": 1,
+      "scoreDisplayMode": "binary",
+      "details": { "type": "table", "items": [] }
+    },
+    "html-has-lang": {
+      "id": "html-has-lang",
+      "title": "`<html>` element has a `[lang]` attribute",
+      "description": "If a page doesn't specify a lang attribute, a screen reader assumes the default language set by the user.",
+      "score": 1,
+      "scoreDisplayMode": "binary",
+      "details": { "type": "table", "items": [] }
+    },
+    "link-name": {
+      "id": "link-name",
+      "title": "Links have a discernible name",
+      "description": "Link text (and alternate text for images, when used as links) that is discernible, unique, and focusable improves the navigation experience for screen reader users.",
+      "score": 1,
+      "scoreDisplayMode": "binary",
+      "details": { "type": "table", "items": [] }
+    }
+  }
+}
