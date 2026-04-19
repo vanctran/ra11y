@@ -21,6 +21,17 @@ export function severityToConfidence(severity: string): Confidence {
   return "low";
 }
 
+/**
+ * Resolves the agent-facing confidence for a Violation. Honours an
+ * explicit `v.confidence` when present (canonically `"inherited"` on
+ * synthesized wrapper-call-site findings — Q2R2-INHERITED), otherwise
+ * falls back to the severity-derived mapping.
+ */
+function resolveConfidence(v: Violation): Confidence {
+  if (v.confidence !== undefined) return v.confidence;
+  return severityToConfidence(v.severity);
+}
+
 function buildSnippet(v: Violation): AgentSnippet {
   if (typeof v.snippet === "string" && v.snippet.length > 0) {
     return { before: [], highlighted: v.snippet, after: [] };
@@ -136,7 +147,7 @@ export function buildAgentFinding(v: Violation, opts?: BuildAgentFindingOptions)
       ? { couldBeWrongBecause: [...v.couldBeWrongBecause] }
       : {}),
     severity: v.severity,
-    confidence: severityToConfidence(v.severity),
+    confidence: resolveConfidence(v),
     line: v.location.line,
     column: v.location.column,
     ...(v.location.endLine !== undefined && { endLine: v.location.endLine }),
@@ -148,5 +159,12 @@ export function buildAgentFinding(v: Violation, opts?: BuildAgentFindingOptions)
     category,
     suppressWith: buildSuppressPragma(v.location.filePath, v.ruleId),
     ...(placement !== undefined && { suppressPlacement: placement }),
+    ...(v.sourceOfFinding !== undefined && {
+      sourceOfFinding: {
+        filePath: v.sourceOfFinding.filePath,
+        line: v.sourceOfFinding.line,
+        ...(v.sourceOfFinding.column !== undefined && { column: v.sourceOfFinding.column }),
+      },
+    }),
   };
 }

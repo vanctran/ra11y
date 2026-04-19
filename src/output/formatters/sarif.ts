@@ -70,6 +70,14 @@ interface SarifResult {
   readonly level: SarifLevel;
   readonly message: { readonly text: string };
   readonly locations: readonly SarifLocation[];
+  /**
+   * SARIF spec "relatedLocations" — each entry is a secondary location
+   * carrying a `role` property. We use role `"origin"` on inherited
+   * findings (Q2R2-INHERITED / ADR 0012) to point at the wrapper
+   * definition the finding was synthesized from. Omitted on primary
+   * findings.
+   */
+  readonly relatedLocations?: readonly SarifRelatedLocation[];
   readonly partialFingerprints: Readonly<Record<string, string>>;
   /**
    * SARIF `properties` is an open, untyped bag (spec-compliant). We surface
@@ -77,10 +85,26 @@ interface SarifResult {
    * (GitHub code scanning, ingesters) can render the escape-hatch hints
    * alongside the finding without a schema change. Informational only —
    * see docs/adr/0009-violation-could-be-wrong-because.md.
+   *
+   * We also surface `confidence` here (canonically `"inherited"` on
+   * synthesized call-site findings) so SARIF consumers can group /
+   * filter without the schema change relatedLocations already implies.
    */
   readonly properties?: {
     readonly couldBeWrongBecause?: readonly string[];
+    readonly confidence?: string;
   };
+}
+
+interface SarifRelatedLocation {
+  readonly physicalLocation: {
+    readonly artifactLocation: { readonly uri: string };
+    readonly region: {
+      readonly startLine: number;
+      readonly startColumn?: number;
+    };
+  };
+  readonly properties: { readonly role: string };
 }
 
 interface SarifLocation {
@@ -171,23 +195,7 @@ function violationToSarifResult(violation: Violation): SarifResult {
     ruleId: violation.ruleId,
     level: severityToLevel(violation.severity),
     message: { text: violation.message },
-    locations: [
-      {
-        physicalLocation: {
-          artifactLocation: { uri: violation.location.filePath },
-          region: {
-            startLine: violation.location.line,
-            startColumn: violation.location.column,
-            ...(violation.location.endLine !== undefined && {
-              endLine: violation.location.endLine,
-            }),
-            ...(violation.location.endColumn !== undefined && {
-              endColumn: violation.location.endColumn,
-            }),
-          },
-        },
-      },
-    ],
+    locations: [buildPrimaryLocation(violation)],
     partialFingerprints: {
       // Reuse the Violation's stable findingId — GitHub code scanning
       // uses this to deduplicate the same violation across runs. The
@@ -203,16 +211,71 @@ function violationToSarifResult(violation: Violation): SarifResult {
       // across files for the same kind of problem.
       groupKey: violation.groupKey,
     },
-    // Surface the Violation's `couldBeWrongBecause` reason codes in
-    // SARIF's open `properties` bag. Omitted entirely when the field is
-    // absent or empty on the Violation — per CLAUDE.md §1 "Ambiguous
-    // field shapes are dishonest," a present-but-empty properties
-    // object would be indistinguishable from "rule emitted codes" vs
-    // "rule stayed silent." See docs/adr/0009-violation-could-be-
-    // wrong-because.md.
-    ...(violation.couldBeWrongBecause && violation.couldBeWrongBecause.length > 0
-      ? { properties: { couldBeWrongBecause: [...violation.couldBeWrongBecause] } }
-      : {}),
+    // Surface the Violation's `couldBeWrongBecause` reason codes and
+    // `confidence` in SARIF's open `properties` bag. Omit the whole
+    // object when there is nothing to carry — per CLAUDE.md §1
+    // "Ambiguous field shapes are dishonest," a present-but-empty
+    // properties object would be indistinguishable from "emitted
+    // codes" vs "rule stayed silent." See ADR 0009 + ADR 0012.
+    ...buildSarifProperties(violation),
+    // Inherited findings (Q2R2-INHERITED) carry a pointer back to the
+    // wrapper-definition location that originated the finding. SARIF
+    // `relatedLocations` with `properties.role = "origin"` is the
+    // canonical way to express "the real site lives here." See ADR
+    // 0012.
+    ...buildSarifRelatedLocations(violation),
+  };
+}
+
+function buildPrimaryLocation(violation: Violation): SarifLocation {
+  return {
+    physicalLocation: {
+      artifactLocation: { uri: violation.location.filePath },
+      region: {
+        startLine: violation.location.line,
+        startColumn: violation.location.column,
+        ...(violation.location.endLine !== undefined && { endLine: violation.location.endLine }),
+        ...(violation.location.endColumn !== undefined && {
+          endColumn: violation.location.endColumn,
+        }),
+      },
+    },
+  };
+}
+
+function buildSarifRelatedLocations(
+  violation: Violation,
+): { readonly relatedLocations: readonly SarifRelatedLocation[] } | Record<string, never> {
+  if (violation.sourceOfFinding === undefined) return {};
+  const { filePath, line, column } = violation.sourceOfFinding;
+  return {
+    relatedLocations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: filePath },
+          region: {
+            startLine: line,
+            ...(column !== undefined && { startColumn: column }),
+          },
+        },
+        properties: { role: "origin" },
+      },
+    ],
+  };
+}
+
+function buildSarifProperties(
+  violation: Violation,
+): { readonly properties: NonNullable<SarifResult["properties"]> } | Record<string, never> {
+  const hasCodes =
+    violation.couldBeWrongBecause !== undefined && violation.couldBeWrongBecause.length > 0;
+  const confidence = violation.confidence;
+  if (!hasCodes && confidence === undefined) return {};
+  return {
+    properties: {
+      ...(hasCodes && { couldBeWrongBecause: [...(violation.couldBeWrongBecause ?? [])] }),
+      ...(confidence !== undefined && { confidence }),
+    },
   };
 }
 
