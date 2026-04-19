@@ -1,0 +1,88 @@
+{
+  "testEngine": { "name": "axe-core", "version": "4.9.1" },
+  "testRunner": { "name": "axe" },
+  "testEnvironment": {
+    "userAgent": "Mozilla/5.0 (synthetic)",
+    "windowWidth": 1280,
+    "windowHeight": 800
+  },
+  "timestamp": "2026-04-19T10:00:00.000Z",
+  "url": "http://localhost:3000/",
+  "toolOptions": {},
+  "violations": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "tags": ["cat.color", "wcag2aa", "wcag143"],
+      "description": "Ensures the contrast between foreground and background colors meets WCAG 2 AA contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.9/color-contrast",
+      "nodes": [
+        {
+          "any": [],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<span class=\"status-label\">Draft</span>",
+          "target": [".status-label"],
+          "failureSummary": "Fix any of the following: Element has insufficient color contrast of 2.5 (foreground color: #999999, background color: #ffffff, font size: 10.4pt, font weight: normal)"
+        }
+      ]
+    },
+    {
+      "id": "image-alt",
+      "impact": "critical",
+      "tags": ["cat.text-alternatives", "wcag2a", "wcag111"],
+      "description": "Ensures <img> elements have alternate text or a role of none or presentation",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.9/image-alt",
+      "nodes": [
+        {
+          "any": [],
+          "all": [],
+          "none": [],
+          "impact": "critical",
+          "html": "<img src=\"/banner.png\">",
+          "target": ["img[src='/banner.png']"],
+          "failureSummary": "Fix any of the following: Element does not have an alt attribute"
+        }
+      ]
+    },
+    {
+      "id": "label",
+      "impact": "critical",
+      "tags": ["cat.forms", "wcag2a", "wcag412"],
+      "description": "Ensures every form element has a label",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.9/label",
+      "nodes": [
+        {
+          "any": [],
+          "all": [],
+          "none": [],
+          "impact": "critical",
+          "html": "<input type=\"email\" placeholder=\"Enter email\">",
+          "target": ["input[type='email']"],
+          "failureSummary": "Fix any of the following: Form element does not have an implicit (wrapped) <label>"
+        }
+      ]
+    }
+  ],
+  "passes": [
+    {
+      "id": "document-title",
+      "impact": null,
+      "tags": ["cat.text-alternatives", "wcag2a", "wcag242"],
+      "description": "Ensures each HTML document contains a non-empty <title> element",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.9/document-title",
+      "nodes": [{ "html": "<title>Widget App</title>", "target": ["title"] }]
+    },
+    {
+      "id": "html-has-lang",
+      "impact": null,
+      "tags": ["cat.language", "wcag2a", "wcag311"],
+      "description": "Ensures every HTML document has a lang attribute",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.9/html-has-lang",
+      "nodes": [{ "html": "<html lang=\"en\">", "target": ["html"] }]
+    }
+  ],
+  "incomplete": [],
+  "inapplicable": []
+}
