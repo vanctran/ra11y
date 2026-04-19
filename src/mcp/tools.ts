@@ -28,6 +28,7 @@ import { conformanceStatementTool } from "./tool-conformance-statement.ts";
 import { coverageTool } from "./tool-coverage.ts";
 import { detectNativeWrappersTool } from "./tool-detect-wrappers.ts";
 import { explainStandardTool } from "./tool-explain-standard.ts";
+import { listAttestationsTool } from "./tool-list-attestations.ts";
 import { listSuppressionsTool } from "./tool-list-suppressions.ts";
 import { proposeBaselineTool } from "./tool-propose-baseline.ts";
 import { proposeConfigTool } from "./tool-propose-config.ts";
@@ -527,6 +528,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   listSuppressionsTool,
   suppressTool,
   attestTool,
+  listAttestationsTool,
   proposeConfigTool,
   proposeBaselineTool,
   sessionConfigureTool,
