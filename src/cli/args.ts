@@ -36,6 +36,19 @@ export interface CliOptions {
     | "agent";
   readonly standards: readonly string[];
   readonly level: "A" | "AA" | "AAA";
+  /**
+   * Named conformance profile to pin the scan scope against. When set,
+   * overrides `standards` + `level` at resolution time — see
+   * `src/config/profiles.ts`. `undefined` when the flag was not passed.
+   */
+  readonly profile: string | undefined;
+  /**
+   * True when the user explicitly passed `--profile` together with
+   * `--standard` and/or `--level`. The scan command emits the
+   * `profile_overrides_standard_level` warning on this condition —
+   * profile wins, but the explicit flags were redundant.
+   */
+  readonly profileOverridesExplicit: boolean;
   readonly exclude: readonly string[];
   readonly failOn: "error" | "warning" | "any" | "never";
   readonly ruleId?: string;
@@ -96,6 +109,7 @@ interface RawCliOptions {
   readonly format: string | undefined;
   readonly standard: string | undefined;
   readonly level: string | undefined;
+  readonly profile: string | undefined;
   readonly failOn: string | undefined;
   readonly exclude: string | readonly string[] | undefined;
   readonly ignore: string | readonly string[] | undefined;
@@ -201,6 +215,7 @@ function translate(
     format: stringAt(raw, "format"),
     standard: stringAt(raw, "standard"),
     level: stringAt(raw, "level"),
+    profile: stringAt(raw, "profile"),
     failOn: stringAt(raw, "fail-on"),
     exclude: listAt(raw, "exclude"),
     ignore: listAt(raw, "ignore"),
@@ -249,6 +264,10 @@ function baseOpts(
     format: normalizeFormat(raw?.format),
     standards: normalizeStandards(raw?.standard),
     level: normalizeLevel(raw?.level),
+    profile: normalizeProfile(raw?.profile),
+    profileOverridesExplicit:
+      normalizeProfile(raw?.profile) !== undefined &&
+      (typeof raw?.standard === "string" || typeof raw?.level === "string"),
     exclude: normalizeList(raw?.exclude).concat(normalizeList(raw?.ignore)),
     failOn: normalizeFailOn(raw?.failOn),
     noColor: raw?.noColor === true,
@@ -295,6 +314,19 @@ function normalizeLevel(value: string | undefined): CliOptions["level"] {
   if (value === "A") return "A";
   if (value === "AAA") return "AAA";
   return "AA";
+}
+
+/**
+ * Profiles are a pure handle; we don't validate the name against the
+ * built-in or user-declared set here because the loader isn't reachable
+ * from argv parsing. The downstream resolver in the scan command looks
+ * the name up against built-ins + `LoadedConfig.profiles` and fails the
+ * invocation with exit 2 if it doesn't match — that's also where the
+ * list of valid names is assembled.
+ */
+function normalizeProfile(value: string | undefined): string | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  return value;
 }
 
 function normalizeFailOn(value: string | undefined): CliOptions["failOn"] {

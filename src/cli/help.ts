@@ -25,6 +25,9 @@ OUTPUT
 STANDARDS
   --standard <list>      Comma-separated standard IDs (default: wcag22)
   --level <level>        A | AA | AAA (default: AA)
+  --profile <name>       Named conformance profile (wcag21-a, wcag21-aa,
+                         wcag22-a, wcag22-aa, wcag22-aaa, section508,
+                         en301549). Overrides --standard and --level.
   --list-standards       List loaded standards with criterion counts
 
 RULES

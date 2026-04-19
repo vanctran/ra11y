@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { loadConfig } from "../../config/index.ts";
 import { parseInlineDisablesDetailed } from "../../config/inline-disables.ts";
+import { BUILTIN_PROFILES, resolveProfile } from "../../config/profiles.ts";
 import {
   BASELINE_FILENAME,
   buildBaselineFile,
@@ -28,7 +29,7 @@ import { BUILTIN_CANDIDATE_FINDERS } from "../../review/index.ts";
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
-import type { LoadedConfig } from "../../types/config.ts";
+import type { ConformanceProfile, LoadedConfig } from "../../types/config.ts";
 import type { Rule } from "../../types/rule.ts";
 import type { Standard } from "../../types/standard.ts";
 import type { ScanResult } from "../../types/violation.ts";
@@ -55,9 +56,23 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   // pick up standards, rule settings, and excludes that aren't
   // explicitly set on the command line.
   const fileConfig = await loadConfig({ cwd });
-  const effectiveStandards = mergeStandards(options.standards, fileConfig);
+
+  // Resolve --profile before merging standards/level — when supplied,
+  // the profile wins over both and drives the scope downstream reports
+  // filter against. Unknown profile names fail fast with exit 2 and a
+  // list of valid names; valid names collapse to their {standards,
+  // level} tuple here and the rest of the command treats them like the
+  // user had typed `--standard <list> --level <L>` directly.
+  const profileResolution = resolveProfileFromOptions(options, fileConfig.profiles);
+  if (profileResolution.error !== undefined) {
+    return { stdout: "", stderr: profileResolution.error, exitCode: 2 };
+  }
+  const effectiveStandards =
+    profileResolution.standards ?? mergeStandards(options.standards, fileConfig);
+  const effectiveLevel = profileResolution.level ?? options.level;
   const effectiveExcludes = mergeExcludes(options.exclude, fileConfig);
   const activeRules = filterRulesByConfig(BUILTIN_RULES, fileConfig);
+  const profileWarningLine = profileResolution.warning;
 
   // Validate requested standards before doing any work.
   const missing = effectiveStandards.filter((id) => !(id in STANDARD_BY_ID));
@@ -112,7 +127,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     files: parsed,
     finders: BUILTIN_CANDIDATE_FINDERS,
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
-    level: options.level,
+    level: effectiveLevel,
     nativeWrapperElements: fileConfig.nativeWrapperElements,
   });
 
@@ -129,13 +144,55 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   // When --checklist is passed, append the manual review checklist
   // after the violations report so the user gets one complete document.
   if (options.command === "checklist") {
-    const coverage = buildCoverageReport(result, LOADED_STANDARDS, options.level);
+    const coverage = buildCoverageReport(result, LOADED_STANDARDS, effectiveLevel);
     const checklist = buildChecklist(coverage, LOADED_STANDARDS, report.candidates ?? []);
     const markdown = renderChecklistMarkdown(checklist);
-    return { stdout: `${output}\n\n---\n\n${markdown}`, stderr: "", exitCode };
+    return {
+      stdout: `${output}\n\n---\n\n${markdown}`,
+      stderr: profileWarningLine ?? "",
+      exitCode,
+    };
   }
 
-  return { stdout: `${output}\n`, stderr: "", exitCode };
+  return { stdout: `${output}\n`, stderr: profileWarningLine ?? "", exitCode };
+}
+
+/**
+ * Narrows `options` into a resolved profile — either valid (returns its
+ * `standards`/`level`), an error (unknown name → exit 2 + valid-name
+ * listing), or a no-op (`--profile` wasn't passed). When the user
+ * passed `--profile` alongside `--standard` and/or `--level`, populates
+ * the `warning` line the scan command forwards to stderr so the agent
+ * can branch on `profile_overrides_standard_level` without inspecting
+ * the rest of the response.
+ */
+function resolveProfileFromOptions(
+  options: CliOptions,
+  userProfiles: readonly ConformanceProfile[],
+): {
+  readonly standards?: readonly string[];
+  readonly level?: "A" | "AA" | "AAA";
+  readonly warning?: string;
+  readonly error?: string;
+} {
+  if (options.profile === undefined) return {};
+  const profile = resolveProfile(options.profile, userProfiles);
+  if (profile === undefined) {
+    const builtin = BUILTIN_PROFILES.map((p) => p.name);
+    const user = userProfiles.map((p) => p.name);
+    const valid = [...builtin, ...user].join(", ");
+    return {
+      error: `ra11y: unknown profile \`${options.profile}\`. Valid profiles: ${valid}.\n`,
+    };
+  }
+  const warning = options.profileOverridesExplicit
+    ? "ra11y: warnings=profile_overrides_standard_level (profile wins over --standard/--level)\n"
+    : undefined;
+  return {
+    standards: profile.standards,
+    ...(profile.level === undefined ? {} : { level: profile.level }),
+    ...(warning === undefined ? {} : { warning }),
+  };
 }
 
 /**
