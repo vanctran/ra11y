@@ -15,7 +15,18 @@ import type { Severity } from "../../types/violation.ts";
 
 export type Effort = "trivial" | "moderate" | "significant";
 export type Category = "auto-fix" | "review" | "manual";
-export type Confidence = "high" | "medium" | "low";
+/**
+ * Agent-facing confidence axis.
+ *
+ * By default derived from severity — `error` → `high`, `warning` →
+ * `medium`, `info` → `low`. When the underlying Violation carries
+ * `confidence: "inherited"` (synthesized from a wrapper-definition
+ * finding per Q2R2-INHERITED / ADR 0012), the forwarder surfaces
+ * `"inherited"` verbatim so agents can branch/sort/route on it. Per
+ * CLAUDE.md §1 "Don't downgrade priority to hide things," `"inherited"`
+ * is not a suppression axis — every inherited finding is surfaced.
+ */
+export type Confidence = "high" | "medium" | "low" | "inherited";
 export type Safety = "safe" | "unsafe";
 
 /**
@@ -113,6 +124,19 @@ export interface AgentFinding {
    * repeating on every finding.
    */
   readonly suppressPlacement?: string;
+  /**
+   * Present on findings synthesized from another location — canonically,
+   * inherited findings at wrapper call sites whose root cause lives at
+   * a wrapper DEFINITION (Q2R2-INHERITED / ADR 0012). The agent should
+   * edit `sourceOfFinding`, not the call-site location. Omitted on
+   * primary findings per CLAUDE.md §1 "Ambiguous field shapes are
+   * dishonest."
+   */
+  readonly sourceOfFinding?: {
+    readonly filePath: string;
+    readonly line: number;
+    readonly column?: number;
+  };
 }
 
 export interface AgentFile {

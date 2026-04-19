@@ -113,6 +113,44 @@ export interface Violation {
   readonly fixPaths?: FixPaths;
   readonly snippet?: string;
   /**
+   * Scanner-level confidence that this is a real finding. Distinct from
+   * `severity` (which is the WCAG-side impact if real) and from the
+   * agent-response `Confidence` mirror that derives from severity. Four
+   * values:
+   *
+   *   - `"high"` / `"medium"` / `"low"` — classical confidence levels,
+   *     reserved for rules that want to signal probabilistic strength.
+   *     Most rules leave this field unset; forwarders treat "unset" as
+   *     "inherit from severity" (the agent-response layer does this).
+   *   - `"inherited"` — this finding was synthesized from a finding at
+   *     a wrapper DEFINITION (Q2R2-INHERITED). The real site that
+   *     needs fixing is `sourceOfFinding`; this location is a call site
+   *     surfaced so the agent sees the downstream impact. Agents MAY
+   *     branch on `"inherited"` to group, sort, or route, but per
+   *     CLAUDE.md §1 "Don't downgrade priority to hide things" the
+   *     scanner never hides inherited findings — every call site is
+   *     surfaced.
+   *
+   * Present-when-meaningful. Unset by default.
+   */
+  readonly confidence?: "high" | "medium" | "low" | "inherited";
+  /**
+   * When this finding was synthesized from another location (e.g.
+   * inherited from a wrapper definition, per Q2R2-INHERITED), points
+   * at the source of truth — the location the agent should fix.
+   * Absent on primary findings. Present-when-meaningful; forwarders
+   * use a conditional spread so `sourceOfFinding: undefined` never
+   * reaches the wire (CLAUDE.md §1 "Ambiguous field shapes are
+   * dishonest").
+   *
+   * See docs/adr/0012-wrapper-introspection-role.md.
+   */
+  readonly sourceOfFinding?: {
+    readonly filePath: string;
+    readonly line: number;
+    readonly column?: number;
+  };
+  /**
    * Stable identity for the finding — the same opaque token across
    * re-runs of the same scan, so an agent can verify "did my edit
    * close finding X?" by exact identity rather than fuzzy `(file,
