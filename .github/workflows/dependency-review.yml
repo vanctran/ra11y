@@ -1,0 +1,30 @@
+name: Dependency Review
+
+# Soft gate on PRs — runs GitHub's dependency-review action alongside
+# our in-house scripts/check-zero-deps.ts guard. Redundancy is
+# intentional: zero-dep is a CLAUDE.md §3 invariant and two
+# independent checks make accidental dependency additions much harder
+# to land. If this action flags a risky dependency before our guard
+# catches it, we treat it as a signal that the guard needs tightening.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
