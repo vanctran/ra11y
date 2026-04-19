@@ -36,6 +36,10 @@ import type { Location } from "./violation.ts";
  *   carries no `"fail"`-yielding source. Phase 1 bases this on the
  *   absence of `static` sources alone; later phases may additionally
  *   require positive runtime/attested evidence before promoting.
+ * - `"partial"` — the criterion has at least one `attested: "pass"`
+ *   source but the union of attested `ruleIds` does not cover every
+ *   rule that satisfies this criterion. Some slice was verified;
+ *   others were not. See ADR 0012.
  * - `"unknown"` — the criterion is manual-only, or the ledger has
  *   no source that speaks to it. Candidate sources do not move a
  *   criterion out of `"unknown"` — they point reviewers at locations
@@ -44,7 +48,7 @@ import type { Location } from "./violation.ts";
  *   in a text-only app, declared via an attestation). Reserved for
  *   Phase 2+; no Phase 1 producer emits this.
  */
-export type EvidenceStatus = "pass" | "fail" | "unknown" | "n/a";
+export type EvidenceStatus = "pass" | "fail" | "partial" | "unknown" | "n/a";
 
 /**
  * One input contributing to a criterion's verdict. Discriminated by
@@ -94,6 +98,14 @@ export type EvidenceSource =
       readonly reason: string;
       /** ISO-8601 timestamp the attestation was recorded. */
       readonly attestedAt: string;
+      /**
+       * Rule IDs this attestation covers. Omitted means "every rule that
+       * satisfies the criterion" (criterion-wide claim); present with one
+       * or more IDs means the attestation only speaks to those specific
+       * rules. Used by the coverage check in {@link EvidenceStatus} —
+       * see ADR 0012.
+       */
+      readonly ruleIds?: readonly string[];
       /** Attestation scope — defaults to `"project"` when omitted. */
       readonly scope?: "project" | "file" | "line";
       /** Location the attestation pins to, when `scope !== "project"`. */
@@ -146,6 +158,16 @@ export interface CriterionEvidence {
 export interface AttestationRecord {
   /** Criterion this attestation speaks to (`<standardId>:<localId>`). */
   readonly criterionId: string;
+  /**
+   * Rule IDs this attestation claims coverage for. Omitted means the
+   * attestation is criterion-wide — it fans out to every rule that
+   * satisfies the criterion. Present with one or more IDs means the
+   * attestation only speaks to those specific rules, which feeds the
+   * partial-coverage check in the ledger's status derivation.
+   *
+   * See ADR 0012.
+   */
+  readonly ruleIds?: readonly string[];
   /** Who attested — author, bot, runtime-tool-plus-CI, etc. */
   readonly by: string;
   /** Human-readable rationale. */

@@ -48,6 +48,17 @@ export interface BuildEvidenceLedgerInputs {
    */
   readonly attestations?: readonly AttestationRecord[];
   /**
+   * Returns the set of rule IDs that satisfy the given criterion. Used
+   * by the partial-coverage check in status derivation (ADR 0012): an
+   * attestation with explicit `ruleIds` only clears the criterion when
+   * the union of all attested `ruleIds` covers this rule set. Default
+   * returns an empty array — safe for tests that don't exercise the
+   * coverage path, but scanner wiring should pass
+   * `(id) => rulesRegistry.rulesFor(id)` so production derivation uses
+   * real rule sets.
+   */
+  readonly rulesForCriterion?: (criterionId: string) => readonly string[];
+  /**
    * ISO-8601 stamp for {@link EvidenceLedger.meta.generatedAt}. Default
    * `new Date().toISOString()`. Overridable so tests can pin the value
    * for deterministic assertions.
@@ -64,6 +75,7 @@ export function buildEvidenceLedger(inputs: BuildEvidenceLedgerInputs): Evidence
   const staticByCriterion = indexStaticSources(inputs.result.violations);
   const candidateByCriterion = indexCandidateSources(inputs.report.candidates ?? []);
   const attestedByCriterion = indexAttestedSources(inputs.attestations ?? []);
+  const rulesForCriterion = inputs.rulesForCriterion ?? (() => []);
 
   const entries: CriterionEvidence[] = [];
   for (const standard of inputs.standards) {
@@ -77,7 +89,12 @@ export function buildEvidenceLedger(inputs: BuildEvidenceLedgerInputs): Evidence
         criterionId: criterion.id,
         standardId: standard.id,
         automatable: criterion.automatable,
-        status: deriveStatus(criterion.automatable, staticSources, attestedSources),
+        status: deriveStatus(
+          criterion.automatable,
+          staticSources,
+          attestedSources,
+          rulesForCriterion(criterion.id),
+        ),
         sources,
       });
     }
@@ -170,6 +187,7 @@ function indexAttestedSources(
       by: a.by,
       reason: a.reason,
       attestedAt: a.attestedAt,
+      ...(a.ruleIds !== undefined && { ruleIds: a.ruleIds }),
       ...(a.scope !== undefined && { scope: a.scope }),
       ...(a.location !== undefined && { location: a.location }),
       ...(a.verdict !== undefined && { verdict: a.verdict }),
@@ -189,7 +207,8 @@ function compareAttestedSources(a: EvidenceSource, b: EvidenceSource): number {
 }
 
 /**
- * Phase 2 status derivation. Strict precedence:
+ * Phase 2 status derivation with ADR-0012 coverage check. Strict
+ * precedence:
  *
  *   1. Any `static` source OR any attested `"fail"` → `"fail"`. Static
  *      findings are in-tree evidence; they win over any claim to the
@@ -197,10 +216,23 @@ function compareAttestedSources(a: EvidenceSource, b: EvidenceSource): number {
  *      produces fail (author asserted a runtime failure the scanner
  *      couldn't see).
  *   2. Any attested `"n/a"` and no fail-evidence → `"n/a"`.
- *   3. Any attested `"pass"` (default verdict when omitted) → `"pass"`,
- *      even for manual criteria.
- *   4. Automatable (non-manual) criterion with no fail-evidence → `"pass"`.
- *   5. Otherwise (manual, with only candidate sources or none) → `"unknown"`.
+ *   3. Any attested `"pass"`, and either:
+ *        - `rulesForCriterion` is empty (purely manual — vacuous
+ *          coverage), OR
+ *        - at least one attestation omits `ruleIds` (criterion-wide
+ *          claim covers every satisfying rule), OR
+ *        - the union of `ruleIds` across pass-attestations ⊇
+ *          `rulesForCriterion`
+ *      → `"pass"`.
+ *   4. Any attested `"pass"` but the rule-coverage union is a proper
+ *      subset of `rulesForCriterion` → `"partial"`. Some slice was
+ *      verified; others remain unattested.
+ *   5. Automatable (non-manual) criterion with no fail-evidence and no
+ *      attestations → `"pass"` (absence of failure; the conformance
+ *      report promotes this to a `"no-evidence"` blocker when an
+ *      explicit attestation is required).
+ *   6. Otherwise (manual, with only candidate sources or none) →
+ *      `"unknown"`.
  *
  * Candidate sources never move a criterion's status — they point a
  * reviewer at locations but don't assert.
@@ -209,21 +241,62 @@ function deriveStatus(
   automatable: Automatability,
   staticSources: readonly EvidenceSource[],
   attestedSources: readonly EvidenceSource[],
+  rulesForCriterion: readonly string[],
 ): EvidenceStatus {
-  const hasStaticFail = staticSources.length > 0;
-  let hasAttestedFail = false;
-  let hasAttestedNA = false;
-  let hasAttestedPass = false;
-  for (const s of attestedSources) {
-    if (s.kind !== "attested") continue;
-    const verdict = s.verdict ?? "pass";
-    if (verdict === "fail") hasAttestedFail = true;
-    else if (verdict === "n/a") hasAttestedNA = true;
-    else hasAttestedPass = true;
-  }
-  if (hasStaticFail || hasAttestedFail) return "fail";
-  if (hasAttestedNA) return "n/a";
-  if (hasAttestedPass) return "pass";
+  const tally = tallyAttestations(attestedSources);
+  if (staticSources.length > 0 || tally.hasFail) return "fail";
+  if (tally.hasNA) return "n/a";
+  if (tally.hasPass) return derivePassStatus(tally, rulesForCriterion);
   if (automatable !== "manual") return "pass";
   return "unknown";
+}
+
+interface AttestationTally {
+  hasFail: boolean;
+  hasNA: boolean;
+  hasPass: boolean;
+  hasUniversalPass: boolean;
+  readonly passRules: Set<string>;
+}
+
+function tallyAttestations(sources: readonly EvidenceSource[]): AttestationTally {
+  const tally: AttestationTally = {
+    hasFail: false,
+    hasNA: false,
+    hasPass: false,
+    hasUniversalPass: false,
+    passRules: new Set(),
+  };
+  for (const s of sources) {
+    if (s.kind === "attested") absorbAttestation(tally, s);
+  }
+  return tally;
+}
+
+function absorbAttestation(
+  tally: AttestationTally,
+  source: Extract<EvidenceSource, { kind: "attested" }>,
+): void {
+  const verdict = source.verdict ?? "pass";
+  if (verdict === "fail") {
+    tally.hasFail = true;
+    return;
+  }
+  if (verdict === "n/a") {
+    tally.hasNA = true;
+    return;
+  }
+  tally.hasPass = true;
+  if (source.ruleIds === undefined) tally.hasUniversalPass = true;
+  else for (const r of source.ruleIds) tally.passRules.add(r);
+}
+
+function derivePassStatus(
+  tally: AttestationTally,
+  rulesForCriterion: readonly string[],
+): EvidenceStatus {
+  if (rulesForCriterion.length === 0) return "pass";
+  if (tally.hasUniversalPass) return "pass";
+  for (const r of rulesForCriterion) if (!tally.passRules.has(r)) return "partial";
+  return "pass";
 }

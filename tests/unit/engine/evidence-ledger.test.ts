@@ -333,6 +333,126 @@ describe("buildEvidenceLedger", () => {
     expect(ledger.entries[0]?.status).toBe("pass");
   });
 
+  it("covers the purely-manual vacuous case — S is empty, criterion-wide pass → pass", () => {
+    // Manual criterion, no rules satisfy it. Coverage check is vacuous —
+    // ⋃ ruleIds ⊇ ∅ is trivially true. Matches today's manual-attested-pass path.
+    const wcag22 = mkStandard("wcag22", [{ localId: "1.2.1", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:1.2.1")],
+      rulesForCriterion: () => [],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("pass");
+  });
+
+  it("treats a criterion-wide attestation (no ruleIds) as covering every satisfying rule → pass", () => {
+    // Automatable criterion with 3 rules. A criterion-wide attestation fans
+    // out to cover all three; the derivation emits pass.
+    const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:4.1.2")],
+      rulesForCriterion: (id) =>
+        id === "wcag22:4.1.2"
+          ? ["aria/role-invalid", "aria/required-attrs", "semantics/button-name"]
+          : [],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("pass");
+  });
+
+  it("marks a criterion as partial when attested ruleIds are a proper subset of satisfying rules", () => {
+    // Worked example: 13 rules satisfy wcag22:4.1.2; agent attests only
+    // one. The criterion is partially covered — not blocking on fail, but
+    // not a clean pass either.
+    const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
+    const rules = ["aria/role-invalid", "aria/required-attrs", "semantics/button-name"];
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:4.1.2", { ruleIds: ["semantics/button-name"] })],
+      rulesForCriterion: (id) => (id === "wcag22:4.1.2" ? rules : []),
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("partial");
+  });
+
+  it("promotes partial to pass once the attested ruleIds union covers every satisfying rule", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
+    const rules = ["aria/role-invalid", "aria/required-attrs", "semantics/button-name"];
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        mkAttestation("wcag22:4.1.2", {
+          by: "first",
+          ruleIds: ["aria/role-invalid", "aria/required-attrs"],
+        }),
+        mkAttestation("wcag22:4.1.2", {
+          by: "second",
+          ruleIds: ["semantics/button-name"],
+        }),
+      ],
+      rulesForCriterion: (id) => (id === "wcag22:4.1.2" ? rules : []),
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("pass");
+  });
+
+  it("rule-level attested fail dominates criterion-wide attested pass — fail wins", () => {
+    // Conflict resolution rule from ADR 0012: fail is load-bearing, even
+    // when a broader pass-attestation is also present.
+    const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        mkAttestation("wcag22:4.1.2", { by: "reviewer", verdict: "pass" }),
+        mkAttestation("wcag22:4.1.2", {
+          by: "axe-runtime",
+          verdict: "fail",
+          ruleIds: ["aria/required-attrs"],
+          reason: "axe-core flagged missing aria-required on one form",
+        }),
+      ],
+      rulesForCriterion: (id) =>
+        id === "wcag22:4.1.2" ? ["aria/role-invalid", "aria/required-attrs"] : [],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("fail");
+  });
+
+  it("propagates attestation ruleIds onto the attested EvidenceSource", () => {
+    const wcag22 = mkStandard("wcag22", [{ localId: "4.1.2", automatable: "full" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [mkAttestation("wcag22:4.1.2", { ruleIds: ["aria/required-attrs"] })],
+      rulesForCriterion: () => [],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    const attested = ledger.entries[0]?.sources[0];
+    expect(attested?.kind).toBe("attested");
+    if (attested?.kind === "attested") {
+      expect(attested.ruleIds).toEqual(["aria/required-attrs"]);
+    }
+  });
+
   it("sorts attested sources per criterion by (attestedAt, by, reason)", () => {
     const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
     const ledger = buildEvidenceLedger({

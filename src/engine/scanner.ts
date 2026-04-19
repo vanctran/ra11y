@@ -235,6 +235,7 @@ export function runScan(inputs: ScanInputs): ScanProducts {
     standards: inputs.standards,
     enabled,
     attestations: mergedAttestations,
+    rulesForCriterion: (id) => rulesRegistry.rulesFor(id),
     generatedAt: ledgerGeneratedAt,
   });
 

@@ -51,8 +51,16 @@ export interface ConformanceProfile {
  *   - `"candidate-only"` → the manual-review finder surfaced a
  *     location but no one has attested. Call `attest` or dismiss
  *     after reading.
+ *   - `"partially-attested"` → some rules under this criterion have
+ *     been attested but the union of attested `ruleIds` does not cover
+ *     every satisfying rule. Call `attest` with the missing `ruleIds`
+ *     (see ADR 0012).
  */
-export type ConformanceBlockerReason = "no-evidence" | "failing" | "candidate-only";
+export type ConformanceBlockerReason =
+  | "no-evidence"
+  | "failing"
+  | "candidate-only"
+  | "partially-attested";
 
 export interface ConformanceBlocker {
   readonly criterionId: string;
@@ -91,6 +99,7 @@ export interface ConformanceStatement {
   readonly summary: {
     readonly pass: number;
     readonly fail: number;
+    readonly partial: number;
     readonly unknown: number;
     readonly na: number;
   };
@@ -123,6 +132,7 @@ export function buildConformanceStatement(
   const blockers: ConformanceBlocker[] = [];
   let pass = 0;
   let fail = 0;
+  let partial = 0;
   let unknown = 0;
   let na = 0;
   for (const criterion of inScope) {
@@ -131,6 +141,7 @@ export function buildConformanceStatement(
     const status: EvidenceStatus = entry?.status ?? "unknown";
     if (status === "pass") pass += 1;
     else if (status === "fail") fail += 1;
+    else if (status === "partial") partial += 1;
     else if (status === "n/a") na += 1;
     else unknown += 1;
 
@@ -155,7 +166,7 @@ export function buildConformanceStatement(
     conformant: blockers.length === 0,
     criteriaInScope: inScope.length,
     blockers,
-    summary: { pass, fail, unknown, na },
+    summary: { pass, fail, partial, unknown, na },
   };
 }
 
@@ -173,7 +184,7 @@ export function renderConformanceMarkdown(statement: ConformanceStatement): stri
   lines.push(`- Generated: ${generatedAt}`);
   lines.push(`- Criteria in scope: ${criteriaInScope}`);
   lines.push(
-    `- Status: **${conformant ? "CONFORMANT" : "NOT CONFORMANT"}** (pass=${summary.pass}, fail=${summary.fail}, unknown=${summary.unknown}, n/a=${summary.na})`,
+    `- Status: **${conformant ? "CONFORMANT" : "NOT CONFORMANT"}** (pass=${summary.pass}, fail=${summary.fail}, partial=${summary.partial}, unknown=${summary.unknown}, n/a=${summary.na})`,
   );
   lines.push("");
   if (conformant) {
@@ -229,6 +240,7 @@ function classifyBlocker(
   entry: CriterionEvidence | undefined,
 ): ConformanceBlockerReason | null {
   if (status === "fail") return "failing";
+  if (status === "partial") return "partially-attested";
   if (status === "pass" || status === "n/a") {
     // Pass/n/a are only honest when they stand on a non-candidate
     // source. Without one, the "pass" is the automatable-with-no-
