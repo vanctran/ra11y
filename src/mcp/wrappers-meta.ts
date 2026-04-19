@@ -10,8 +10,12 @@
 
 import { readFile } from "node:fs/promises";
 import { walkJsxElements } from "../engine/ast-helpers.ts";
-import type { ParsedFile } from "../engine/scanner.ts";
+import type { ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverFiles } from "../input/discover.ts";
+import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
+import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import type { LoadedConfig } from "../types/config.ts";
+import type { Rule } from "../types/rule.ts";
 import type { McpSession } from "./session.ts";
 import { matchesWrapperPattern, wrapperPatternToTagRegexSource } from "./wrapper-matcher.ts";
 
@@ -89,6 +93,64 @@ export interface ResolvedWrapperSources {
    * no source supplied a mapping.
    */
   readonly elements: Readonly<Record<string, string>>;
+}
+
+/**
+ * Assembles the `NativeWrapperSources` payload for plain-scan tools
+ * (`scan`, `scan_file`, `scan_diff`) that do not run the auto-detect
+ * probe. Threads the flat names from file + session AND the parallel
+ * wrapper-to-element records so `runScanAndFormat` can forward the
+ * merged `activeNativeWrapperElements` map to the response envelope
+ * and pass it to `runScan` for rules opted-in via
+ * `Rule.wrapperTreatsAsElement`. The element fields are
+ * conditional-spread so they remain absent when the user stayed on
+ * the legacy array-form config — otherwise the response would emit
+ * `{}` for the element map, which reads as "present but empty"
+ * rather than "no mapping supplied" (CLAUDE.md §1).
+ */
+export function buildWrapperSourcesFromConfig(
+  projectConfig: LoadedConfig,
+  session: McpSession,
+): NativeWrapperSources {
+  const fileElements = projectConfig.nativeWrapperElements;
+  const sessionElements = session.config.nativeWrapperElements;
+  return {
+    fromFile: projectConfig.nativeWrappers,
+    ...(Object.keys(fileElements).length > 0 ? { fromFileElements: fileElements } : {}),
+    fromSession: session.config.nativeWrappers,
+    ...(Object.keys(sessionElements).length > 0 ? { fromSessionElements: sessionElements } : {}),
+  };
+}
+
+/**
+ * Packs the inputs to `runScan` into a single options object, threading
+ * the conditional `attestations` / `processes` / `nativeWrapperElements`
+ * keys. Lives here so these branches stay out of `runScanAndFormat` and
+ * its cognitive-complexity score stays inside Biome's budget.
+ */
+export function buildRunScanOptions(args: {
+  readonly activeRules: readonly Rule[];
+  readonly enabled: readonly string[];
+  readonly files: readonly ParsedFile[];
+  readonly level: "A" | "AA" | "AAA";
+  readonly attestations: readonly import("../types/evidence.ts").AttestationRecord[];
+  readonly processes: readonly import("../types/config.ts").Process[] | undefined;
+  readonly wrapperElements: Readonly<Record<string, string>>;
+}): Parameters<typeof runScan>[0] {
+  const { activeRules, enabled, files, level, attestations, processes, wrapperElements } = args;
+  return {
+    standards: BUILTIN_STANDARDS,
+    rules: activeRules,
+    enabled,
+    files,
+    finders: BUILTIN_CANDIDATE_FINDERS,
+    level,
+    ...(attestations.length > 0 && { attestations }),
+    ...(processes !== undefined && processes.length > 0 && { processes }),
+    ...(Object.keys(wrapperElements).length > 0 && {
+      nativeWrapperElements: wrapperElements,
+    }),
+  };
 }
 
 /**
@@ -186,17 +248,29 @@ export interface ActiveNativeWrapper {
 
 /**
  * Assembles the wrapper-related meta block: a unified tagged
- * `activeNativeWrappers` list, the session-override audit prose, and
- * the unused-in-config audit. Each sub-block is conditionally
- * included only when there's content to report — no sentinel-empty
- * fields.
+ * `activeNativeWrappers` list, the parallel `activeNativeWrapperElements`
+ * map (wrapper → native element) when the user supplied the object form
+ * of `Config.nativeWrappers`, the session-override audit prose, and the
+ * unused-in-config audit. Each sub-block is conditionally included only
+ * when there's content to report — no sentinel-empty fields.
  */
 export function wrappersMetaBlock(args: {
   sessionOnly: readonly string[];
   unusedWrappers: readonly string[];
   wrapperProvenance: ResolvedWrapperSources["bySource"];
+  /**
+   * Merged wrapper → native-element map across file + session sources.
+   * Surfaces as `activeNativeWrapperElements` so agents can round-trip
+   * the object form of `Config.nativeWrappers` via MCP. Omitted entirely
+   * when empty per CLAUDE.md §1 "Ambiguous field shapes are dishonest"
+   * — a `{}` value would read as "present but empty" rather than "no
+   * mapping supplied." Optional so callers that never consume the
+   * object form (today: `list_suppressions`) can omit it without
+   * tripping the honest-shape rule.
+   */
+  wrapperElements?: Readonly<Record<string, string>>;
 }): Record<string, unknown> {
-  const { sessionOnly, unusedWrappers, wrapperProvenance } = args;
+  const { sessionOnly, unusedWrappers, wrapperProvenance, wrapperElements } = args;
   const out: Record<string, unknown> = {};
   // The surface contract: emit `activeNativeWrappers` when ANY wrapper
   // signal is present — including auto-detect `assumed` names that
@@ -206,6 +280,15 @@ export function wrappersMetaBlock(args: {
   // signal the agent needs to investigate.
   const entries = buildActiveWrapperEntries(wrapperProvenance);
   if (entries.length > 0) out["activeNativeWrappers"] = entries;
+  // Parallel element-mapping surface. Populated only when at least one
+  // source contributed a wrapper → element mapping (object-form
+  // ra11y.config.ts or `sessionConfigure` with the object form).
+  // Session entries layer on top of file entries at resolve time, so
+  // the shape here is the merged result — agents don't need to
+  // re-reconcile provenance to reconstruct the map.
+  if (wrapperElements !== undefined && Object.keys(wrapperElements).length > 0) {
+    out["activeNativeWrapperElements"] = wrapperElements;
+  }
   if (sessionOnly.length > 0) {
     // Agents editing ra11y.config.ts need to know when a session
     // configure() call is layering extras on top of the file — without

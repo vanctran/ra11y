@@ -165,7 +165,7 @@ export const scanProjectTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
-      buildWrapperSources(projectConfig.nativeWrappers, session.config.nativeWrappers, classified),
+      buildWrapperSources(projectConfig, session, classified),
       root,
       params["verboseMeta"] === true,
       skipCriterion,
@@ -323,16 +323,26 @@ function classifyIfAutoDetect(
  * `confirmed: true|false`. The `fromAutoDetect` key is omitted
  * entirely when autoDetect produced no candidates, so the shape
  * never ships an empty `{confirmed: [], assumed: []}`.
+ *
+ * The `fromFileElements` / `fromSessionElements` maps thread through
+ * so `activeNativeWrapperElements` shows up in the response envelope
+ * and wrapper-opt-in rules see the object form via `RuleContext`.
+ * Both fields are conditional-spread so array-form configs stay
+ * identical on the wire.
  */
 function buildWrapperSources(
-  fromFile: readonly string[],
-  fromSession: readonly string[],
+  projectConfig: import("../types/config.ts").LoadedConfig,
+  session: import("./session.ts").McpSession,
   classified: { readonly confirmed: readonly string[]; readonly assumed: readonly string[] },
 ): NativeWrapperSources {
   const autoDetectHasAny = classified.confirmed.length > 0 || classified.assumed.length > 0;
+  const fileElements = projectConfig.nativeWrapperElements;
+  const sessionElements = session.config.nativeWrapperElements;
   return {
-    fromFile,
-    fromSession,
+    fromFile: projectConfig.nativeWrappers,
+    ...(Object.keys(fileElements).length > 0 ? { fromFileElements: fileElements } : {}),
+    fromSession: session.config.nativeWrappers,
+    ...(Object.keys(sessionElements).length > 0 ? { fromSessionElements: sessionElements } : {}),
     ...(autoDetectHasAny ? { fromAutoDetect: classified } : {}),
   };
 }

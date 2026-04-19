@@ -52,6 +52,7 @@ import {
   textResult,
 } from "./tools-helpers.ts";
 import { warningsField, warningsFieldFromScanMeta } from "./warnings.ts";
+import { buildWrapperSourcesFromConfig } from "./wrappers-meta.ts";
 
 export type { McpTool, McpToolDef, McpToolResult } from "./tools-helpers.ts";
 
@@ -158,10 +159,7 @@ const scanTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
-      {
-        fromFile: projectConfig.nativeWrappers,
-        fromSession: session.config.nativeWrappers,
-      },
+      buildWrapperSourcesFromConfig(projectConfig, session),
       cwd,
       params["verboseMeta"] === true,
     );
@@ -289,10 +287,7 @@ const scanFileTool: McpTool = {
       standards,
       strParam(params, "minSeverity"),
       session.effectiveRules(projectConfig),
-      {
-        fromFile: projectConfig.nativeWrappers,
-        fromSession: session.config.nativeWrappers,
-      },
+      buildWrapperSourcesFromConfig(projectConfig, session),
       configSearchBase,
       params["verboseMeta"] === true,
     );
@@ -475,10 +470,18 @@ const sessionConfigureTool: McpTool = {
           additionalProperties: { type: "string", enum: ["error", "warning", "info", "off"] },
         },
         nativeWrappers: {
-          type: "array",
-          items: { type: "string" },
+          oneOf: [
+            {
+              type: "array",
+              items: { type: "string" },
+            },
+            {
+              type: "object",
+              additionalProperties: { type: "string" },
+            },
+          ],
           description:
-            'PascalCase components you\'ve verified wrap a native interactive element (<button>, <a>, etc.). Info-level keyboard/handler-missing notes on these components will be suppressed. Example: ["Button", "ActionButton", "IconButton"]. Additive across calls.',
+            'PascalCase components you\'ve verified wrap a native interactive element (<button>, <a>, etc.). Two accepted shapes:\n\n  • Flat names array — `["Button", "ActionButton", "IconButton"]`. Info-level keyboard/handler-missing notes on these components are suppressed; wrapper-opt-in rules (`media/alt-text-missing`, `navigation/link-descriptive-text`, `forms/labels-required`) do NOT pick them up because the native element target is unknown.\n  • Object map — `{ Button: "button", ActionButton: "button", RouterLink: "a", Avatar: "img" }`. In addition to suppression, wrapper-opt-in rules treat these components as the mapped native element and fire/pass accordingly. Surfaces on the response as `activeNativeWrapperElements`.\n\nAdditive across calls: per-key merge on the object form (later entries refine prior ones for the same wrapper); union on the array form.',
         },
         allowWrite: {
           type: "boolean",

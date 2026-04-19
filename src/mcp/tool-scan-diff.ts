@@ -51,6 +51,7 @@ import {
   strParam,
   textResult,
 } from "./tools-helpers.ts";
+import { buildWrapperSourcesFromConfig } from "./wrappers-meta.ts";
 
 export const scanDiffTool: McpTool = {
   def: {
@@ -199,10 +200,7 @@ async function handleBaselineMode(
     standards,
     strParam(params, "minSeverity"),
     session.effectiveRules(projectConfig),
-    {
-      fromFile: projectConfig.nativeWrappers,
-      fromSession: session.config.nativeWrappers,
-    },
+    buildWrapperSourcesFromConfig(projectConfig, session),
     cwd,
     params["verboseMeta"] === true,
   );
@@ -323,10 +321,7 @@ async function handleHunksMode(
     standards,
     strParam(params, "minSeverity"),
     session.effectiveRules(projectConfig),
-    {
-      fromFile: projectConfig.nativeWrappers,
-      fromSession: session.config.nativeWrappers,
-    },
+    buildWrapperSourcesFromConfig(projectConfig, session),
     cwd,
     params["verboseMeta"] === true,
   );

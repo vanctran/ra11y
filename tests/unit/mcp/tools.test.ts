@@ -1325,3 +1325,161 @@ describe("MCP tool: suggest_fix", () => {
     expect(data.kind).toBe("none");
   });
 });
+
+describe("nativeWrapperElements round-trip through MCP handlers", () => {
+  // Guards that `LoadedConfig.nativeWrapperElements` surfaces on the
+  // scan response envelope as `activeNativeWrapperElements` when the
+  // user has authored the object form of `Config.nativeWrappers`, and
+  // stays absent otherwise (honest-shape per CLAUDE.md §1 — an empty
+  // `{}` would read as "present but empty" rather than "no mapping").
+  // Exercises the three entry points: scan_project (config-on-disk),
+  // scan_file (config-on-disk), sessionConfigure (ephemeral object
+  // form layered on top of a file-less session).
+
+  it("scan_project with object-form nativeWrappers surfaces activeNativeWrapperElements", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapmap-mcp-object-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.json"),
+      JSON.stringify({
+        nativeWrappers: { Button: "button", RouterLink: "a", Avatar: "img" },
+      }),
+    );
+    await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <Button />;");
+
+    const tool = findTool("scan_project");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { activeNativeWrapperElements?: Readonly<Record<string, string>> };
+    };
+    expect(data.meta.activeNativeWrapperElements).toEqual({
+      Button: "button",
+      RouterLink: "a",
+      Avatar: "img",
+    });
+  });
+
+  it("scan_project with array-form nativeWrappers omits activeNativeWrapperElements", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapmap-mcp-array-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.json"),
+      JSON.stringify({ nativeWrappers: ["Button", "RouterLink"] }),
+    );
+    await writeFile(joinPath(dir, "app.tsx"), "export const App = () => <Button />;");
+
+    const tool = findTool("scan_project");
+    const session = new McpSession();
+    const result = await tool.handler({ cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { activeNativeWrapperElements?: Readonly<Record<string, string>> };
+    };
+    // Names are present in the tagged list (array form still registers
+    // them), but the element-mapping surface is absent because the
+    // legacy shape supplies no mapping.
+    expect(data.meta.activeNativeWrapperElements).toBeUndefined();
+  });
+
+  it("scan_file with object-form nativeWrappers surfaces activeNativeWrapperElements", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapmap-mcp-scan-file-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.json"),
+      JSON.stringify({ nativeWrappers: { IconButton: "button" } }),
+    );
+    const appPath = joinPath(dir, "app.tsx");
+    await writeFile(appPath, "export const App = () => <IconButton />;");
+
+    const tool = findTool("scan_file");
+    const session = new McpSession();
+    const result = await tool.handler({ path: appPath, cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      plan: Record<string, unknown>;
+      meta: { activeNativeWrapperElements?: Readonly<Record<string, string>> };
+    };
+    expect(data.meta.activeNativeWrapperElements).toEqual({ IconButton: "button" });
+  });
+
+  it("sessionConfigure accepts the object form and layers it onto the session element map", async () => {
+    // The object shape must reach session.config.nativeWrapperElements
+    // through the schema + handler path. We verify via session state
+    // (the canonical source) rather than via a scan — keeps the test
+    // scoped to the MCP-configure wiring.
+    const tool = findTool("sessionConfigure");
+    const session = new McpSession();
+    await tool.handler({ nativeWrappers: { Button: "button", RouterLink: "a" } }, session);
+    expect(session.config.nativeWrapperElements).toEqual({
+      Button: "button",
+      RouterLink: "a",
+    });
+    // Folded into the flat names list too, so consumers that only read
+    // `nativeWrappers` see the object-form contributions.
+    expect([...session.config.nativeWrappers].sort()).toEqual(["Button", "RouterLink"]);
+  });
+
+  it("sessionConfigure object-form surfaces activeNativeWrapperElements on a subsequent scan", async () => {
+    // End-to-end wiring: agent configures the map via MCP, then calls
+    // scan — the response envelope must carry the mapping back so the
+    // round-trip is complete. Uses `scan` (paths-based) to keep the
+    // fixture minimal.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapmap-mcp-session-"));
+    const appPath = joinPath(dir, "app.tsx");
+    await writeFile(appPath, "export const App = () => <IconButton />;");
+
+    const configure = findTool("sessionConfigure");
+    const session = new McpSession();
+    await configure.handler({ nativeWrappers: { IconButton: "button" } }, session);
+
+    const scan = findTool("scan");
+    const result = await scan.handler({ paths: [appPath], cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { activeNativeWrapperElements?: Readonly<Record<string, string>> };
+    };
+    expect(data.meta.activeNativeWrapperElements).toEqual({ IconButton: "button" });
+  });
+
+  it("session element map layers on top of file element map (session wins on collision)", async () => {
+    // Mirrors the name-side precedence: a `sessionConfigure` override
+    // for a key present in ra11y.config.ts replaces the file value in
+    // the merged `activeNativeWrapperElements`. Agents refining a
+    // mapping mid-session don't need to restate the whole object.
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+
+    const dir = await mkdtemp(joinPath(tmpdir(), "ra11y-wrapmap-mcp-merge-"));
+    await writeFile(
+      joinPath(dir, "ra11y.config.json"),
+      JSON.stringify({ nativeWrappers: { Button: "button", Card: "div" } }),
+    );
+    const appPath = joinPath(dir, "app.tsx");
+    await writeFile(appPath, "export const App = () => <Button />;");
+
+    const configure = findTool("sessionConfigure");
+    const session = new McpSession();
+    // Override the file's `Button: "button"` with `Button: "a"` for
+    // the session. Card stays at the file's value.
+    await configure.handler({ nativeWrappers: { Button: "a" } }, session);
+
+    const scan = findTool("scan_project");
+    const result = await scan.handler({ cwd: dir }, session);
+    const data = JSON.parse(result.content[0].text) as {
+      meta: { activeNativeWrapperElements?: Readonly<Record<string, string>> };
+    };
+    expect(data.meta.activeNativeWrapperElements).toEqual({ Button: "a", Card: "div" });
+  });
+});

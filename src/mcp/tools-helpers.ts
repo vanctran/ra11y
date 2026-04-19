@@ -17,25 +17,23 @@ import {
   buildAgentFinding,
   countFixes,
 } from "../output/agent-response/index.ts";
-import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import type { Rule } from "../types/rule.ts";
 import type { Standard } from "../types/standard.ts";
 import type { Violation } from "../types/violation.ts";
-import { buildAnalysisCoverage } from "./analysis-coverage.ts";
 import { detectApplicability, isLikelyIrrelevant } from "./manual-applicability.ts";
-import { buildPlanSummary } from "./plan-summary.ts";
 import { buildReferenceGuide } from "./reference-guide.ts";
 import { buildRuleCoverageDerivative } from "./rule-coverage-derivative.ts";
+import { buildScanMeta, buildScanPlan } from "./scan-assembly.ts";
 import type { McpSession } from "./session.ts";
-import { suppressionAudit, suppressionsMetaBlock } from "./suppression-audit.ts";
+import { suppressionAudit } from "./suppression-audit.ts";
 import { nameMatchesAnyWrapper } from "./wrapper-matcher.ts";
 import {
+  buildRunScanOptions,
   type NativeWrapperSources,
   resolveUnusedWrappers,
   resolveWrapperSources,
-  wrappersMetaBlock,
 } from "./wrappers-meta.ts";
 
 export { buildAnalysisCoverage } from "./analysis-coverage.ts";
@@ -407,17 +405,6 @@ function collectManualCriteria(
   return seen;
 }
 
-/** Tally parseable files by extension — surfaces coverage gaps at a glance. */
-function countByExtension(files: readonly ParsedFile[]): Record<string, number> {
-  const counts = new Map<string, number>();
-  for (const f of files) {
-    const dot = f.filePath.lastIndexOf(".");
-    const ext = dot === -1 ? "(no-ext)" : f.filePath.slice(dot);
-    counts.set(ext, (counts.get(ext) ?? 0) + 1);
-  }
-  return Object.fromEntries([...counts.entries()].sort(([a], [b]) => a.localeCompare(b)));
-}
-
 // ─── Shared scan+format ─────────────────────────────────────────────────────
 
 /**
@@ -538,22 +525,23 @@ export async function runScanAndFormat(
   const effective = ruleSettings ?? session.config.rules;
   const activeRules = applyRuleSettings(BUILTIN_RULES, effective);
   const attestations = await loadDurableAttestations(cwd ?? process.cwd());
-  const { result, report, perRuleCoverage } = runScan({
-    standards: BUILTIN_STANDARDS,
-    rules: activeRules,
-    enabled,
-    files,
-    finders: BUILTIN_CANDIDATE_FINDERS,
-    level: session.config.level,
-    ...(attestations.length > 0 && { attestations }),
-    ...(processes !== undefined && processes.length > 0 && { processes }),
-  });
-
   const {
     wrappers,
     sessionOnly,
     bySource: wrapperProvenance,
+    elements: wrapperElements,
   } = resolveWrapperSources(wrapperSources, session);
+  const { result, report, perRuleCoverage } = runScan(
+    buildRunScanOptions({
+      activeRules,
+      enabled,
+      files,
+      level: session.config.level,
+      attestations,
+      processes,
+      wrapperElements,
+    }),
+  );
   const { violations: withoutWrapperNoise } = dropWrapperNoise(result.violations, wrappers);
   const unusedWrappers = await resolveUnusedWrappers(wrappers, files, cwd);
   const severityFiltered = filterBySeverity(withoutWrapperNoise, minSeverity);
@@ -611,95 +599,33 @@ export async function runScanAndFormat(
   // consumer" here too.
   const ruleCoverageDerivative = buildRuleCoverageDerivative(perRuleCoverage, filtered);
   const formatted: ScanFormatted = {
-    plan: {
+    plan: buildScanPlan({
       totalFindings: filtered.length,
       violations: violations.length,
       notes: notes.length,
-      // Split mechanical edits from prose-only guidance so an agent can
-      // size batch-apply work separately from copy-rewrite routing. Both
-      // keys are omitted when zero (CLAUDE.md §1 "Ambiguous field shapes
-      // are dishonest" — don't emit `: 0` as data-vs-absent).
-      ...(mechanicalEdits > 0 ? { mechanicalEditsAvailable: mechanicalEdits } : {}),
-      ...(guidanceFixes > 0 ? { guidanceFixesAvailable: guidanceFixes } : {}),
-      // Rule-level violations with no suggestion at all — distinct from
-      // the manual-review counters below, which count WCAG criteria
-      // static analysis can't evaluate. Omitted when zero so a clean
-      // scan doesn't pair it visually with the manual counters.
-      ...(violationsWithoutAnyFix > 0
-        ? { violationsWithoutSuggestion: violationsWithoutAnyFix }
-        : {}),
-      // Actionable manual-review items come first so the summary and the
-      // plan object agree on what agents should budget against: grounded
-      // candidates with file:line, NOT the inflated composite that used
-      // to lead.
-      actionableManualItems: actionableManual,
-      // Bare-criterion prompts — applicable manual criteria the finders
-      // could not ground in code. Agents can dismiss most of these in
-      // one read; keeping them as their own top-level count (not a
-      // sub-field of a composite) is the honest shape.
+      mechanicalEdits,
+      guidanceFixes,
+      violationsWithoutAnyFix,
+      actionableManual,
       untargetedCriteria,
-      // Structured out-of-scope checks. Emitted on EVERY scan (P2-N) —
-      // not just clean ones — so an agent inspecting a mixed-result
-      // response can't overclaim conformance on the strength of a few
-      // findings. Pairing with the MCP server-instructions text is
-      // deliberate: the structured field is the authoritative source
-      // for agents; the prose is for humans.
-      limitations: [
-        "Runtime-only checks (focus traps, live regions, ARIA state updates, post-render color contrast) were not performed — pair with axe-core in Playwright/Vitest for the runtime half.",
-        "Static analysis can prove failure but not conformance: a clean scan is necessary, not sufficient. Do not claim WCAG conformance on this result alone.",
-      ],
-      summary: buildPlanSummary({
-        violations: violations.length,
-        notes: notes.length,
-        mechanicalEdits,
-        guidanceFixes,
-        actionableManual,
-        untargetedCriteria,
-      }),
-    },
+    }),
     files: fileEntries,
-    meta: {
+    meta: buildScanMeta({
       filesScanned: result.filesScanned,
-      // Per-extension counts build confidence that the scan actually saw
-      // the file types agents expect (e.g., "0 .css scanned" is a red flag
-      // if the repo has CSS). Cheap to compute, sorted for determinism.
-      filesByExtension: countByExtension(files),
-      // Count of rules that actually ran after "off" filtering. Without
-      // this, a "pass: true" with no findings is indistinguishable from
-      // "no applicable rules matched" — agents need to know whether the
-      // scan had teeth.
-      rulesEvaluated: activeRules.length,
-      durationMs: Math.round(result.durationMs),
-      standards: [...result.enabledStandards].sort(),
-      ...wrappersMetaBlock({ sessionOnly, unusedWrappers, wrapperProvenance }),
-      // Honest meta about what static analysis couldn't reach, so the
-      // agent can calibrate confidence in "automated clean." Each entry
-      // is a structural gap, not a heuristic guess — the fields are
-      // empty/omitted when there's nothing to report.
-      ...buildAnalysisCoverage(
-        files,
-        wrappers,
-        activeRules,
-        verboseMeta,
-        wrapperProvenance.fromAutoDetect.confirmed.length,
-        preset,
-      ),
-      // Audit trail for every in-source `ra11y-disable` pragma the scan
-      // encountered, with the captured reason text when supplied. Keeps
-      // suppressions visible and accountable — an agent reviewing a
-      // clean scan can see where silence was bought. Omitted when no
-      // pragmas exist in any scanned file.
-      ...suppressionsMetaBlock(suppressions),
-      // Per-rule evaluation telemetry: for each active rule with an
-      // extension gate, how many eligible files existed and how many
-      // actually ran. Low-confidence rows carry a `reason` +
-      // `remediation` so an agent can act on the gap (canonical case:
-      // Tailwind pre-build where `contrast/minimum` runs on 0 eligible
-      // CSS files and the headline 0 findings is meaningless without
-      // this context). Omitted when the array is empty so clean scans
-      // on non-extension-gated rule sets don't ship an empty field.
-      ...(perRuleCoverage.length > 0 ? { perRuleCoverage } : {}),
-    },
+      files,
+      activeRules,
+      durationMs: result.durationMs,
+      enabledStandards: result.enabledStandards,
+      wrappers,
+      sessionOnly,
+      unusedWrappers,
+      wrapperProvenance,
+      wrapperElements,
+      verboseMeta,
+      preset,
+      suppressions,
+      perRuleCoverage,
+    }),
     ...(referenceGuide === undefined ? {} : { referenceGuide }),
     ...(ruleCoverageDerivative === null ? {} : { ruleCoverage: ruleCoverageDerivative }),
   };
