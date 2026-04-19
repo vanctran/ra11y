@@ -9,6 +9,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked (reason i
 - **v0.1.0 — ready to tag.** Code-complete: 54 rules, 4 standards, 9 formatters, 10 MCP tools, 4 reports, CLI wired, release workflow configured. Remaining work is the demo + the tag + publish (Track D).
 - **v0.2.0 — in flight.** MCP hardening (Track M), review-candidate coverage + focus-ring cross-ref (Track R), real-world fixture corpus (Track F). Target: 3–4 weeks post-0.1.0.
 - **v0.3.0+ — staged, not started.** MCP sampling (Track S), ecosystem integrations + public benchmark (Track E). Phase 20 work is deliberately deferred until after 0.2.0 ships and user feedback tells us which sampling-backed tool matters most. See ADR 0005 for the sampling architecture.
+- **v1.0.0 — readiness (Track V).** Conformance capstone work is done in Track C. Remaining v1.0 gates are coverage-matrix reconciliation, fix-suggestion audit, prompt template discoverability, performance baseline, deferred-decision resolution (rule renames, ADR 0003, ADR 0010, ADR 0005 sampling tools), and a real-world fixture push into rule-territory (forms/nav/dialog/table/live-region). Derived from 2026-04-19 three-agent gap analysis.
 
 ## Dispatch model (parallel tracks, not sequential phases)
 
@@ -339,6 +340,56 @@ Track S speculative tools (`verdict-candidate`, `draft-vpat-narrative`, `resolve
 - **Embed axe-core as a runtime dep.** Rejected per **§3 invariant 1** (zero runtime deps). Parse axe's JSON output; don't pull axe-core into the install. Agents already run axe in their test harness; they hand us the JSON path.
 - **In-tool headless browser (Playwright / Puppeteer).** Rejected per zero-deps + MCP-first-consumer framing — the agent already runs the browser in its test harness. We ingest; we don't drive.
 - **Blanket "ra11y verifies conformance" marketing.** Rejected — the conformance statement will cite evidence sources; ra11y is the aggregator, the attestation is the agent's (or human's) word, and the signed bundle is what survives audit. Honesty > reach.
+
+---
+
+## Track V — v1.0.0 readiness
+
+Owner: main session + `doc-writer` + `fixture-curator` + `test-author` + specialists as indicated per item. Source: 2026-04-19 three-agent gap analysis (rule coverage vs WCAG 2.1/2.2 A+AA, MCP shape discipline, backlog + semver + CI infra). The conformance capstone in Track C is shipped; these are the remaining gates for the "find all violations" bar.
+
+No item here proposes new rule detection logic — Track V is about honesty surfaces, decision closure, and coverage verification. Items that WOULD add detection get logged as Track R or Track C items.
+
+### v1.0.0 — coverage honesty
+
+- [ ] **V1-COVERAGE-MATRIX** Authoritative rule-plus-finder coverage matrix published at `docs/kb/standards/coverage.md` with per-criterion rows for WCAG 2.1 + 2.2 A/AA/AAA, Section 508, EN 301 549, ADA. Each row: criterion id, title, rules covering it, finders covering it, "automatable" flag per standard data, actual coverage verdict (`rule` / `finder` / `attestation-only` / `gap`). Generator script under `scripts/generate-coverage-matrix.ts` reading `src/standards/`, `src/rules/`, `src/review/finders/` so the matrix can't drift. Owner: `doc-writer` + `spec-researcher`. Acceptance: CI drift check (`scripts/check-coverage-matrix.ts`) or fold into `check-kb-drift.ts`. Reconciles the 2026-04-19 gap-analysis count discrepancy (agent #1: 22 uncovered; real: ≤5 after finders are counted).
+- [ ] **V1-CRITERION-KB** Per-criterion KB entry under `docs/kb/criteria/<standard>/<id>.md` for every manual / untargeted criterion. Dense, headed, ≤200 lines; retrievable via `ra11y-kb://` resources. Template text replaces the 9-entry `GUIDANCE_BY_ID` map in `src/reports/checklist.ts` — checklist reads from the KB via the resource index, not a hardcoded constant. Owner: `spec-researcher` + main session. Acceptance: every criterion id in the coverage matrix (V1-COVERAGE-MATRIX) resolves to a KB file; `GUIDANCE_BY_ID` is removed or shrinks to a fallback lookup.
+- [ ] **V1-FIX-AUDIT** Per-rule audit of fix suggestions against CLAUDE.md §3 invariant 5 (context-aware, not generic). Produce `docs/kb/rules/fix-suggestion-audit.md` with per-rule rows — current fix text, context inputs used, audit verdict (`context-aware` / `generic` / `caveat-only`), fix actions. Rules marked `generic` get tightened in follow-up commits (per rule, `feat(rules): context-aware fix for <rule>`). Acceptance: zero rows marked `generic` at v1.0 tag. Owner: `rule-implementer` in review mode.
+- [ ] **V1-FIX-RANK-DOC** Document the `suggest_fix` guidance ranking rule in `docs/kb/patterns/suggest-fix-ranking.md` — why `primary` outranks `alternatives`, how `fixClass` (`mechanical` / `guidance` / `caveat`) interacts with the ranking, which rules emit guidance-only responses. Additive field `confidenceRationale?: string` on `suggest_fix` guidance responses is an alternative path — decide in the doc. Owner: `doc-writer`.
+
+### v1.0.0 — surface discoverability
+
+- [ ] **V1-PROMPT-LINK** Wire prompt templates (`audit`, `fix`, `triage`, `vpat-narrative`) into `nextStep` / `nextStepStructured` guidance on `scan_project`, `scan`, `review_candidates`, `checklist` where the workflow is a match. Agents discover templates via `prompts/list` but don't know which tool's `nextStep` should nudge toward which template. Acceptance: each canonical workflow end-point (clean scan → attest; manual review → triage; violation list → audit draft) references the right template by name. Owner: main session.
+
+### v1.0.0 — real-world fixture push
+
+Track F shipped 10 fixtures, all guarding scanner infrastructure (wrappers, templates, TSX generics). Zero fixtures exercise rule-territory behavior in production-like shape. Each item below lands one sanitized fixture under `tests/fixtures/real-world/<case>/` with `source/` + `assertions.ts`, following the ADR 0006 harness. Dispatch in parallel — independent fixtures.
+
+- [ ] **V1-FIXTURE-FORMS** Real-world forms fixture — validation flow, required indicators, server-error binding, aria-describedby tying. Asserts the shipped form rules (`forms/labels-required`, `forms/fieldset-legend`, `forms/required-indicator-missing`, `forms/autocomplete-missing`) + finders (`validation-timing`, `error-identification`, `server-error-untied`) fire the expected candidates. Owner: `fixture-curator`.
+- [ ] **V1-FIXTURE-NAV** Real-world navigation fixture — landmarks, skip link, consistent-nav across two route files. Asserts `navigation/skip-link`, `navigation/link-descriptive-text`, `semantics/landmark-main`, `consistent-navigation` finder behavior. Owner: `fixture-curator`.
+- [ ] **V1-FIXTURE-DIALOG** Real-world dialog/modal fixture — `role="dialog"`, focus-trap expectation (runtime-only → `verify-in-source` fix class), labelled-by / described-by binding. Asserts the aria rules + `couldBeWrongBecause` flagging where appropriate. Owner: `fixture-curator`.
+- [ ] **V1-FIXTURE-TABLE** Real-world data-table fixture — simple + scoped-header + complex-header table; surface rule + finder behavior. Exercises `semantics/table-headers` (if it exists; otherwise flag to Track R). Owner: `fixture-curator`.
+- [ ] **V1-FIXTURE-LIVE-REGION** Real-world live-region fixture — `aria-live="polite"` status container + dynamic update pattern. Asserts `aria/live-region-valid` + `couldBeWrongBecause: ["runtime_behavior_required"]` where scan can't prove anything actually updates. Owner: `fixture-curator`.
+- [ ] **V1-FIXTURE-ATTEST** Real-world attest-bridge fixture — synthetic axe-core JSON + synthetic Lighthouse JSON under `tests/fixtures/real-world/attest-axe/` and `tests/fixtures/real-world/attest-lighthouse/`; assertions verify the agent bridging pattern (`attest` accepts the hand-rolled payload). Pairs with `docs/kb/patterns/bridging-runtime-a11y.md` — the doc is the deliverable, the fixtures are the executable proof. Respects the "no vendor-specific runtime ingest adapters" memory (§1 — adapters stay out of `src/`; the bridge lives in the doc + fixture pattern). Owner: `fixture-curator` + `doc-writer`.
+
+### v1.0.0 — deferred-decision closure
+
+Each item closes one deferred ADR or semver-major decision. Acceptance for each: an ADR marked Accepted (or Superseded / Rejected) + the corresponding backlog item flipped.
+
+- [ ] **V1-RULE-RENAME-DECIDE** Resolve the rule-catalog reorganization previously deferred (Track Q-2 "Deferred", line ~238). Decide: rename with one-major deprecation aliases now (costs semver major), or accept current names as stable. ADR 0018 captures the decision. If renames proceed, generate alias map + deprecation warnings. Owner: main session.
+- [ ] **V1-COV-CHECK-MERGE** Resolve ADR 0010 `coverage` + `checklist` merge question, deferred from Q2R2-COVERAGE-CHECKLIST (line 253). Decide: merge behind verbosity knob with deprecation alias, or close the ADR as not-for-v1.0. Owner: main session.
+- [ ] **V1-PARSER-SUBPKG-DECIDE** Resolve ADR 0003 `@ra11y/parser-typescript` subpackage plan. Decide: extract at v1.0 (cost: extra package maintenance, decoupled TypeScript peer), or defer past v1.0 and update the ADR accordingly. Owner: main session.
+- [ ] **V1-SAMPLING-TOOL-PICK** Resolve ADR 0005 §Follow-up — pick 1–2 of `resolve-component` / `verdict-candidate` / `draft-vpat-narrative` or defer all three past v1.0. Per Track C §Dependencies (line ~335), `verdict-candidate` is the natural first pick since its output is an attestation entry. Unblocks Track S `[!]` items and Track E `examples/ra11y-in-claude-code/`. Owner: main session.
+
+### v1.0.0 — release hygiene
+
+- [ ] **V1-BENCH-BASELINE** Run `/bench` on main and lock the four performance-budget scenarios (cold start ≤200ms, 10 files ≤100ms, 100 files ≤500ms, 1000 files ≤3s) into `docs/performance.md`. First baseline row anchors regressions. Note: `benchmarks/a11y-tool-comparison.md` numbers (Track E `[x]`) are competitor-comparison data and live in a separate file; `docs/performance.md` is the CLAUDE.md §11 budget table. Owner: `benchmark-tuner`.
+- [ ] **V1-API-STABILITY-AUDIT** Read `src/api/` + `src/types/index.ts` export surface and verify every public symbol has TSDoc with `@param` / `@returns` / `@example`, no `@experimental` / `@internal` on exported names, no accidental re-exports of internal types. Output: `docs/adr/0019-v1-api-stability.md` declaring the public surface frozen (modulo a marked-experimental escape hatch). Acceptance: `scripts/check-tsdoc.ts` passes; ADR enumerates every exported name. Owner: `type-smith` + `doc-writer`.
+- [ ] **V1-CHANGELOG-V1** Write the 1.0.0 `CHANGELOG.md` entry covering every closed deferred decision + v1.0 additions. Pairs with `/release 1.0.0` dispatch; do NOT tag until the user explicitly says "ship" (per memory `never release proactively`). Owner: `release-captain`.
+
+### Considered but not elevated to Track V
+
+- **Implement the remaining manual-only criteria as finders.** The coverage matrix (V1-COVERAGE-MATRIX) will enumerate actual gaps — per finder review the finder list confirms most are already covered. If V1-COVERAGE-MATRIX surfaces genuine gaps, each becomes a Track R `R-<criterion>-<topic>` item, NOT a Track V item. Track V verifies; Track R implements detection.
+- **Widen real-world fixtures beyond the five above.** SPA routing, internationalization, dark-mode contrast, reduced-motion — all worth fixtures, none are "find all violations" gates. Log as Track F `F-V1.x` items if the v1.0 bar rises.
 
 ---
 
