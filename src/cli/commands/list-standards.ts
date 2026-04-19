@@ -5,6 +5,7 @@
 
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Standard } from "../../types/standard.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 const LOADED: readonly Standard[] = BUILTIN_STANDARDS;
@@ -23,7 +24,7 @@ export function runListStandards(): ScanExit {
   }
   lines.push(`  ${LOADED.length} standard${LOADED.length === 1 ? "" : "s"} loaded.`);
   lines.push("");
-  return { stdout: lines.join("\n"), stderr: "", exitCode: 0 };
+  return { stdout: lines.join("\n"), stderr: "", exitCode: ExitCode.OK };
 }
 
 function countByLevel(std: Standard): Record<string, number> {

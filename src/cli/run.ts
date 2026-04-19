@@ -19,6 +19,7 @@ import { runListRules } from "./commands/list-rules.ts";
 import { runListStandards } from "./commands/list-standards.ts";
 import { runScanCommand, type ScanExit } from "./commands/scan.ts";
 import { runVpat } from "./commands/vpat.ts";
+import { ExitCode } from "./exit-codes.ts";
 import { renderHelp, VERSION } from "./help.ts";
 
 export async function runCli(argv: readonly string[]): Promise<ScanExit> {
@@ -29,9 +30,9 @@ export async function runCli(argv: readonly string[]): Promise<ScanExit> {
 
   switch (options.command) {
     case "help":
-      return { stdout: renderHelp(), stderr: "", exitCode: 0 };
+      return { stdout: renderHelp(), stderr: "", exitCode: ExitCode.OK };
     case "version":
-      return { stdout: `ra11y v${VERSION}\n`, stderr: "", exitCode: 0 };
+      return { stdout: `ra11y v${VERSION}\n`, stderr: "", exitCode: ExitCode.OK };
     case "list-rules":
       return runListRules();
     case "list-standards":
@@ -48,7 +49,7 @@ export async function runCli(argv: readonly string[]): Promise<ScanExit> {
       return runCertification(options);
     case "mcp":
       await startMcpServer();
-      return { stdout: "", stderr: "", exitCode: 0 };
+      return { stdout: "", stderr: "", exitCode: ExitCode.OK };
     case "init":
       return runInit(options);
     case "doctor":

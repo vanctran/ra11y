@@ -18,6 +18,7 @@ import { join } from "node:path";
 
 import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
+import { ExitCode } from "../exit-codes.ts";
 import { VERSION } from "../help.ts";
 import type { ScanExit } from "./scan.ts";
 
@@ -81,6 +82,6 @@ export function runDoctor(): ScanExit {
   return {
     stdout: lines.join("\n"),
     stderr: "",
-    exitCode: errors.length > 0 ? 1 : 0,
+    exitCode: errors.length > 0 ? ExitCode.VIOLATIONS : ExitCode.OK,
   };
 }

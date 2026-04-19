@@ -2,6 +2,8 @@
  * Help text for `--help` and `--version`.
  */
 
+import { EXIT_CODE_LEGEND } from "./exit-codes.ts";
+
 export const VERSION = "0.0.0";
 
 export function renderHelp(): string {
@@ -50,6 +52,9 @@ ATTESTATIONS
 META
   -h, --help             Show this help
   -v, --version          Print version
+
+EXIT CODES
+${EXIT_CODE_LEGEND.map((e) => `  ${e.code}  ${e.label}`).join("\n")}
 
 EXAMPLES
   ra11y src/

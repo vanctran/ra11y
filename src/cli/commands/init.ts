@@ -13,6 +13,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 const TEMPLATE = `import { defineConfig } from "@ra11y/core/plugin";
@@ -47,7 +48,7 @@ export function runInit(_options: CliOptions): ScanExit {
     return {
       stdout: "",
       stderr: `ra11y: ${rel} already exists — not overwriting\n`,
-      exitCode: 1,
+      exitCode: ExitCode.VIOLATIONS,
     };
   }
 
@@ -63,5 +64,5 @@ export function runInit(_options: CliOptions): ScanExit {
     "      to auto-populate the nativeWrappers list",
     "",
   ];
-  return { stdout: lines.join("\n"), stderr: "", exitCode: 0 };
+  return { stdout: lines.join("\n"), stderr: "", exitCode: ExitCode.OK };
 }

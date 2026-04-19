@@ -20,10 +20,8 @@ import {
 } from "../../config/attestation-store.ts";
 import type { AttestationRecord } from "../../types/evidence.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
-
-const EXIT_OK = 0;
-const EXIT_USER_ERROR = 2;
 
 /** Routes `ra11y attestations <action>` to the matching handler. */
 export function runAttestationsCommand(options: CliOptions): Promise<ScanExit> {
@@ -31,7 +29,7 @@ export function runAttestationsCommand(options: CliOptions): Promise<ScanExit> {
   return Promise.resolve({
     stdout: "",
     stderr: `ra11y: unknown attestations action '${options.attestationsAction ?? ""}'. Supported: prune.\n`,
-    exitCode: EXIT_USER_ERROR,
+    exitCode: ExitCode.USER_ERROR,
   });
 }
 
@@ -51,7 +49,7 @@ async function runAttestationsPrune(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "",
       stderr: `ra11y: attestation store not found at ${displayPath}. Run \`ra11y attest\` (or the \`attest\` MCP tool) to create entries first.\n`,
-      exitCode: EXIT_USER_ERROR,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
 
@@ -63,7 +61,7 @@ async function runAttestationsPrune(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "",
       stderr: `ra11y: failed to read attestation store at ${displayPath}: ${message}\n`,
-      exitCode: EXIT_USER_ERROR,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
 
@@ -75,7 +73,7 @@ async function runAttestationsPrune(options: CliOptions): Promise<ScanExit> {
   return {
     stdout: renderPruneReport(kept, dropped, displayPath, options.attestationsDryRun),
     stderr: "",
-    exitCode: EXIT_OK,
+    exitCode: ExitCode.OK,
   };
 }
 

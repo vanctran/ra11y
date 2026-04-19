@@ -4,6 +4,7 @@
  */
 
 import { BUILTIN_RULES } from "../../rules/index.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 export function runListRules(): ScanExit {
@@ -19,5 +20,5 @@ export function runListRules(): ScanExit {
   }
   lines.push(`  ${BUILTIN_RULES.length} rule${BUILTIN_RULES.length === 1 ? "" : "s"} loaded.`);
   lines.push("");
-  return { stdout: lines.join("\n"), stderr: "", exitCode: 0 };
+  return { stdout: lines.join("\n"), stderr: "", exitCode: ExitCode.OK };
 }

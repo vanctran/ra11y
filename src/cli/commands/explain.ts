@@ -4,6 +4,7 @@
  */
 
 import { BUILTIN_RULES } from "../../rules/index.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 export function runExplain(ruleId: string): ScanExit {
@@ -12,7 +13,7 @@ export function runExplain(ruleId: string): ScanExit {
     return {
       stdout: "",
       stderr: `ra11y: rule '${ruleId}' not found. Use --list-rules to see loaded rules.\n`,
-      exitCode: 2,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
 
@@ -51,7 +52,7 @@ export function runExplain(ruleId: string): ScanExit {
     lines.push("");
   }
 
-  return { stdout: lines.join("\n"), stderr: "", exitCode: 0 };
+  return { stdout: lines.join("\n"), stderr: "", exitCode: ExitCode.OK };
 }
 
 function indent(text: string, spaces: number): string {

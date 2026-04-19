@@ -35,6 +35,7 @@ import type { Standard } from "../../types/standard.ts";
 import type { ScanResult } from "../../types/violation.ts";
 import { filesChangedSince, stagedFiles } from "../../utils/git.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 
 const LOADED_STANDARDS: readonly Standard[] = BUILTIN_STANDARDS;
 
@@ -65,7 +66,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
   // user had typed `--standard <list> --level <L>` directly.
   const profileResolution = resolveProfileFromOptions(options, fileConfig.profiles);
   if (profileResolution.error !== undefined) {
-    return { stdout: "", stderr: profileResolution.error, exitCode: 2 };
+    return { stdout: "", stderr: profileResolution.error, exitCode: ExitCode.USER_ERROR };
   }
   const effectiveStandards =
     profileResolution.standards ?? mergeStandards(options.standards, fileConfig);
@@ -80,7 +81,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "",
       stderr: `ra11y: unknown standard(s): ${missing.join(", ")}. Loaded: ${Object.keys(STANDARD_BY_ID).join(", ")}.\n`,
-      exitCode: 2,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
 
@@ -92,7 +93,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "ra11y: no files to scan.\n",
       stderr: "",
-      exitCode: 0,
+      exitCode: ExitCode.OK,
     };
   }
 
@@ -101,7 +102,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "ra11y: no parseable files found.\n",
       stderr: "",
-      exitCode: 0,
+      exitCode: ExitCode.OK,
     };
   }
 
@@ -147,7 +148,7 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
 
   const formatter = BUILTIN_FORMATTERS[options.format];
   const output = formatter.format(result, report);
-  const exitCode = shouldFail(result, options.failOn) ? 1 : 0;
+  const exitCode = shouldFail(result, options.failOn) ? ExitCode.VIOLATIONS : ExitCode.OK;
 
   // When --checklist is passed, append the manual review checklist
   // after the violations report so the user gets one complete document.
@@ -237,7 +238,7 @@ async function handleBaselineMode(
     return {
       stdout: `ra11y: wrote baseline with ${baseline.violations.length} entries to ${relative(cwd, path)}\n`,
       stderr: "",
-      exitCode: 0,
+      exitCode: ExitCode.OK,
     };
   }
 
@@ -247,7 +248,7 @@ async function handleBaselineMode(
     return {
       stdout: `ra11y: updated baseline — now ${baseline.violations.length} entries in ${relative(cwd, path)}\n`,
       stderr: "",
-      exitCode: 0,
+      exitCode: ExitCode.OK,
     };
   }
 
@@ -257,7 +258,7 @@ async function handleBaselineMode(
     return {
       stdout: "",
       stderr: `ra11y: baseline file not found at ${relative(cwd, path)}. Run \`ra11y --baseline create\` first.\n`,
-      exitCode: 2,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
   const diff = diffAgainstBaseline(result, existing);
@@ -283,7 +284,7 @@ async function handleBaselineMode(
   return {
     stdout: `${lines.join("\n")}\n`,
     stderr: "",
-    exitCode: diff.newViolations.length > 0 ? 3 : 0,
+    exitCode: diff.newViolations.length > 0 ? ExitCode.NEW_VIOLATIONS : ExitCode.OK,
   };
 }
 

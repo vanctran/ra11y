@@ -10,14 +10,16 @@ ra11y [command] [options] [paths...]
 - `[paths...]` — files or directories to scan. Defaults to the current directory.
 - `[options]` — any of the flags below, in any order.
 
-Exit codes:
+Exit codes are emitted by every command and defined centrally in `src/cli/exit-codes.ts`. They are considered stable at v1.0 — changes become semver-major surface.
 
 | Code | Meaning |
 |-----:|---------|
 | `0` | Clean scan (or `--fail-on never`, or `--baseline check` with no new violations) |
-| `1` | Violations found at or above the `--fail-on` threshold |
-| `2` | Scanner error (bad config, unknown standard, missing baseline file, etc.) |
+| `1` | Violations found at or above the `--fail-on` threshold, or command-specific failures (doctor probe errors, init refusing to overwrite) |
+| `2` | Invalid arguments, unknown rule/standard/profile, missing required input, or read failures (bad config, missing baseline file, etc.) |
 | `3` | `--baseline check` detected new violations not in the baseline |
+
+For the canonical error index (MCP structured errors + CLI exit codes), see [`docs/errors.md`](./errors.md).
 
 ## Commands
 

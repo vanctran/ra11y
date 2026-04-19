@@ -14,10 +14,8 @@ import {
   writeBaseline,
 } from "../../engine/baseline.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
-
-const EXIT_OK = 0;
-const EXIT_USER_ERROR = 2;
 
 /** Routes `ra11y baseline <action>` to the matching handler. */
 export function runBaselineCommand(options: CliOptions): Promise<ScanExit> {
@@ -25,7 +23,7 @@ export function runBaselineCommand(options: CliOptions): Promise<ScanExit> {
   return Promise.resolve({
     stdout: "",
     stderr: `ra11y: unknown baseline action '${options.baselineAction ?? ""}'. Supported: prune.\n`,
-    exitCode: EXIT_USER_ERROR,
+    exitCode: ExitCode.USER_ERROR,
   });
 }
 
@@ -48,14 +46,14 @@ async function runBaselinePrune(options: CliOptions): Promise<ScanExit> {
     return {
       stdout: "",
       stderr: `ra11y: failed to parse baseline at ${displayPath}: ${message}\n`,
-      exitCode: EXIT_USER_ERROR,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
   if (baseline === null) {
     return {
       stdout: "",
       stderr: `ra11y: baseline file not found at ${displayPath}. Run \`ra11y baseline create\` first.\n`,
-      exitCode: EXIT_USER_ERROR,
+      exitCode: ExitCode.USER_ERROR,
     };
   }
 
@@ -65,7 +63,7 @@ async function runBaselinePrune(options: CliOptions): Promise<ScanExit> {
   return {
     stdout: renderPruneReport(removed, kept, displayPath, options.baselineDryRun),
     stderr: "",
-    exitCode: EXIT_OK,
+    exitCode: ExitCode.OK,
   };
 }
 

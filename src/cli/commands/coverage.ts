@@ -17,6 +17,7 @@ import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 export async function runCoverage(options: CliOptions): Promise<ScanExit> {
@@ -46,7 +47,7 @@ export async function runCoverage(options: CliOptions): Promise<ScanExit> {
   });
 
   const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);
-  return { stdout: renderCoverageSummary(coverage), stderr: "", exitCode: 0 };
+  return { stdout: renderCoverageSummary(coverage), stderr: "", exitCode: ExitCode.OK };
 }
 
 function parseFor(filePath: string, source: string): Ast | null {

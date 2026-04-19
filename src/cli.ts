@@ -4,6 +4,7 @@
  * the bulk of the CLI is unit-testable without spawning a process.
  */
 
+import { ExitCode } from "./cli/exit-codes.ts";
 import { runCli } from "./cli/run.ts";
 
 async function main(): Promise<void> {
@@ -16,5 +17,5 @@ async function main(): Promise<void> {
 main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
   process.stderr.write(`ra11y: ${message}\n`);
-  process.exit(2);
+  process.exit(ExitCode.USER_ERROR);
 });

@@ -19,6 +19,7 @@ import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 export async function runChecklist(options: CliOptions): Promise<ScanExit> {
@@ -55,7 +56,7 @@ export async function runChecklist(options: CliOptions): Promise<ScanExit> {
 
   // Combine: violations report first, then the manual checklist.
   const combined = `${violationsOutput}\n\n---\n\n${markdown}`;
-  return { stdout: combined, stderr: "", exitCode: 0 };
+  return { stdout: combined, stderr: "", exitCode: ExitCode.OK };
 }
 
 function parseFor(filePath: string, source: string): Ast | null {

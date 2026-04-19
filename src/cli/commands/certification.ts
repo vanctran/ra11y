@@ -22,6 +22,7 @@ import { BUILTIN_RULES } from "../../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../../standards/index.ts";
 import type { Ast } from "../../types/ast.ts";
 import type { CliOptions } from "../args.ts";
+import { ExitCode } from "../exit-codes.ts";
 import type { ScanExit } from "./scan.ts";
 
 export async function runCertification(options: CliOptions): Promise<ScanExit> {
@@ -48,7 +49,7 @@ export async function runCertification(options: CliOptions): Promise<ScanExit> {
   const manual = await loadManualReview(cwd);
   const coverage = buildCoverageReport(result, BUILTIN_STANDARDS);
   const scores = buildCertificationScorecard(coverage, BUILTIN_STANDARDS, manual, options.level);
-  return { stdout: renderCertificationMarkdown(scores), stderr: "", exitCode: 0 };
+  return { stdout: renderCertificationMarkdown(scores), stderr: "", exitCode: ExitCode.OK };
 }
 
 async function loadManualReview(cwd: string): Promise<ManualReview> {
