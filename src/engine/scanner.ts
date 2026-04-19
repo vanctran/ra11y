@@ -21,8 +21,9 @@
 
 import type { SuppressionDeclaration } from "../config/inline-disables.ts";
 import type { Ast } from "../types/ast.ts";
+import type { Process } from "../types/config.ts";
 import type { AttestationRecord, EvidenceLedger } from "../types/evidence.ts";
-import type { CandidateFinder, ReviewCandidate } from "../types/review.ts";
+import type { CandidateFinder, ProjectCandidateContext, ReviewCandidate } from "../types/review.ts";
 import type {
   EmittedViolation,
   Language,
@@ -97,14 +98,10 @@ export interface ScanInputs {
    * additional wrappers, identical to pre-Q2-WRAPMAP-RULES behaviour.
    */
   readonly nativeWrapperElements?: Readonly<Record<string, string>>;
-  /**
-   * Durable attestations from `.ra11y/attestations.jsonl` (the
-   * project-level store). Inline pragma-derived attestations are
-   * assembled by the scanner itself from each file's `declarations`
-   * field; both kinds merge before ledger construction so every
-   * attestation flows through the same evidence path.
-   */
+  /** Durable attestations from `.ra11y/attestations.jsonl`; merged with inline pragma-derived attestations before ledger construction. */
   readonly attestations?: readonly AttestationRecord[];
+  /** Declared process page-sets (ADR 0016); threaded to project-scoped finders. */
+  readonly processes?: readonly Process[];
 }
 
 export interface ScanProducts {
@@ -512,16 +509,14 @@ function runProjectFinders(
   const pathToDisableMap = new Map<string, ReadonlyMap<number, ReadonlySet<string>>>();
   for (const f of projectFiles) pathToDisableMap.set(f.filePath, f.disableMap);
 
+  const ctx: ProjectCandidateContext = {
+    files: projectFiles,
+    enabledStandards: enabled,
+    ...(inputs.processes === undefined ? {} : { processes: inputs.processes }),
+  };
   const out: ReviewCandidate[] = [];
   for (const finder of finders) {
-    invokeOneProjectFinder(
-      finder,
-      projectFiles,
-      enabled,
-      activeCriterionIds,
-      pathToDisableMap,
-      out,
-    );
+    invokeOneProjectFinder(finder, ctx, activeCriterionIds, pathToDisableMap, out);
   }
   return out;
 }
@@ -534,13 +529,7 @@ function runProjectFinders(
  */
 function invokeOneProjectFinder(
   finder: CandidateFinder,
-  projectFiles: readonly {
-    readonly filePath: string;
-    readonly source: string;
-    readonly ast: Ast;
-    readonly disableMap: ReadonlyMap<number, ReadonlySet<string>>;
-  }[],
-  enabled: ReadonlySet<string>,
+  ctx: ProjectCandidateContext,
   activeCriterionIds: ReadonlySet<string>,
   pathToDisableMap: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
   out: ReviewCandidate[],
@@ -549,7 +538,7 @@ function invokeOneProjectFinder(
   if (!finder.criterionIds.some((id) => activeCriterionIds.has(id))) return;
   let emitted: readonly ReviewCandidate[] | undefined;
   try {
-    emitted = finder.afterProject({ files: projectFiles, enabledStandards: enabled });
+    emitted = finder.afterProject(ctx);
   } catch {
     return;
   }

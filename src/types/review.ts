@@ -15,6 +15,7 @@
  */
 
 import type { Ast } from "./ast.ts";
+import type { Process } from "./config.ts";
 import type { AppliesTo, FileContext, RuleContext } from "./rule.ts";
 import type { Location } from "./violation.ts";
 
@@ -95,6 +96,20 @@ export interface ProjectFile {
 export interface ProjectCandidateContext {
   readonly files: readonly ProjectFile[];
   readonly enabledStandards: ReadonlySet<string>;
+  /**
+   * Declared process page-sets (`LoadedConfig.processes`) — ordered,
+   * named sets of page file paths that together form a user journey.
+   * Cross-page criteria (3.2.3 Consistent navigation, 3.2.4 Consistent
+   * identification, 2.4.5 Multiple ways) key off this primitive because
+   * they cannot be answered from a single page in isolation.
+   *
+   * Omitted (rather than `[]`) when the caller did not thread the
+   * processes config through; finders that require a declared page set
+   * MUST treat both `undefined` and `[]` as "no process evidence" and
+   * emit zero candidates — honest "needs config" per ADR 0016, never
+   * a heuristic fallback.
+   */
+  readonly processes?: readonly Process[];
 }
 
 /**
