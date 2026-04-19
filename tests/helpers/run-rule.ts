@@ -80,6 +80,7 @@ function invokeLifecycle(
       },
     ],
     enabledStandards: ctx.enabledStandards,
+    nativeWrapperElements: {},
     emit: (v) => sink.push(v),
   };
   collectReturn(rule.afterProject(projectCtx), sink);

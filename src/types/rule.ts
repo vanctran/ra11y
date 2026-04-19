@@ -191,6 +191,16 @@ export interface ProjectRuleFile {
 export interface ProjectContext {
   readonly files: ReadonlyArray<ProjectRuleFile>;
   readonly enabledStandards: ReadonlySet<string>;
+  /**
+   * Full `LoadedConfig.nativeWrapperElements` map (e.g. `{ Button:
+   * "button", Link: "a" }`). Unlike per-file `ctx.wrappersForElement`
+   * — which filters by the rule's own `wrapperTreatsAsElement` — this
+   * exposes every declared wrapper so project-scope rules can reason
+   * across tags (e.g. `wrapper/drift` verifies each declaration's
+   * definition file renders the expected element). Empty object when
+   * the user never supplied the object form.
+   */
+  readonly nativeWrapperElements: Readonly<Record<string, string>>;
   emit(violation: EmittedViolation): void;
 }
 

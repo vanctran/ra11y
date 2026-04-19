@@ -273,6 +273,7 @@ function runProjectRules(
       disableMaps,
       sourcesByPath,
       astsByPath,
+      inputs.nativeWrapperElements ?? {},
       out,
     );
   }
@@ -287,6 +288,7 @@ function invokeOneProjectRule(
   disableMaps: ReadonlyMap<string, ReadonlyMap<number, ReadonlySet<string>>>,
   sourcesByPath: ReadonlyMap<string, string>,
   astsByPath: ReadonlyMap<string, Ast>,
+  nativeWrapperElements: Readonly<Record<string, string>>,
   out: Violation[],
 ): void {
   if (!rule.afterProject) return;
@@ -295,6 +297,7 @@ function invokeOneProjectRule(
   const ctx: ProjectContext = {
     files: projectFiles,
     enabledStandards: enabled,
+    nativeWrapperElements,
     emit: (v) => sink.push(v),
   };
   try {
