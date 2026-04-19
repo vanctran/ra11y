@@ -184,4 +184,173 @@ describe("parseTsx", () => {
       expect(div?.attributes[0]?.name).toBe("id");
     });
   });
+
+  describe("Storybook args synthesis", () => {
+    // The synthesis pass appends a virtual `<Component/>` to
+    // `module.jsxElements` for each story whose `args` is a literal
+    // object the parser can resolve, so rules that need to evaluate
+    // what Storybook would render get a chance to fire. Each test
+    // asserts the synthesized element is present (or absent), the
+    // attributes match the literal args, and the `synthesized` marker
+    // is honest about provenance.
+
+    function syntheticOf(
+      mod: ReturnType<typeof parseTsx>["root"],
+      tag: string,
+    ): JsxElement | undefined {
+      return mod.jsxElements.find(
+        (el) => el.tagName === tag && el.synthesized?.source === "storybook-args",
+      );
+    }
+
+    it("synthesizes a JSX element from literal-string args", () => {
+      const src = `
+        import type { StoryObj } from "@storybook/react";
+        export const Primary: StoryObj<typeof Button> = {
+          args: { label: "Click me" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      const synth = syntheticOf(root, "Button");
+      expect(synth).toBeDefined();
+      expect(synth?.synthesized).toEqual({ source: "storybook-args", storyName: "Primary" });
+      expect(synth?.selfClosing).toBe(true);
+      expect(synth?.attributes.length).toBe(1);
+      const labelAttr = synth?.attributes[0];
+      expect(labelAttr?.name).toBe("label");
+      expect(labelAttr?.value).toEqual({ kind: "StringLiteral", value: "Click me" });
+    });
+
+    it("preserves attribute kind for numeric and boolean args", () => {
+      const src = `
+        export const Primary: StoryObj<typeof Button> = {
+          args: { count: 42, disabled: true, ratio: 0.5 },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      const synth = syntheticOf(root, "Button");
+      expect(synth).toBeDefined();
+      const byName = new Map(synth?.attributes.map((a) => [a.name, a.value] as const));
+      expect(byName.get("count")).toEqual({ kind: "Expression", raw: "42" });
+      expect(byName.get("disabled")).toEqual({ kind: "Expression", raw: "true" });
+      expect(byName.get("ratio")).toEqual({ kind: "Expression", raw: "0.5" });
+    });
+
+    it("synthesizes from the file-level meta.component when no per-story type is given", () => {
+      const src = `
+        const meta: Meta<typeof Img> = { component: Img };
+        export default meta;
+        export const Hero = { args: { src: "hero.png", alt: "" } };
+      `;
+      const { root } = parseTsx(src, { filePath: "Img.stories.tsx" });
+      const synth = syntheticOf(root, "Img");
+      expect(synth).toBeDefined();
+      expect(synth?.synthesized?.storyName).toBe("Hero");
+    });
+
+    it("emits an empty-attributes element when args is `{}`", () => {
+      const src = `
+        export const Empty: StoryObj<typeof Button> = { args: {} };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      const synth = syntheticOf(root, "Button");
+      expect(synth).toBeDefined();
+      expect(synth?.attributes.length).toBe(0);
+    });
+
+    it("skips synthesis when args contains a spread", () => {
+      const src = `
+        export const Variant: StoryObj<typeof Button> = {
+          args: { ...Primary.args, label: "Override" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      expect(syntheticOf(root, "Button")).toBeUndefined();
+    });
+
+    it("skips synthesis when an arg value is a callback", () => {
+      const src = `
+        export const WithCallback: StoryObj<typeof Button> = {
+          args: { onClick: () => alert("hi"), label: "Click" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      expect(syntheticOf(root, "Button")).toBeUndefined();
+    });
+
+    it("skips synthesis when an arg value is a bare identifier", () => {
+      const src = `
+        export const WithRef: StoryObj<typeof Button> = {
+          args: { onClick: handleClick, label: "x" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      expect(syntheticOf(root, "Button")).toBeUndefined();
+    });
+
+    it("skips synthesis when the component cannot be resolved", () => {
+      const src = `
+        export const Untyped = { args: { label: "x" } };
+      `;
+      const { root } = parseTsx(src, { filePath: "Mystery.stories.tsx" });
+      expect(
+        root.jsxElements.find((el) => el.synthesized?.source === "storybook-args"),
+      ).toBeUndefined();
+    });
+
+    it("does not synthesize on non-story files", () => {
+      const src = `
+        export const Primary: StoryObj<typeof Button> = {
+          args: { label: "Click me" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.tsx" });
+      expect(
+        root.jsxElements.find((el) => el.synthesized?.source === "storybook-args"),
+      ).toBeUndefined();
+    });
+
+    it("does not synthesize when no filePath is supplied", () => {
+      const src = `
+        export const Primary: StoryObj<typeof Button> = {
+          args: { label: "Click me" },
+        };
+      `;
+      const { root } = parseTsx(src);
+      expect(
+        root.jsxElements.find((el) => el.synthesized?.source === "storybook-args"),
+      ).toBeUndefined();
+    });
+
+    it("synthesizes once per story with `args`, leaving stories without `args` alone", () => {
+      const src = `
+        export const First: StoryObj<typeof Button> = { args: { label: "A" } };
+        export const Second: StoryObj<typeof Button> = { args: { label: "B" } };
+        export const Render: StoryObj<typeof Button> = {
+          render: () => <Button label="C" />,
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      const synth = root.jsxElements.filter((el) => el.synthesized?.source === "storybook-args");
+      expect(synth.length).toBe(2);
+      const stories = synth.map((s) => s.synthesized?.storyName).sort();
+      expect(stories).toEqual(["First", "Second"]);
+    });
+
+    it("does not double-count `args` nested inside `parameters`", () => {
+      const src = `
+        export const Tunable: StoryObj<typeof Button> = {
+          parameters: {
+            args: { ignore: "this" },
+          },
+          args: { label: "real" },
+        };
+      `;
+      const { root } = parseTsx(src, { filePath: "Button.stories.tsx" });
+      const synth = syntheticOf(root, "Button");
+      expect(synth).toBeDefined();
+      expect(synth?.attributes.length).toBe(1);
+      expect(synth?.attributes[0]?.name).toBe("label");
+    });
+  });
 });
