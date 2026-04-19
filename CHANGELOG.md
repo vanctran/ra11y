@@ -4,6 +4,8 @@ All notable changes to ra11y are documented in this file. The format is based on
 
 ## [Unreleased]
 
+Migration guide (v0.2 → v1.0): [`docs/migrations/0.2-to-1.0.md`](./docs/migrations/0.2-to-1.0.md)
+
 ### Added
 
 #### Configuration
