@@ -166,12 +166,12 @@ function cleanScanNextStep(inputs: NextStepInputs): NextStepResult {
   if (inputs.actionableManual > 0) {
     const pl = inputs.actionableManual === 1 ? "on has" : "a have";
     return {
-      prose: `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next.${inputs.iterativeTip}`,
+      prose: `Automated checks clean; ${inputs.actionableManual} manual-review criteri${pl} grounded candidates. Call \`checklist\` next, then run the \`ra11y/triage\` prompt (via \`prompts/get\`) to batch-process the candidates.${inputs.iterativeTip}`,
       structured: { tool: "checklist", args: {} },
     };
   }
   return {
-    prose: `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone.`,
+    prose: `Automated checks clean. Call \`checklist\` for the manual-review half (criteria + grounded candidates).${inputs.iterativeTip} Pair with axe-core in Playwright/Vitest for runtime checks (focus traps, live regions, ARIA state, post-render contrast); do not claim "a11y clean" from this result alone. For a full end-to-end conformance audit, use the \`ra11y/audit\` prompt (via \`prompts/get\`).`,
     structured: { tool: "checklist", args: {} },
   };
 }
@@ -195,11 +195,11 @@ function violationNextStep(inputs: NextStepInputs, first: FirstFinding): NextSte
     // trip.
     if (inputs.allViolationsMechanical) {
       return {
-        prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}); every finding carries an inline mechanical fix — apply \`primary.edit\` directly from the finding.${manualTail(inputs)}${inputs.iterativeTip}`,
+        prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}); every finding carries an inline mechanical fix — apply \`primary.edit\` directly from the finding. For the multi-finding fix workflow, use the \`ra11y/fix\` prompt (via \`prompts/get\`).${manualTail(inputs)}${inputs.iterativeTip}`,
       };
     }
     return {
-      prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`).${manualTail(inputs)}${inputs.iterativeTip}`,
+      prose: `${inputs.violations} violation${vPlural} (${inputs.fixable} with fix suggestion${fPlural}). Start with \`suggest_fix\` on ${first.path}:${first.line} (rule \`${first.ruleId}\`). For the multi-finding fix workflow, use the \`ra11y/fix\` prompt (via \`prompts/get\`).${manualTail(inputs)}${inputs.iterativeTip}`,
       structured: {
         tool: "suggest_fix",
         args: { ruleId: first.ruleId, file: first.path, line: first.line },

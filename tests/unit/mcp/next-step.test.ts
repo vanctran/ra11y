@@ -261,6 +261,79 @@ describe("buildNextStep", () => {
     });
   });
 
+  // ── Prompt-link assertions (V1-PROMPT-LINK) ──────────────────────────────
+  // Each canonical workflow endpoint should surface the right prompt
+  // template by name so agents discover them without extra round-trips
+  // to `prompts/list`. The assertions are literal-string checks —
+  // typos in the template name ("vpat" vs "ra11y/vpat-narrative") are
+  // caught here before they ship.
+
+  it("clean scan with manual candidates mentions ra11y/triage prompt", () => {
+    const result = buildNextStep(
+      formatted({ plan: { violations: 0, notes: 0, actionableManualItems: 3 } }),
+    );
+    expect(result.prose).toContain("ra11y/triage");
+    expect(result.prose).toContain("prompts/get");
+    // Structured still points at the MCP tool (checklist); the prompt
+    // name lives in the prose only per task instructions.
+    expect(result.structured).toEqual({ tool: "checklist", args: {} });
+  });
+
+  it("clean scan with zero manual candidates mentions ra11y/audit prompt", () => {
+    const result = buildNextStep(
+      formatted({ plan: { violations: 0, notes: 0, actionableManualItems: 0 } }),
+    );
+    expect(result.prose).toContain("ra11y/audit");
+    expect(result.prose).toContain("prompts/get");
+    // Structured still points at checklist — the canonical next MCP call.
+    expect(result.structured).toEqual({ tool: "checklist", args: {} });
+  });
+
+  it("violation branch with fixable violations mentions ra11y/fix prompt", () => {
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 2, mechanicalEditsAvailable: 2 },
+        files: [
+          {
+            path: "App.tsx",
+            findings: [
+              { ...sampleFinding, severity: "error", fixClass: "guidance" },
+              {
+                ruleId: "label/empty",
+                line: 10,
+                column: 1,
+                severity: "warning",
+                fixClass: "guidance",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.prose).toContain("ra11y/fix");
+    expect(result.prose).toContain("prompts/get");
+    // Structured still points at suggest_fix (the MCP tool).
+    expect(result.structured?.tool).toBe("suggest_fix");
+  });
+
+  it("all-mechanical violations branch mentions ra11y/fix prompt", () => {
+    const result = buildNextStep(
+      formatted({
+        plan: { violations: 1, mechanicalEditsAvailable: 1 },
+        files: [
+          {
+            path: "App.tsx",
+            findings: [{ ...sampleFinding, severity: "error", fixClass: "mechanical" }],
+          },
+        ],
+      }),
+    );
+    expect(result.prose).toContain("ra11y/fix");
+    expect(result.prose).toContain("prompts/get");
+    // All-mechanical branch omits structured (dedupe logic unchanged).
+    expect(result.structured).toBeUndefined();
+  });
+
   it("produces prose and structured forms that agree on the named tool across every branch", () => {
     // Invariant check: iterate the branches that emit structured
     // output and confirm the tool name in `structured.tool` appears

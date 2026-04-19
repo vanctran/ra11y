@@ -50,6 +50,7 @@ interface ReviewBody {
   readonly candidateCount: number;
   readonly prompts?: Record<string, PromptEntry>;
   readonly candidates: ReadonlyArray<Record<string, unknown>>;
+  readonly nextStep?: string;
 }
 
 async function runReviewCandidates(params: Record<string, unknown>): Promise<ReviewBody> {
@@ -123,6 +124,28 @@ describe("review_candidates: top-level prompts map dedupe", () => {
       // array — it lives exclusively in the top-level prompts map.
       expect(candidatesJson.includes(text)).toBe(false);
     }
+  });
+
+  // ── Prompt-link assertions (V1-PROMPT-LINK) ─────────────────────────────
+  // review_candidates should nudge toward ra11y/triage when candidates
+  // exist; the nextStep is omitted when candidates is empty so the
+  // present-when-meaningful discipline (CLAUDE.md §1) holds.
+
+  it("surfaces ra11y/triage prompt name in nextStep when candidates exist", async () => {
+    const body = await runReviewCandidates({ paths: [CONSISTENT_NAV_BAD] });
+    expect(body.candidateCount).toBeGreaterThan(0);
+    expect(body.nextStep).toBeDefined();
+    expect(body.nextStep).toContain("ra11y/triage");
+    expect(body.nextStep).toContain("prompts/get");
+  });
+
+  it("omits nextStep when no candidates are returned", async () => {
+    const body = await runReviewCandidates({
+      paths: [GOOD_ALT],
+      criterionId: CRITERION_NO_FINDER,
+    });
+    expect(body.candidateCount).toBe(0);
+    expect(body.nextStep).toBeUndefined();
   });
 
   it("serialized response is measurably smaller than the pre-dedupe shape on a many-candidate criterion", async () => {

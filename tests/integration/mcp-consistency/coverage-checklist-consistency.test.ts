@@ -177,6 +177,28 @@ describe("ADR 0010 — coverage and checklist stay consistent across the shared 
     expect(result).toBeDefined();
   });
 
+  it("checklist zero-actionable nextStep mentions ra11y/audit and ra11y/vpat-narrative prompts", async () => {
+    // V1-PROMPT-LINK: when there are no actionable items the workflow
+    // endpoint is VPAT/audit work. The prose must name both templates
+    // so agents discover them without a separate prompts/list call.
+    // Structured still points at `coverage` (the companion MCP tool) —
+    // the prompt names live in prose only per CLAUDE.md §1.
+    const dir = await mkdtemp(join(tmpdir(), "ra11y-checklist-prompt-link-"));
+    const responses = await mcpSession([initMsg(1), toolCall(2, "checklist", { cwd: dir })]);
+    const checklist = body<ChecklistBody>(responses[1]);
+    if (checklist.summary.actionable !== 0) {
+      throw new Error(
+        `fixture regression — expected 0 actionable items on empty dir, got ${checklist.summary.actionable}`,
+      );
+    }
+
+    expect(checklist.nextStep).toContain("ra11y/audit");
+    expect(checklist.nextStep).toContain("ra11y/vpat-narrative");
+    expect(checklist.nextStep).toContain("prompts/get");
+    // Structured still points at coverage, not a prompt.
+    expect(checklist.nextStepStructured?.tool).toBe("coverage");
+  });
+
   it("both tools conditional-spread the nextStep pair as a unit", async () => {
     // Conditional-spread discipline: `nextStep` and
     // `nextStepStructured` are present together, or both absent —

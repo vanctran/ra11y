@@ -140,6 +140,17 @@ export const reviewCandidatesTool: McpTool = {
     // `[cwd]`) and doesn't load project config here; mirror the `scan`
     // tool's warning inputs so the malformed-input case surfaces the
     // honest `scanned_zero_files` code rather than a silent success.
+    // `nextStep` is present-when-meaningful (CLAUDE.md §1): when
+    // candidates exist, nudge toward the `ra11y/triage` prompt which
+    // wraps the scan → read → verdict loop into a single structured
+    // pass. Omitted on zero candidates — there is nothing to triage.
+    const reviewNextStep =
+      candidates.length > 0
+        ? {
+            nextStep:
+              "For each candidate: read the `snippet` + `reason`, look up `prompts[criterionId].text` for the pass/fail question, then verdict. Run the `ra11y/triage` prompt (via `prompts/get`) to batch-process all candidates in one structured pass.",
+          }
+        : {};
     return textResult({
       level,
       standards,
@@ -148,6 +159,7 @@ export const reviewCandidatesTool: McpTool = {
       // finder-backed candidates) rather than emitting `prompts: {}`.
       // Per CLAUDE.md §1, conditional-spread at the assembly site.
       ...(hasPrompts ? { prompts } : {}),
+      ...reviewNextStep,
       candidates: candidates.map((c) => {
         const standardId = c.criterionId.split(":")[0] ?? "";
         const criterionKey = c.criterionId;

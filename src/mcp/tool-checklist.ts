@@ -752,7 +752,7 @@ function buildChecklistNextStep({
     if (level !== undefined) args["level"] = level;
     return {
       nextStep:
-        "No actionable manual items. Call `coverage` for the per-standard compliance dashboard.",
+        "No actionable manual items. Call `coverage` for the per-standard compliance dashboard. For a full end-to-end conformance audit, use the `ra11y/audit` prompt (via `prompts/get`); for per-criterion VPAT narrative drafting, use the `ra11y/vpat-narrative` prompt.",
       nextStepStructured: { tool: "coverage", args },
     };
   }
