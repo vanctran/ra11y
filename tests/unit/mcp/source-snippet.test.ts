@@ -187,6 +187,7 @@ describe("findEnclosingBlock: TSX/JSX/TS/JS brace-balance walker", () => {
     // function body should still be the enclosing block.
     const source = [
       "function f(x) {", // 1
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: test fixture represents source containing a template literal
       "  const s = `hello ${x + 1} world`;", // 2
       "  return s;", // 3
       "}", // 4
