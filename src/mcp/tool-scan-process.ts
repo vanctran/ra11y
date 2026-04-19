@@ -172,6 +172,7 @@ export const scanProcessTool: McpTool = {
       standards,
       level,
       cwd,
+      matched,
     });
 
     const totalFindings = pagesScanned.reduce((n, p) => n + p.findings, 0);
@@ -279,11 +280,13 @@ async function scanPages(args: {
   readonly standards: readonly string[];
   readonly level: "A" | "AA" | "AAA";
   readonly cwd: string;
+  readonly matched: Process;
 }): Promise<{
   readonly pagesScanned: readonly PageScanSummary[];
   readonly perPageResults: readonly ScanResult[];
 }> {
-  const { present, missing, baseDir, session, projectConfig, standards, level, cwd } = args;
+  const { present, missing, baseDir, session, projectConfig, standards, level, cwd, matched } =
+    args;
   const attestations = await loadDurableAttestations(cwd);
   const effectiveRuleSettings = session.effectiveRules(projectConfig);
   const activeRules = applyRuleSettings(BUILTIN_RULES, effectiveRuleSettings);
@@ -306,6 +309,15 @@ async function scanPages(args: {
       finders: BUILTIN_CANDIDATE_FINDERS,
       level,
       ...(attestations.length > 0 && { attestations }),
+      // Thread the matched process through every per-page call. Known
+      // limitation: consistent-identification / consistent-navigation
+      // index across files within one scan, so per-page invocation
+      // won't yet catch cross-page divergence — follow-up work will
+      // aggregate the page set. Passing the matched entry now makes
+      // the wiring honest and keeps the contract aligned with
+      // scan_project's threading, which is the shape future
+      // aggregation will slot into.
+      processes: [matched],
     });
     perPageResults.push(result);
     pagesScanned.push({ path: pagePath, findings: result.violations.length });
