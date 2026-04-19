@@ -6,10 +6,18 @@
  */
 
 import { runScan } from "../engine/scanner.ts";
+import {
+  type AttestationStalenessProbe,
+  type AttestationSurface,
+  buildAttestationSurface,
+  createGitStalenessProbe,
+  indexAttestationsByCriterion,
+} from "../reports/attestation-surface.ts";
 import { buildCoverageReport, type PerStandardCoverage } from "../reports/coverage.ts";
 import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
+import type { AttestationRecord } from "../types/evidence.ts";
 import type { ReviewCandidate, ReviewConfidence } from "../types/review.ts";
 import {
   type Applicability,
@@ -71,6 +79,23 @@ interface ChecklistItemOut {
   readonly candidates: readonly ChecklistCandidateOut[];
   readonly likelyRelevant?: false;
   readonly relevanceReason?: string;
+  /**
+   * The most recent durable attestation that speaks to this criterion,
+   * when one exists. Surfaced — not suppressive — so the agent sees
+   * verdicted + stale entries alongside un-attested ones and decides
+   * whether to trust the claim or re-verify.
+   *
+   * `stale: true` appears when the attestation's stamp commit differs
+   * from HEAD AND at least one file in the attestation's scope has
+   * changed since the stamp. Omitted when not stale or when the git
+   * probe can't answer (not a repo, git unavailable) — honest shape
+   * per CLAUDE.md §1.
+   *
+   * Verdict passes through verbatim; records without an explicit
+   * verdict surface as `"pending"` so the agent can distinguish an
+   * un-asserted claim from a committed pass/fail/n/a.
+   */
+  readonly attestation?: AttestationSurface;
 }
 
 const CONFIDENCE_RANK: Readonly<Record<ReviewConfidence, number>> = {
@@ -203,11 +228,21 @@ export const checklistTool: McpTool = {
     const applicability = detectApplicability(files);
 
     const sources = sourceIndex(files);
+    const attestationsByCriterion = indexAttestationsByCriterion(attestations);
+    // Probe the git state once per scan — the closure caches per-stamp
+    // resolution so every criterion sharing an `attestedAt` pays a
+    // single git call across the whole checklist pass. `undefined`
+    // signals "not inside a repo, staleness indeterminate" — the
+    // per-item builder then omits `stale` across the board, which is
+    // honest rather than guessing.
+    const stalenessProbe = createGitStalenessProbe(cwd);
     const { needsReview, likelyIrrelevant } = bucketChecklistItems(
       coverage,
       report.candidates ?? [],
       applicability,
       sources,
+      attestationsByCriterion,
+      stalenessProbe,
     );
     // Actionable items (concrete candidates) stay in `items`; criteria
     // the finders couldn't ground in code move to `untargeted`. Keeping
@@ -452,6 +487,8 @@ function buildChecklistItem(
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
   sources: ReadonlyMap<string, SourceEntry>,
+  attestations: readonly AttestationRecord[],
+  stalenessProbe: AttestationStalenessProbe | undefined,
 ): { item: ChecklistItemOut; relevant: boolean } {
   const mapped = mapCandidates(criterion.id, candidates, sources);
   const principle = wcagPrincipleFor(criterion.standardId, criterion.localId);
@@ -462,6 +499,13 @@ function buildChecklistItem(
   // single "high" hit sizes the item honestly even when other hits
   // are lower-signal.
   const itemConfidence: ReviewConfidence = highestConfidence(mapped) ?? "low";
+  // Attestation surfacing: "surface, don't suppress" — attestations
+  // appear on the item so the agent can decide whether to trust or
+  // re-verify. They never filter the criterion out. `stale: true`
+  // rides on this shape when the git probe detects code drift since
+  // the stamp; absent when the probe can't answer. See
+  // src/reports/attestation-surface.ts for the full contract.
+  const attestation = buildAttestationSurface(attestations, stalenessProbe);
   const base: ChecklistItemOut = {
     criterionId: criterion.id,
     title: criterion.title,
@@ -470,6 +514,7 @@ function buildChecklistItem(
     confidence: itemConfidence,
     ...(principle === null ? {} : { principle }),
     candidates: mapped,
+    ...(attestation === undefined ? {} : { attestation }),
   };
   if (!isLikelyIrrelevant(criterion.id, applicability)) return { item: base, relevant: true };
   const reason = irrelevanceReason(criterion.id, applicability);
@@ -484,6 +529,8 @@ function bucketChecklistItems(
   candidates: readonly ReviewCandidate[],
   applicability: Applicability,
   sources: ReadonlyMap<string, SourceEntry>,
+  attestationsByCriterion: ReadonlyMap<string, readonly AttestationRecord[]>,
+  stalenessProbe: AttestationStalenessProbe | undefined,
 ): { needsReview: ChecklistItemOut[]; likelyIrrelevant: ChecklistItemOut[] } {
   const needsReview: ChecklistItemOut[] = [];
   const likelyIrrelevant: ChecklistItemOut[] = [];
@@ -493,7 +540,14 @@ function bucketChecklistItems(
     for (const criterionId of entry.manualCriteria) {
       const criterion = standard.criteria.find((c) => c.id === criterionId);
       if (!criterion) continue;
-      const { item, relevant } = buildChecklistItem(criterion, candidates, applicability, sources);
+      const { item, relevant } = buildChecklistItem(
+        criterion,
+        candidates,
+        applicability,
+        sources,
+        attestationsByCriterion.get(criterion.id) ?? [],
+        stalenessProbe,
+      );
       (relevant ? needsReview : likelyIrrelevant).push(item);
     }
   }

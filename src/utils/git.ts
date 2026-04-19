@@ -56,6 +56,80 @@ export function stagedFiles(cwd: string = process.cwd()): string[] {
 }
 
 /**
+ * Returns the SHA of the nearest commit on HEAD's history at or before
+ * the given ISO-8601 timestamp. Used by attestation staleness: an
+ * attestation records `attestedAt` but no commit; this helper picks the
+ * commit the author's tree likely reflected, so "changed since the
+ * attestation" can be computed as `git diff <stamp> HEAD`.
+ *
+ * Returns null if the lookup fails (not a repo, no commits before the
+ * stamp, git unavailable). Callers treat null as "staleness
+ * indeterminate — omit the field," which is the honest shape when we
+ * can't answer the question.
+ */
+export function stampCommitForTimestamp(
+  isoTimestamp: string,
+  cwd: string = process.cwd(),
+): string | null {
+  const root = gitRoot(cwd);
+  if (root === null) return null;
+  const result = spawnSync("git", ["rev-list", "-n", "1", `--before=${isoTimestamp}`, "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.status !== 0) return null;
+  const sha = (result.stdout ?? "").trim();
+  return sha.length === 0 ? null : sha;
+}
+
+/**
+ * Returns absolute paths of files changed between `stamp` and HEAD,
+ * including uncommitted working-tree changes vs HEAD. Used by
+ * attestation staleness — any file in an attestation's scope that
+ * appears in this list flips `stale: true`. Returns `null` on git
+ * failure so callers can distinguish "no files changed" (empty set)
+ * from "couldn't answer" (null → omit the field).
+ */
+export function changedFilesBetween(
+  stamp: string,
+  cwd: string = process.cwd(),
+): Set<string> | null {
+  const root = gitRoot(cwd);
+  if (root === null) return null;
+  const committed = spawnSync("git", ["diff", "--name-only", `${stamp}..HEAD`], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (committed.status !== 0) return null;
+  const out = new Set<string>(parseFileList(committed.stdout ?? "", root));
+  const uncommitted = spawnSync("git", ["diff", "--name-only", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (uncommitted.status === 0) {
+    for (const f of parseFileList(uncommitted.stdout ?? "", root)) out.add(f);
+  }
+  return out;
+}
+
+/** Current HEAD SHA, or null if the lookup fails. */
+export function headSha(cwd: string = process.cwd()): string | null {
+  const root = gitRoot(cwd);
+  if (root === null) return null;
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.status !== 0) return null;
+  const sha = (result.stdout ?? "").trim();
+  return sha.length === 0 ? null : sha;
+}
+
+/**
  * Returns absolute paths of files changed since the given git ref
  * (e.g., "main", "HEAD~5", "v1.0.0"). Used by `--since <ref>`.
  */
