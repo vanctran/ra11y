@@ -249,23 +249,26 @@ export const checklistTool: McpTool = {
     // to the scanned files (irrelevance is itself a finding). The prior
     // `totalManualCriteria` field counted everything and kept
     // contradicting the other surfaces.
-    // Coverage pass-rate numbers, inlined so an agent doesn't need a
-    // separate `coverage` call. Keyed by standardId when the session has
-    // more than one enabled; flattened when exactly one, so the common
-    // single-standard case stays shallow.
+    // ADR 0010 — `checklist.summary.automatedCoverage` is a one-field
+    // gloss: `{ standardId, automatedCriteriaPassRate }`. The headline
+    // pass-rate number is honest here (workflow-queue context for the
+    // manual items we're about to list), but the full per-standard
+    // block (`criteriaTotal`, `criteriaAutomatable`,
+    // `criteriaAutomatablePassing`, `failingAutomatedCriteria`) is
+    // canonical in `coverage` only — emitting it here re-created the
+    // "three places reporting the same shape" drift ADR 0010 closed.
+    // Single-standard path flattens to an object; multi-standard keeps
+    // the array shape so `Array.isArray(automatedCoverage)` still
+    // discriminates.
     const automatedCoverage =
       coverage.length === 1
         ? {
             standardId: coverage[0]?.standardId,
             automatedCriteriaPassRate: coverage[0]?.automatedPassRate,
-            criteriaAutomatable: coverage[0]?.automatable,
-            criteriaAutomatablePassing: coverage[0]?.passing,
           }
         : coverage.map((c) => ({
             standardId: c.standardId,
             automatedCriteriaPassRate: c.automatedPassRate,
-            criteriaAutomatable: c.automatable,
-            criteriaAutomatablePassing: c.passing,
           }));
     // Field order is load-bearing — the agent reads top-to-bottom and
     // uses the leading fields as the headline. Actionable-first puts
@@ -298,6 +301,25 @@ export const checklistTool: McpTool = {
     };
 
     const showUntargeted = params["showUntargeted"] === true;
+    // ADR 0010 cross-pointing: the `checklist` tool answers "what
+    // should I manually review next, and where?" — its `nextStep`
+    // routes callers onward to the matching companion surface:
+    //   - actionable.length === 0 → `coverage` (compliance dashboard
+    //     is the honest next question when there are no grounded
+    //     candidates to iterate);
+    //   - truncated pages → `checklist` with `offset: nextOffset`
+    //     (keep paging through the same workflow queue);
+    //   - otherwise omitted (the agent iterates items[] directly).
+    // Conditional-spread discipline (CLAUDE.md §1): `nextStep` +
+    // `nextStepStructured` ship together or not at all.
+    const checklistNextStep = buildChecklistNextStep({
+      actionableLen: actionable.length,
+      truncated: page.paginationFields.truncated === true,
+      nextOffset: page.paginationFields.nextOffset,
+      cwd,
+      standard: strParam(params, "standard"),
+      level: strParam(params, "level"),
+    });
     // Doctrine (CLAUDE.md §1 "Zero-output success is ambiguous failure"):
     // a `checklist` response shaped like `{ items: [], untargetedCriteria: 0 }`
     // is indistinguishable from "tool never ran" unless we surface the
@@ -315,6 +337,7 @@ export const checklistTool: McpTool = {
       ...page.paginationFields,
       ...(showUntargeted ? { untargetedCriteriaList: untargeted } : {}),
       likelyIrrelevant: filteredIrrelevant,
+      ...checklistNextStep,
       ...warningsField({
         filesScanned: files.length,
         rootSource: null,
@@ -572,4 +595,64 @@ export function paginateChecklistItems(
       ...(perCriterionClipped ? { perCriterionClipped: true as const } : {}),
     },
   };
+}
+
+interface ChecklistNextStepInputs {
+  readonly actionableLen: number;
+  readonly truncated: boolean;
+  readonly nextOffset: number | undefined;
+  readonly cwd: string;
+  readonly standard: string | undefined;
+  readonly level: string | undefined;
+}
+
+/**
+ * Builds the `checklist` tool's cross-pointing next-step pair per
+ * ADR 0010.
+ *
+ * Three branches:
+ *   - actionable.length === 0 → point at `coverage` (compliance
+ *     dashboard is the honest follow-up when there are no grounded
+ *     candidates to iterate).
+ *   - truncated page → point at `checklist` again with the paging
+ *     offset so the caller walks the queue without looking up the
+ *     right params.
+ *   - otherwise → omit both fields (honest-shape per CLAUDE.md §1
+ *     "Ambiguous field shapes are dishonest"; the agent already has
+ *     the items[] list to iterate).
+ *
+ * `nextStep` + `nextStepStructured` are emitted as a pair or not at
+ * all — one-sided emission would re-create the drift ADR 0010 closes.
+ */
+function buildChecklistNextStep({
+  actionableLen,
+  truncated,
+  nextOffset,
+  cwd,
+  standard,
+  level,
+}: ChecklistNextStepInputs): {
+  readonly nextStep?: string;
+  readonly nextStepStructured?: { readonly tool: string; readonly args: Record<string, unknown> };
+} {
+  if (actionableLen === 0) {
+    const args: Record<string, unknown> = { cwd };
+    if (standard !== undefined) args["standard"] = standard;
+    if (level !== undefined) args["level"] = level;
+    return {
+      nextStep:
+        "No actionable manual items. Call `coverage` for the per-standard compliance dashboard.",
+      nextStepStructured: { tool: "coverage", args },
+    };
+  }
+  if (truncated && typeof nextOffset === "number") {
+    const args: Record<string, unknown> = { cwd, offset: nextOffset };
+    if (standard !== undefined) args["standard"] = standard;
+    if (level !== undefined) args["level"] = level;
+    return {
+      nextStep: `Page truncated. Call \`checklist\` again with \`offset: ${nextOffset}\` to continue; call \`coverage\` for the per-standard compliance dashboard.`,
+      nextStepStructured: { tool: "checklist", args },
+    };
+  }
+  return {};
 }

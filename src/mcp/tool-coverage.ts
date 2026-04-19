@@ -165,11 +165,82 @@ export const coverageTool: McpTool = {
     // would split the wire shape on a signal invisible to the schema —
     // we leave that path unchanged until a concrete consumer needs it.
     if (entries.length === 1) {
-      return textResult({ ...entries[0], ...warnings });
+      const entry = entries[0];
+      // ADR 0010 cross-pointing. `coverage` answers "how close are we
+      // to conformance?" — its `nextStep` routes the caller onward
+      // to the matching workflow surface:
+      //   - manualWithCandidates non-empty → `checklist` (grounded
+      //     candidates with file:line are the honest next question);
+      //   - manualWithCandidates empty but failingAutomated present →
+      //     `scan_project` (fix violations before reviewing manual);
+      //   - both empty → omit (clean report, no follow-up to name).
+      // Conditional-spread discipline (CLAUDE.md §1): `nextStep` +
+      // `nextStepStructured` ship as one unit or not at all.
+      const nextStep = entry
+        ? buildCoverageNextStep({
+            manualWithCandidatesLen: entry.manualWithCandidates.length,
+            failingAutomatedLen: entry.failingAutomatedCriteria.length,
+            cwd,
+            standard: strParam(params, "standard"),
+            level: strParam(params, "level"),
+          })
+        : {};
+      return textResult({ ...entry, ...nextStep, ...warnings });
     }
     return textResult(entries);
   },
 };
+
+interface CoverageNextStepInputs {
+  readonly manualWithCandidatesLen: number;
+  readonly failingAutomatedLen: number;
+  readonly cwd: string;
+  readonly standard: string | undefined;
+  readonly level: string | undefined;
+}
+
+/**
+ * Builds the `coverage` tool's cross-pointing next-step pair per
+ * ADR 0010.
+ *
+ * Three branches:
+ *   - manualWithCandidates non-empty → point at `checklist` (grounded
+ *     review candidates are the honest next question).
+ *   - empty but failingAutomated non-empty → point at `scan_project`
+ *     (the agent should fix automated violations before working the
+ *     manual queue).
+ *   - otherwise (clean report) → omit both fields (honest-shape per
+ *     CLAUDE.md §1 — no follow-up to name).
+ */
+function buildCoverageNextStep({
+  manualWithCandidatesLen,
+  failingAutomatedLen,
+  cwd,
+  standard,
+  level,
+}: CoverageNextStepInputs): {
+  readonly nextStep?: string;
+  readonly nextStepStructured?: { readonly tool: string; readonly args: Record<string, unknown> };
+} {
+  if (manualWithCandidatesLen > 0) {
+    const args: Record<string, unknown> = { cwd };
+    if (standard !== undefined) args["standard"] = standard;
+    if (level !== undefined) args["level"] = level;
+    return {
+      nextStep:
+        "Call `checklist` to work through manual-review candidates with concrete file:line locations.",
+      nextStepStructured: { tool: "checklist", args },
+    };
+  }
+  if (failingAutomatedLen > 0) {
+    return {
+      nextStep:
+        "Automated criteria are failing. Call `scan_project` to see the violations with file:line and fix suggestions.",
+      nextStepStructured: { tool: "scan_project", args: { cwd } },
+    };
+  }
+  return {};
+}
 
 /**
  * Enriches bare criterion IDs (e.g. "wcag22:2.4.11") with their titles

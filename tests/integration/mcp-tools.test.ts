@@ -879,10 +879,11 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
     }
   });
 
-  it("checklist.summary.automatedCoverage lets a single call replace coverage+checklist", async () => {
-    // Agents calling both `coverage` and `checklist` duplicate work;
-    // the checklist summary should carry enough pass-rate context to
-    // make one call sufficient for the common clean-repo path.
+  it("checklist.summary.automatedCoverage is a one-field gloss (ADR 0010)", async () => {
+    // ADR 0010 trimmed the per-standard block that used to live on
+    // `checklist.summary.automatedCoverage` — the full shape is
+    // canonical on `coverage` only. What survives here is the headline
+    // identity + pass rate the workflow-queue context needs.
     const responses = await mcpSession([
       initMsg(1),
       toolCall(2, "checklist", { paths: [BAD_ALT_DIR] }),
@@ -892,17 +893,20 @@ describe("MCP tools/call round-trip: coverage for all registered tools", () => {
         automatedCoverage: {
           standardId: string;
           automatedCriteriaPassRate: number;
-          criteriaAutomatable: number;
-          criteriaAutomatablePassing: number;
         };
       };
     };
     expect(body.summary.automatedCoverage.standardId).toBe("wcag22");
     expect(typeof body.summary.automatedCoverage.automatedCriteriaPassRate).toBe("number");
-    expect(body.summary.automatedCoverage.criteriaAutomatable).toBeGreaterThan(0);
-    expect(body.summary.automatedCoverage.criteriaAutomatablePassing).toBeLessThanOrEqual(
-      body.summary.automatedCoverage.criteriaAutomatable,
-    );
+    // The dropped fields (criteriaAutomatable, criteriaAutomatablePassing)
+    // must not re-appear — that would re-create the three-places-same-shape
+    // drift ADR 0010 closes.
+    expect(
+      (body.summary.automatedCoverage as Record<string, unknown>)["criteriaAutomatable"],
+    ).toBeUndefined();
+    expect(
+      (body.summary.automatedCoverage as Record<string, unknown>)["criteriaAutomatablePassing"],
+    ).toBeUndefined();
   });
 
   it("checklist includes untargetedCriteriaList when showUntargeted: true", async () => {
