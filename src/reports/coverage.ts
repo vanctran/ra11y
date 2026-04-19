@@ -20,6 +20,7 @@
  * suppress — agents read the attested state directly).
  */
 
+import type { ConformanceProfile } from "../config/profiles.ts";
 import type { AttestationRecord } from "../types/evidence.ts";
 import type { Standard } from "../types/standard.ts";
 import type { CoverageEntry, ScanResult } from "../types/violation.ts";
@@ -90,19 +91,37 @@ export interface PerStandardCoverage {
   readonly coveredManualCriteria?: readonly string[];
 }
 
-/** Builds a per-standard coverage report from scan results + loaded standards. */
+/**
+ * Builds a per-standard coverage report from scan results + loaded standards.
+ *
+ * The optional `profile` narrows the criterion scope to a named conformance
+ * profile (see `src/config/profiles.ts`). When supplied:
+ *   - Only standards whose ID is listed in `profile.standards` appear in the
+ *     report (even if `result.enabledStandards` is wider — the caller asked
+ *     for a profile-scoped view).
+ *   - `profile.level`, when set, overrides the `level` argument. WCAG-like
+ *     profiles (`wcag22-aa`) carry a level; level-less profiles (Section 508,
+ *     EN 301 549) fall through to `level`.
+ *
+ * When `profile` is `undefined`, behavior is unchanged — every enabled
+ * standard's criteria up to `level` appear in the output.
+ */
 export function buildCoverageReport(
   result: ScanResult,
   loadedStandards: readonly Standard[],
   level?: "A" | "AA" | "AAA",
+  profile?: ConformanceProfile,
 ): readonly PerStandardCoverage[] {
   const enabledSet = new Set(result.enabledStandards);
+  const profileStandards = profile === undefined ? null : new Set(profile.standards);
+  const effectiveLevel = profile?.level ?? level;
   const failingByStandard = indexFailingCriteria(result);
-  const maxLevel = levelRank(level ?? "AAA");
+  const maxLevel = levelRank(effectiveLevel ?? "AAA");
 
   const out: PerStandardCoverage[] = [];
   for (const standard of loadedStandards) {
     if (!enabledSet.has(standard.id)) continue;
+    if (profileStandards !== null && !profileStandards.has(standard.id)) continue;
     const filtered = filterByLevel(standard, maxLevel);
     out.push(buildOne(filtered, failingByStandard.get(standard.id) ?? new Set()));
   }

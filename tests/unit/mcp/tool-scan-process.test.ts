@@ -115,9 +115,10 @@ describe("scan_process: happy path — every declared page exists", () => {
         "shipping.html",
         "confirm.html",
       ]);
-      // processLevelCandidates always present, always empty in this
-      // phase — the shape is the point.
-      expect(body.processLevelCandidates).toEqual([]);
+      // processLevelCandidates always present with a concrete array
+      // shape — may populate with 2.4.5 multiple-ways candidates from
+      // the heuristic fallback when a process page has no <nav>.
+      expect(Array.isArray(body.processLevelCandidates)).toBe(true);
       // No warnings on the all-present happy path.
       expect(body.warnings).toBeUndefined();
       expect(body.meta.missingPages).toBeUndefined();
