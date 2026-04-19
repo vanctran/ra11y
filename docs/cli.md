@@ -3,9 +3,10 @@
 ## Usage
 
 ```
-ra11y [options] [paths...]
+ra11y [command] [options] [paths...]
 ```
 
+- `[command]` — one of the named commands below. Omitting a command runs `scan` by default.
 - `[paths...]` — files or directories to scan. Defaults to the current directory.
 - `[options]` — any of the flags below, in any order.
 
@@ -17,6 +18,147 @@ Exit codes:
 | `1` | Violations found at or above the `--fail-on` threshold |
 | `2` | Scanner error (bad config, unknown standard, missing baseline file, etc.) |
 | `3` | `--baseline check` detected new violations not in the baseline |
+
+## Commands
+
+When no command is given, ra11y runs `scan`. Commands that accept `[paths...]` fall back to the current directory when no paths are given.
+
+Global flags (`--standard`, `--level`, `--exclude`, `--format`, `--verbose`, `--quiet`, `--debug`, `--no-color`) apply to all commands that run a scan. They are documented in the sections below; per-command flags document only what is specific to that command.
+
+### ra11y scan
+
+Discovers files, parses them, and runs accessibility rules against the enabled standards. Violations are written to stdout in the requested format. Exit code follows `--fail-on`.
+
+```bash
+ra11y src/ --standard wcag22,section508 --level AA --format sarif > ra11y.sarif
+```
+
+Key flags:
+
+- `--changed` — scan only files staged in git (`git diff --cached --name-only`). Overrides positional paths.
+- `--since <ref>` — scan files changed since the given git ref (branch, tag, or commit SHA).
+- `--fail-on <level>` — exit non-zero on: `error` (default), `warning`, `any`, or `never`.
+- `--profile <name>` — pin the scan to a named conformance profile defined in `ra11y.config.ts`. Overrides `--standard` and `--level` when both are given; a warning is printed on stderr.
+- `--baseline <mode>` — `create`, `check`, or `update`. See [Baseline mode](#baseline-mode).
+
+### ra11y coverage
+
+Runs a scan and prints a per-standard automation-coverage table: how many automatable criteria pass, how many need manual review, and which criteria are failing.
+
+```bash
+ra11y src/ --standard wcag22,en301549 --coverage
+```
+
+Exit code is always `0` — this is a reporting command, not a gate.
+
+### ra11y checklist
+
+Runs a scan and produces a Markdown manual-review worksheet. The worksheet groups every criterion marked `automatable: "manual"` by standard, includes grounded review candidates with `file:line` locations where the scanner found relevant code, and appends automated violation output above the worksheet boundary.
+
+```bash
+ra11y src/ --checklist > checklist.md
+```
+
+Exit code is always `0`.
+
+### ra11y vpat
+
+Runs a scan and produces a VPAT 2.4-shaped Markdown conformance table. Pipe to a file for your compliance documentation.
+
+```bash
+ra11y src/ --vpat > compliance/vpat.md
+```
+
+The output format is described in [docs/certification/vpat-mapping.md](certification/vpat-mapping.md). Exit code is always `0`.
+
+### ra11y certification
+
+Runs a scan and produces a 0–100 certification readiness scorecard. Reads `.ra11y-manual.json` from the current directory (if present) to factor human-reviewed manual criteria into the score; without that file, manual criteria count as pending.
+
+```bash
+ra11y src/ --certification
+```
+
+Exit code is always `0`. See [docs/certification/readiness-scoring.md](certification/readiness-scoring.md) for score methodology.
+
+### ra11y list-rules
+
+Prints every loaded rule with its ID, severity, and the criteria it satisfies.
+
+```bash
+ra11y list-rules
+```
+
+No flags beyond global meta flags. Use `ra11y explain <rule-id>` for full rule documentation.
+
+### ra11y list-standards
+
+Prints every loaded standard with its version, publisher, URL, and criterion counts broken down by level.
+
+```bash
+ra11y list-standards
+```
+
+### ra11y explain
+
+Prints detailed metadata for a single rule: normative WCAG quote, rationale, good and bad code examples, and spec references.
+
+```bash
+ra11y explain contrast/minimum
+```
+
+Returns exit code `2` when the rule ID is not found.
+
+### ra11y init
+
+Writes a starter `ra11y.config.ts` into the current directory. Idempotent — if the file already exists, it refuses to overwrite and exits `1`.
+
+```bash
+ra11y init
+```
+
+The generated config covers `standards`, `level`, `exclude`, and the `nativeWrappers` array for projects that wrap native interactive elements in PascalCase components.
+
+### ra11y doctor
+
+Checks the environment and project configuration: Node version, whether `ra11y.config.ts` is present, how many standards and rules are loaded, and common gotchas (missing `tsconfig.json`, not in a git repo). Prints a summary to stdout.
+
+```bash
+ra11y doctor
+```
+
+Warnings (non-blocking) print as `!`. Hard errors exit non-zero so CI can gate on `ra11y doctor` if desired.
+
+### ra11y baseline
+
+Subcommand namespace for managing the on-disk baseline file (`.ra11y-baseline.json`). The `create`, `check`, and `update` modes run via the `--baseline` flag on `scan`; this subcommand provides `prune`, which removes entries whose files no longer exist.
+
+```bash
+ra11y baseline prune           # drop dead entries and rewrite the file
+ra11y baseline prune --dry-run # report without mutating
+```
+
+Key flags:
+
+- `--baseline-file <path>` — use a baseline file at a non-default path.
+- `--dry-run` — report what would be removed without writing.
+
+See [Baseline mode](#baseline-mode) for the `create`/`check`/`update` workflow.
+
+### ra11y attestations
+
+Subcommand namespace for managing the attestation ledger (`.ra11y/attestations.jsonl`). Currently exposes `prune`, which drops records pinned to files that no longer exist.
+
+```bash
+ra11y attestations prune           # drop dead records and rewrite the ledger
+ra11y attestations prune --dry-run # report without mutating
+```
+
+Key flags:
+
+- `--dry-run` — report what would be dropped without writing.
+
+Attestation records are created by the `attest` MCP tool or by writing to `.ra11y/attestations.jsonl` directly. See [docs/mcp/tool-reference.md](mcp/tool-reference.md) for the `attest` tool shape.
 
 ## Input
 
