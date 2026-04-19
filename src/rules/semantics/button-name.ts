@@ -26,6 +26,7 @@ import { defineRule } from "../../api/plugin.ts";
 import {
   findHtmlElementsByTag,
   findJsxElementsByTag,
+  findJsxElementsForTag,
   getHtmlAttribute,
   getJsxAttribute,
   getJsxAttributeString,
@@ -45,6 +46,12 @@ export const rule = defineRule({
   severity: "error",
   scope: "node",
   fixClass: "verify-in-source",
+  // Opt in: wrapper components declared as rendering `<button>` via the
+  // object form of `nativeWrappers`, plus polymorphic `<Wrapper as="button">`
+  // / `<Slot asChild><button>…</button></Slot>` call sites (Q2R2-POLYMORPHIC).
+  // All three channels get the same icon-only / empty-button accessible-name
+  // check as a bare `<button>`.
+  wrapperTreatsAsElement: "button",
   appliesTo: {
     fileExtensions: [".html", ".htm", ".tsx", ".jsx"],
   },
@@ -71,7 +78,7 @@ export const rule = defineRule({
       ctx.language === "ts" ||
       ctx.language === "js"
     ) {
-      checkJsx(ctx.ast as TsxModule, (v) => ctx.emit(v));
+      checkJsx(ctx.ast as TsxModule, ctx.wrappersForElement, (v) => ctx.emit(v));
     }
   },
 });
@@ -170,14 +177,26 @@ function hasInputButtonNameHtml(element: HtmlElement): boolean {
 // JSX
 // ---------------------------------------------------------------------------
 
-function checkJsx(module: TsxModule, emit: Emit): void {
-  checkJsxNativeButtons(module, emit);
+function checkJsx(module: TsxModule, wrappersForButton: ReadonlySet<string>, emit: Emit): void {
+  checkJsxNativeButtons(module, wrappersForButton, emit);
   checkJsxInputButtons(module, emit);
   checkJsxRoleButtons(module, emit);
 }
 
-function checkJsxNativeButtons(module: TsxModule, emit: Emit): void {
-  for (const button of findJsxElementsByTag(module, "button")) {
+function checkJsxNativeButtons(
+  module: TsxModule,
+  wrappersForButton: ReadonlySet<string>,
+  emit: Emit,
+): void {
+  // Three resolution channels: bare `<button>`, mapped wrappers
+  // (`{ IconButton: "button" }`), and polymorphic `as="button"` /
+  // `asChild` → `<button>` (Q2R2-POLYMORPHIC). The accessible-name
+  // rules apply uniformly — the call-site attrs/children on a wrapper
+  // are what forward to the inner `<button>`.
+  const seen = new Set<JsxElement>();
+  for (const button of findJsxElementsForTag(module, "button", wrappersForButton)) {
+    if (seen.has(button)) continue;
+    seen.add(button);
     if (hasAccessibleNameJsx(button)) continue;
     emit(buildJsxViolation("button", button));
   }

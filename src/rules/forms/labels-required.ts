@@ -195,20 +195,27 @@ function checkJsx(module: TsxModule, wrappersForInput: ReadonlySet<string>, emit
   const labelHtmlFors = collectJsxLabelHtmlFors(module);
   const implicitlyLabeledElementIds = collectJsxImplicitlyLabeledControls(module, wrappersForInput);
 
-  for (const tag of LABELABLE_TAGS) {
-    for (const el of findJsxElementsByTag(module, tag)) {
-      if (isExcludedJsxControl(el)) continue;
-      if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
-      emit(buildJsxViolation(el));
-    }
+  // `<input>` has three resolution channels (native, mapped wrapper,
+  // polymorphic `as="input"` / `asChild` → `<input>`); `findJsxElementsForTag`
+  // unifies all three. `<select>` and `<textarea>` keep native-only iteration
+  // — `wrapperTreatsAsElement` carries a single target tag, so polymorphic
+  // opt-in is scoped to `"input"` per Q2R2-POLYMORPHIC. Rule scope for
+  // those tags is unchanged.
+  const seen = new Set<JsxElement>();
+  for (const el of findJsxElementsForTag(module, "input", wrappersForInput)) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    // `isExcludedJsxControl` only skips when we can read a literal `type`
+    // prop; PascalCase wrappers without a `type` fall through and get
+    // the same label check as a bare `<input>`. Polymorphic resolution
+    // doesn't change the decision — `type="submit"` on a polymorphic
+    // `<Button as="input">` still excludes it.
+    if (isExcludedJsxControl(el)) continue;
+    if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
+    emit(buildJsxViolation(el));
   }
-  // Mapped wrappers (Q2-WRAPMAP-RULES): components the user declared as
-  // rendering `<input>` internally (`{ TextField: "input", EmailInput:
-  // "input" }`) need the same label-association check. isExcludedJsxControl
-  // is skipped because we can't infer `type="submit"` etc. from a
-  // PascalCase call site — the wrapper is opaque.
-  for (const name of wrappersForInput) {
-    for (const el of findJsxElementsByTag(module, name)) {
+  for (const tag of ["select", "textarea"] as const) {
+    for (const el of findJsxElementsByTag(module, tag)) {
       if (jsxHasLabel(el, labelHtmlFors, implicitlyLabeledElementIds)) continue;
       emit(buildJsxViolation(el));
     }
@@ -260,9 +267,21 @@ function collectJsxImplicitlyLabeledControls(
   for (const label of findJsxElementsByTag(module, "label")) {
     for (const descendant of walkJsxDescendants(label)) {
       const tag = descendant.tagName;
-      const labelable = LABELABLE_TAGS.has(tag.toLowerCase()) || wrappersForInput.has(tag);
-      if (!labelable) continue;
-      ranges.add(descendant.range.start);
+      if (LABELABLE_TAGS.has(tag.toLowerCase()) || wrappersForInput.has(tag)) {
+        ranges.add(descendant.range.start);
+        continue;
+      }
+      // Polymorphic `<Field as="input" />` nested inside a <label> — the
+      // resolved tag is the labeled control even though the call-site tag
+      // isn't. Keeps implicit labeling consistent with the rule's
+      // polymorphic opt-in (Q2R2-POLYMORPHIC).
+      const resolved = resolvePolymorphicTag(descendant);
+      if (
+        (resolved.resolvedFromAs || resolved.resolvedFromAsChild) &&
+        resolved.tagName.toLowerCase() === "input"
+      ) {
+        ranges.add(descendant.range.start);
+      }
     }
   }
   return ranges;
@@ -282,7 +301,11 @@ function* walkJsxDescendants(element: JsxElement): Iterable<JsxElement> {
 // imported) — but we need walkJsxDescendants because the helper is
 // not exported. Keeping these inline is cleaner than plumbing new
 // helpers for a single rule.
-import { findJsxElementsByTag } from "../../engine/ast-helpers.ts";
+import {
+  findJsxElementsByTag,
+  findJsxElementsForTag,
+  resolvePolymorphicTag,
+} from "../../engine/ast-helpers.ts";
 
 function isExcludedJsxControl(el: JsxElement): boolean {
   if (el.tagName.toLowerCase() !== "input") return false;

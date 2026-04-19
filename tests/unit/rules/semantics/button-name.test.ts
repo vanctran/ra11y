@@ -143,4 +143,72 @@ describe("rule semantics/button-name", () => {
       expect(rule.satisfies).toContain("wcag21:4.1.2");
     });
   });
+
+  describe("nativeWrapperElements mapping (Q2-WRAPMAP-RULES)", () => {
+    it("opts in to the native `button` tag so mapped wrappers fire", () => {
+      expect(rule.wrapperTreatsAsElement).toBe("button");
+    });
+
+    it("fires on a wrapper declared to render `<button>` via the mapping with no name", () => {
+      const v = runRule(rule, `const X = <IconButton />;`, {
+        nativeWrapperElements: { IconButton: "button" },
+      });
+      expect(v).toHaveLength(1);
+      expect(v[0]?.ruleId).toBe("semantics/button-name");
+    });
+
+    it("silences when the mapped wrapper call site has aria-label", () => {
+      const v = runRule(rule, `const X = <IconButton aria-label="Close" />;`, {
+        nativeWrapperElements: { IconButton: "button" },
+      });
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not fire on an unmapped PascalCase component", () => {
+      const v = runRule(rule, `const X = <UnknownButton />;`);
+      expect(v).toHaveLength(0);
+    });
+  });
+
+  describe("polymorphic as/asChild resolution (Q2R2-POLYMORPHIC)", () => {
+    it('fires on <Box as="button" /> with no accessible name', () => {
+      const v = runRule(rule, `const X = <Box as="button" />;`);
+      expect(v).toHaveLength(1);
+      expect(v[0]?.ruleId).toBe("semantics/button-name");
+    });
+
+    it('does not fire when polymorphic `as="button"` call site supplies aria-label', () => {
+      const v = runRule(rule, `const X = <Box as="button" aria-label="Close" />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it('does not fire when polymorphic `as="button"` has visible text children', () => {
+      const v = runRule(rule, `const X = <Box as="button">Save</Box>;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it("fires on <Slot asChild><button /></Slot> — inner button has no name", () => {
+      // Both the inner <button> and the <Slot asChild> call site fail the
+      // accessible-name check independently. Two surfaces are honest per
+      // AI-first doctrine — the agent dismisses duplicates in one read.
+      const v = runRule(rule, `const X = <Slot asChild><button /></Slot>;`);
+      expect(v.length).toBeGreaterThanOrEqual(1);
+      expect(v[0]?.ruleId).toBe("semantics/button-name");
+    });
+
+    it("does not re-dispatch when `as` is a non-literal expression (honest — agent reads)", () => {
+      const v = runRule(rule, `const X = <Box as={tag} />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it('does not re-dispatch when `as="div"` resolves to a non-target tag', () => {
+      const v = runRule(rule, `const X = <Box as="div" />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not re-dispatch when `as` is absent", () => {
+      const v = runRule(rule, `const X = <Box />;`);
+      expect(v).toHaveLength(0);
+    });
+  });
 });

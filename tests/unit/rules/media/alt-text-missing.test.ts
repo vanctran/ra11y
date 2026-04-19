@@ -200,4 +200,46 @@ describe("rule media/alt-text-missing", () => {
       expect(violations).toHaveLength(0);
     });
   });
+
+  describe("polymorphic as/asChild resolution (Q2R2-POLYMORPHIC)", () => {
+    it('fires on <Box as="img" src=... /> with no alt', () => {
+      const violations = runRule(rule, `const X = <Box as="img" src="u.png" />;`);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.ruleId).toBe("media/alt-text-missing");
+    });
+
+    it('does not fire when polymorphic `as="img"` call site supplies alt', () => {
+      const violations = runRule(rule, `const X = <Box as="img" src="u.png" alt="User" />;`);
+      expect(violations).toHaveLength(0);
+    });
+
+    it("fires on <Slot asChild><img src=... /></Slot> — polymorphic resolution plus inner <img>", () => {
+      // Two surfaces: the inner <img> fires directly via the native-tag
+      // channel, and the polymorphic <Slot asChild> call-site fires via
+      // asChild resolution. Both are honest surface points for the agent
+      // — AI-first doctrine prefers surfacing both over heuristic dedup.
+      const violations = runRule(rule, `const X = <Slot asChild><img src="u.png" /></Slot>;`);
+      expect(violations).toHaveLength(2);
+      expect(violations[0]?.ruleId).toBe("media/alt-text-missing");
+      expect(violations[1]?.ruleId).toBe("media/alt-text-missing");
+    });
+
+    it("does not re-dispatch when `as` is a non-literal expression (honest — agent reads)", () => {
+      // `as={tagName}` is dynamic; polymorphic resolution stays off, so
+      // the call site isn't treated as an <img> by this rule. The agent
+      // reading the surrounding code is the correct arbiter.
+      const violations = runRule(rule, `const X = <Box as={tagName} src="u.png" />;`);
+      expect(violations).toHaveLength(0);
+    });
+
+    it('does not re-dispatch when `as="div"` resolves to a non-target tag', () => {
+      const violations = runRule(rule, `const X = <Box as="div" src="u.png" />;`);
+      expect(violations).toHaveLength(0);
+    });
+
+    it("does not re-dispatch when `as` is absent", () => {
+      const violations = runRule(rule, `const X = <Box src="u.png" />;`);
+      expect(violations).toHaveLength(0);
+    });
+  });
 });

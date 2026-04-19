@@ -161,4 +161,39 @@ describe("rule forms/labels-required", () => {
       expect(v).toHaveLength(0);
     });
   });
+
+  describe("polymorphic as/asChild resolution (Q2R2-POLYMORPHIC)", () => {
+    it('fires on <Field as="input" /> with no label', () => {
+      const v = runRule(rule, `const X = <Field as="input" />;`);
+      expect(v.length).toBeGreaterThan(0);
+      expect(v[0]?.ruleId).toBe("forms/labels-required");
+    });
+
+    it('does not fire when polymorphic `as="input"` call site has aria-label', () => {
+      const v = runRule(rule, `const X = <Field as="input" aria-label="Email" />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it('does not fire when polymorphic `as="input"` is wrapped in <label>', () => {
+      const v = runRule(rule, `const X = <label>Email<Field as="input" /></label>;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not re-dispatch when `as` is a non-literal expression (honest — agent reads)", () => {
+      // `as={inputTag}` is dynamic — the rule stays off this call site
+      // and the agent reading the code decides.
+      const v = runRule(rule, `const X = <Field as={inputTag} />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it('does not re-dispatch when `as="div"` resolves to a non-target tag', () => {
+      const v = runRule(rule, `const X = <Field as="div" />;`);
+      expect(v).toHaveLength(0);
+    });
+
+    it("does not re-dispatch when `as` is absent", () => {
+      const v = runRule(rule, `const X = <Field />;`);
+      expect(v).toHaveLength(0);
+    });
+  });
 });

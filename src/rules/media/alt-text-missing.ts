@@ -27,6 +27,7 @@ import { defineRule } from "../../api/plugin.ts";
 import {
   findHtmlElementsByTag,
   findJsxElementsByTag,
+  findJsxElementsForTag,
   getHtmlAttribute,
   getJsxAttribute,
   getJsxAttributeString,
@@ -132,28 +133,24 @@ function emitHtmlViolation(element: HtmlElement, emit: Emit): void {
 }
 
 function checkJsx(module: TsxModule, wrappersForImg: ReadonlySet<string>, emit: Emit): void {
-  checkJsxTagGroup(module, "img", emit);
-  checkJsxInputImages(module, emit);
-  // Mapped wrappers (Q2-WRAPMAP-RULES): a user-declared component that
-  // renders `<img>` internally gets the same name check — if the wrapper
-  // call site doesn't pass `alt` / `aria-label` / `aria-labelledby`, the
-  // inner `<img>` will have no accessible name at runtime.
-  for (const name of wrappersForImg) {
-    checkJsxTagGroup(module, name, emit);
-  }
-}
-
-/**
- * Runs the img-like accessible-name check on every JSX element with the
- * given tag name. Shared by the literal `<img>` pass and the mapped-wrapper
- * pass — same rule semantics, different tag source.
- */
-function checkJsxTagGroup(module: TsxModule, tag: string, emit: Emit): void {
-  for (const element of findJsxElementsByTag(module, tag)) {
+  // Three resolution channels feed the img-accessible-name check:
+  //   1. bare `<img>` — the native tag channel.
+  //   2. `wrappersForImg` — PascalCase wrappers the user declared as
+  //      rendering `<img>` via `nativeWrappers` (Q2-WRAPMAP-RULES).
+  //   3. polymorphic `as="img"` / `asChild` → `<img>` (Q2R2-POLYMORPHIC) —
+  //      surfaced by `findJsxElementsForTag` once per matching element.
+  // `findJsxElementsForTag` unifies all three; the wrapper's own attrs
+  // are the call-site attrs that get forwarded to the inner `<img>`, so
+  // the same `hasAccessibleNameJsx` check applies without modification.
+  const seen = new Set<JsxElement>();
+  for (const element of findJsxElementsForTag(module, "img", wrappersForImg)) {
+    if (seen.has(element)) continue;
+    seen.add(element);
     if (isDecorativeJsxElement(element)) continue;
     if (hasAccessibleNameJsx(element)) continue;
     emitJsxViolation(element, emit);
   }
+  checkJsxInputImages(module, emit);
 }
 
 /** Flags `<input type="image">` without a usable accessible name. */
