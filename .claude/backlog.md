@@ -31,14 +31,14 @@ Owner: `release-captain` + `doc-writer`. Blocks nothing; can ship independently.
 ### v0.1.0
 
 - [ ] asciinema demo recording embedded in README
-- [ ] Version bump confirmation (package.json already reads `0.1.0`; verify + commit a release-prep chore if anything else drifts)
+- [x] Version bump confirmation (package.json already reads `0.1.0`; verify + commit a release-prep chore if anything else drifts) (a0a805b — README status note, terminal version example, config.md stale forward-ref, writing-a-rule.md afterProject note; no drift in CHANGELOG date, llms.txt absent)
 - [ ] Tag `v0.1.0` and push (triggers `release.yml` → npm publish with provenance)
 - [ ] GitHub release with changelog excerpt
 
 ### v0.2.0
 
 - [x] Release notes for 0.2.0 — drafted under `## [Unreleased]` in CHANGELOG.md (1eabf39). Covers M/R/F/S/E deltas; dated header waits for release.
-- [ ] Migration notes if any track introduces a breaking MCP shape (expected: none; `suggest_fix` shape change called out in CHANGELOG Changed section — draft migration note if needed at release time)
+- [x] Migration notes if any track introduces a breaking MCP shape (b2ed366 — warranted; four hard breaks in response-output shapes: suggest_fix suggestion→fixPaths+kind, checklist.summary.automatedCoverage trimmed to gloss, untargetedCriteria rename, activeNativeWrappers string[]→tagged-object-list; filePath param alias and configure dispatch are input-side compat, not output-side; docs/migrations/0.1-to-0.2.md created)
 
 ---
 
