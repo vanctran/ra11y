@@ -86,6 +86,17 @@ export class McpSession {
   readonly config: SessionConfig;
   readonly logging: LoggingState;
   private readonly cache: Map<string, CacheEntry> = new Map();
+  /**
+   * Session-scoped meta-cache for the opt-in `metaMode: "delta"` path.
+   * Keyed on `sessionRef` (hash of tool name + signature-relevant
+   * inputs) → the full `meta` object the caller last saw under that
+   * signature. Populated and read exclusively from
+   * `src/mcp/meta-cache.ts`'s helpers; tool handlers never touch it
+   * directly. Per-signature replacement (not global purge): a key
+   * whose inputs change gets a fresh `sessionRef` on the next call
+   * and the prior entry becomes unreachable.
+   */
+  private readonly metaBySessionRef: Map<string, Record<string, unknown>> = new Map();
   private rootsList: readonly SessionRoot[] = [];
   private hostCaps: HostCapabilities = { sampling: false, roots: false, elicitation: false };
   /**
@@ -249,6 +260,34 @@ export class McpSession {
   /** Number of cached files (for diagnostics). */
   get cacheSize(): number {
     return this.cache.size;
+  }
+
+  /**
+   * Read the previously-stored full `meta` object for a given
+   * `sessionRef`. Returns `undefined` when no prior call under that
+   * signature has been made — the meta-cache helper reads this to
+   * decide whether to emit the full baseline or collapse to a delta.
+   */
+  getCachedMeta(sessionRef: string): Record<string, unknown> | undefined {
+    return this.metaBySessionRef.get(sessionRef);
+  }
+
+  /**
+   * Store the full `meta` object under a `sessionRef`. Called by the
+   * meta-cache helper on every opted-in call so the baseline tracks
+   * the latest state (a field that flapped between calls reconciles
+   * against the most recent value, never a stale-first baseline).
+   * Per-signature replacement — no cap needed for a stable input
+   * signature; cross-signature entries accumulate for session
+   * lifetime, which is bounded by the MCP connection.
+   */
+  putCachedMeta(sessionRef: string, meta: Record<string, unknown>): void {
+    this.metaBySessionRef.set(sessionRef, meta);
+  }
+
+  /** Diagnostic count of cached meta baselines. */
+  get metaCacheSize(): number {
+    return this.metaBySessionRef.size;
   }
 }
 
