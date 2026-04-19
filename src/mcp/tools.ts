@@ -21,6 +21,7 @@ import { applyFixTool } from "./tool-apply-fix.ts";
 import { attestTool } from "./tool-attest.ts";
 import { auditTool } from "./tool-audit.ts";
 import { baselineTool } from "./tool-baseline.ts";
+import { bootstrapTool } from "./tool-bootstrap.ts";
 import { checklistTool } from "./tool-checklist.ts";
 import { conformanceStatementTool } from "./tool-conformance-statement.ts";
 import { coverageTool } from "./tool-coverage.ts";
@@ -514,6 +515,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   reviewCandidatesTool,
   auditTool,
   baselineTool,
+  bootstrapTool,
   listRulesTool,
   listSuppressionsTool,
   suppressTool,
