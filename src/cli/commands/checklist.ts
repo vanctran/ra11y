@@ -69,7 +69,7 @@ function parseFor(filePath: string, source: string): Ast | null {
     filePath.endsWith(".ts") ||
     filePath.endsWith(".js")
   ) {
-    const r = parseTsx(source);
+    const r = parseTsx(source, { filePath });
     return { language: "tsx", root: r.root, errors: r.errors };
   }
   return null;

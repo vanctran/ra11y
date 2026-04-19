@@ -320,7 +320,7 @@ function parseForExtension(filePath: string, source: string): Ast | null {
     return { language: "css", root: r.root, errors: r.errors };
   }
   if (ext === ".tsx" || ext === ".jsx" || ext === ".ts" || ext === ".js") {
-    const r = parseTsx(source);
+    const r = parseTsx(source, { filePath });
     return { language: "tsx", root: r.root, errors: r.errors };
   }
   return null;

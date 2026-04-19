@@ -34,11 +34,29 @@ import type {
   SourcePosition,
   TsxModule,
 } from "../../types/ast.ts";
+import { isStorybookStoryFile } from "../../utils/path.ts";
 import { classifyAngleBracket } from "./tsx-generic-classifier.ts";
+import { synthesizeStorybookArgsElements } from "./tsx-storybook-synthesis.ts";
 
 export interface TsxParseResult {
   readonly root: TsxModule;
   readonly errors: readonly ParseError[];
+}
+
+/**
+ * Optional knobs for {@link parseTsx}. The parser stays a pure
+ * `(source) → AST` function for the common case; callers that have a
+ * file path on hand pass it so file-shape-specific passes (currently
+ * just the Storybook `args` synthesis) can engage. Callers without a
+ * file path just omit `options` — same behavior as v0.0.x.
+ */
+export interface TsxParseOptions {
+  /**
+   * Absolute or project-relative path of the file being parsed.
+   * Drives the Storybook synthesis pass via `isStorybookStoryFile`.
+   * No effect on non-story files. The path is never read from disk.
+   */
+  readonly filePath?: string;
 }
 
 const SELF_CLOSING_VOID: ReadonlySet<string> = new Set([
@@ -57,8 +75,26 @@ const SELF_CLOSING_VOID: ReadonlySet<string> = new Set([
   "wbr",
 ]);
 
-export function parseTsx(source: string): TsxParseResult {
-  return new TsxParser(source).parse();
+export function parseTsx(source: string, options: TsxParseOptions = {}): TsxParseResult {
+  const result = new TsxParser(source).parse();
+  // Storybook synthesis is the only file-path-aware pass today. Engage
+  // when the path looks like a story file (`isStorybookStoryFile` is the
+  // single source of truth — see `src/utils/path.ts`); otherwise the
+  // result is identical to v0.0.x. Synthesized elements are appended to
+  // `module.jsxElements` so existing AST walkers see them without any
+  // rule-side change. Each synthetic element carries its own
+  // `synthesized` marker so downstream consumers can label findings as
+  // derived; no rule branches on the marker today.
+  if (!(options.filePath && isStorybookStoryFile(options.filePath))) return result;
+  const { elements } = synthesizeStorybookArgsElements(source);
+  if (elements.length === 0) return result;
+  const root: TsxModule = {
+    kind: result.root.kind,
+    range: result.root.range,
+    loc: result.root.loc,
+    jsxElements: [...result.root.jsxElements, ...elements],
+  };
+  return { root, errors: result.errors };
 }
 
 class TsxParser {

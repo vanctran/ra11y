@@ -141,7 +141,35 @@ export interface JsxElement extends BaseNode {
    * spread expands to.
    */
   readonly hasSpreadProps: boolean;
+  /**
+   * Provenance marker for elements the parser inserted from non-JSX
+   * source — currently only Storybook `StoryObj` `args` bindings,
+   * where `<Button {...args} />` is what Storybook renders but the
+   * source contains only the `args` data literal. Absent on every JSX
+   * element that came from real `<Tag/>` syntax in the source.
+   * Downstream consumers (rules, reporters) can read this to label
+   * findings as derived rather than directly observed; today no rule
+   * branches on it — the marker is honest provenance, not a behavior
+   * switch.
+   *
+   * Per `docs/kb/architecture/ai-first-consumer.md` "Ambiguous field
+   * shapes are dishonest": present-when-meaningful via conditional
+   * spread, never an empty object on real elements.
+   */
+  readonly synthesized?: SyntheticElementOrigin;
 }
+
+/** Where a synthesized JSX element came from. */
+export type SyntheticElementOrigin = {
+  readonly source: "storybook-args";
+  /**
+   * The variable-declarator name (e.g. `Primary` for
+   * `export const Primary: StoryObj<typeof Button> = { args: {…} }`).
+   * Lets a reporter say "synthesized from the Primary story" without
+   * re-parsing.
+   */
+  readonly storyName: string;
+};
 
 export type JsxNode = JsxElement | JsxText | JsxExpression;
 
