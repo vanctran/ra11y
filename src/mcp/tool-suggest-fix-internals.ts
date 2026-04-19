@@ -184,12 +184,11 @@ function buildFixPathsOutcome(inputs: {
 }): Record<string, unknown> {
   const { match, source, line, sourceContext, confidence, snippetField, verify, warningsField } =
     inputs;
-  // `match.fixPaths` is guaranteed non-null at the call site — the
-  // helper is only invoked from the `if (match.fixPaths)` branch of
-  // `buildSuggestFixPayload`.
   const fixPaths = match.fixPaths;
   if (fixPaths === undefined) {
-    throw new Error("buildFixPathsOutcome: match.fixPaths must be defined");
+    throw new Error(
+      "ra11y internal invariant: buildFixPathsOutcome called without match.fixPaths. This helper is only invoked from the `if (match.fixPaths)` branch of buildSuggestFixPayload; reaching it indicates a refactor missed a caller. Please file an issue with the ruleId of the offending match.",
+    );
   }
   const mechanical = fixPaths.primary.edit;
   const widened = mechanical

@@ -215,13 +215,25 @@ function isRuleIds(v: unknown): v is readonly string[] {
  * enter the store through the sanctioned tool.
  */
 function requireValidRecord(record: AttestationRecord): AttestationRecord {
-  const coerced = coerceAttestationRecord(record as unknown);
+  const coerced = coerceAttestationRecord(record);
   if (coerced === null) {
+    const missing = describeMissingFields(record);
     throw new Error(
-      "ra11y: invalid attestation record — criterionId, by, reason, attestedAt are required non-empty strings.",
+      `ra11y: invalid attestation record — ${missing}. Required non-empty strings: criterionId, by, reason, attestedAt. Example: { criterionId: "wcag22:1.1.1", by: "agent", reason: "reviewed", attestedAt: "2026-04-19T00:00:00Z", verdict: "pass", scope: "project" }.`,
     );
   }
   return coerced;
+}
+
+function describeMissingFields(record: AttestationRecord): string {
+  const problems: string[] = [];
+  const v = record as unknown as Record<string, unknown>;
+  for (const field of ["criterionId", "by", "reason", "attestedAt"] as const) {
+    const value = v[field];
+    if (typeof value !== "string") problems.push(`${field} is ${typeof value}`);
+    else if (value.length === 0) problems.push(`${field} is empty`);
+  }
+  return problems.length > 0 ? problems.join(", ") : "fields failed deeper validation";
 }
 
 function isScope(v: unknown): v is "project" | "file" | "line" {

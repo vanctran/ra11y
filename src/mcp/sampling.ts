@@ -137,7 +137,9 @@ export async function sample(
  */
 function coerceResult(raw: unknown): SamplingResult {
   if (!raw || typeof raw !== "object") {
-    throw new Error("sampling/createMessage: response was not an object");
+    throw new Error(
+      `sampling/createMessage: host returned ${raw === null ? "null" : typeof raw} instead of a result object. Spec: https://modelcontextprotocol.io/specification — host must return { role: "assistant", content, model, stopReason? }. If the host does not support sampling, it should decline the capability during initialize instead of returning a non-object.`,
+    );
   }
   const r = raw as {
     role?: unknown;
