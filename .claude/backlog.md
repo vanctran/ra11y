@@ -298,37 +298,37 @@ Sequencing (cross-gap, soft): attestations first (unlocks evidence semantics eve
 
 ### v0.3.0 — attestation ledger (foundation)
 
-- [ ] **C-ATTEST-ADR** ADR `docs/adr/0009-conformance-attestation-ledger.md` — on-disk format, identity fields (criterion + scope + evidence type + commit), freshness policy (when does an attestation go stale), relationship to baseline + suppressions, whether attestations are per-page or per-process.
-- [ ] **C-ATTEST-STORE** `.ra11y-attestations.json` schema + `src/engine/attestations.ts` load/save primitives. Mirrors `baseline.ts` shape discipline: versioned envelope, stable key order, 2-space indent.
-- [ ] **C-ATTEST-TOOL** `attest_criterion` MCP tool — records `{ criterionId, verdict: "pass"|"fail"|"n/a", scope: { path | process }, evidence: string, reviewer: string }` to the ledger. Stamps commit hash. Rejects verdicts without evidence text (empty evidence would be the same shape-honesty failure as bare `ra11y-disable` pragmas — Q2-REASON precedent).
-- [ ] **C-ATTEST-LIST** `list_attestations` MCP tool — returns the active ledger, freshness-annotated (entries pointing at files changed since the stamped commit surface `stale: true`).
-- [ ] **C-ATTEST-PRUNE** `ra11y attestations prune` CLI subcommand — drops attestations pointing at deleted files. Mirrors Q2-PRUNE's pattern (commit ebbe753); reuses the pure-function + injectable-predicate shape.
-- [ ] **C-ATTEST-CHECKLIST** `checklist` response surfaces per-criterion `attestation?: { verdict, stale?, evidence }`. Agents skip verdicted non-stale criteria; surface stale + un-attested only. Keeps the "surface, don't suppress" doctrine — stale attestations resurface automatically on code change.
-- [ ] **C-SUPPRESSION-ATTEST** `ra11y-disable` pragmas with reason text become attestation entries at scan time (one per pragma). Pairs with Q2-REASON + Q2-LISTSUPP — the reason IS the evidence. Bare pragmas (flagged by Q2-REASON's `suppression/no-reason` finder) get `verdict: "pending"` until reason is filled in.
+- [x] **C-ATTEST-ADR** ADR 0011 (evidence as first-class primitive) + ADR 0012 (rule-scoped attestations) cover this slot.
+- [x] **C-ATTEST-STORE** `.ra11y/attestations.jsonl` append-only store with validated envelope landed in `src/config/attestation-store.ts`.
+- [x] **C-ATTEST-TOOL** `attest` MCP tool landed; accepts `criterionId`, `ruleIds?`, `verdict`, `scope`, `location?`, `reason`, `by`; stamps commit hash; rejects bare verdicts.
+- [x] **C-ATTEST-LIST** `list_attestations` MCP tool landed with git-backed staleness probe + `staleProbeUnavailable` signal for non-repo environments.
+- [x] **C-ATTEST-PRUNE** `ra11y attestations prune [--dry-run]` subcommand landed; pure function + injectable `fileExists` predicate.
+- [x] **C-ATTEST-CHECKLIST** Checklist items spread per-criterion `attestation?: { verdict, stale?, evidence, by? }` with conditional-spread discipline.
+- [x] **C-SUPPRESSION-ATTEST** Bare pragmas emit `verdict: "pending"` attestations; reasoned pragmas emit `"pass"`; `suppression/no-reason` finder retained as complementary signal.
 
 ### Rejected — runtime evidence bridge (2026-04-19)
 
-A prior plan proposed ingesting vendor runtime results (axe-core JSON → normalized shape → ledger) as the path to close runtime-only WCAG criteria. Rejected by the project owner: vendor-specific ingest adapters weaken the moat and point the tool at another tool's output instead of the source. Agents that run runtime checks in their own harness bridge results through the existing `attest` tool — the reason text is the evidence, and the attestation ledger is the durable channel.
+A prior plan proposed ingesting vendor runtime results (axe-core JSON → normalized shape → ledger) as the path to close runtime-only WCAG criteria. Rejected: vendor-specific ingest adapters duplicate capability agents already have via their own test harnesses, and the tool's job is to point at the source — not at another tool's output. The ingest shape is also fragile to vendor schema drift, and the normalized layer re-buckets findings in ways the reading agent can't re-audit. Agents that run runtime checks bridge their results through the existing `attest` tool — the reason text is the evidence, and the attestation ledger is the durable, vendor-neutral channel.
 
 Items struck: C-RUNTIME-ADR, C-AXE-SCHEMA, C-AXE-INGEST, C-RUNTIME-MAP. C-COVERAGE-MERGE is re-scoped below.
 
-- [ ] **C-COVERAGE-MERGE** `coverage` report integrates attestations — per-criterion status becomes `{ static: "pass"|"fail"|"manual", attested?: "pass"|"fail"|"stale" }`. The aggregate "pass" requires at least one positive source; `manual` criteria fall back to the attestation ledger. No runtime column — runtime outcomes reach the ledger as agent-authored attestations.
+- [x] **C-COVERAGE-MERGE** Coverage report integrates attestations; per-criterion row carries optional `attested: { verdict, stale? }`. Manual criteria with fresh pass/n-a attestations count toward covered. Stale/pending/fail don't flip static verdicts.
 
 ### v0.3.0 — process-level scope
 
-- [ ] **C-PROCESS-ADR** ADR `docs/adr/0011-process-level-scope.md` — `processes: [{ name, pages: [string] }]` config primitive; how page ordering is captured; which criteria run at process level vs page level; shape of `scan_process` input/output.
-- [ ] **C-PROCESS-CONFIG** `processes` field in `ra11y.config.ts` + schema validation. Each process is an ordered list of page paths (or URL patterns for runtime-ingest cases).
-- [ ] **C-PROCESS-SCAN** `scan_process` MCP tool — takes a process name, scans each page in order, runs process-level checks: wcag22:3.2.3 (consistent navigation across the ordered set), 3.2.4 (consistent identification), 2.4.5 (multiple ways at process level, not just page level).
-- [ ] **C-PROCESS-CONSISTENCY** Upgrade `src/review/finders/consistent-navigation.ts` to honor the process config when present. The existing heuristic route discovery becomes fallback, not primary signal — deterministic evidence beats inference per CLAUDE.md §1 doctrine.
-- [ ] **C-PROCESS-IDENT** New finder `src/review/finders/consistent-identification.ts` for wcag22:3.2.4. Compares button/link labels + aria-labels across process pages; divergent labels for the same semantic action surface as review candidates with the divergent pairs cited in the `reason`.
+- [x] **C-PROCESS-ADR** ADR 0016 (process-level scope) landed.
+- [x] **C-PROCESS-CONFIG** `processes: [{ name, pages }]` config primitive + schema validation + loader wiring.
+- [x] **C-PROCESS-SCAN** `scan_process` MCP tool landed; orchestrates per-page scan with process-level frame.
+- [x] **C-PROCESS-CONSISTENCY** `consistent-navigation` finder honors declared processes; heuristic path retained as fallback with a reason-text nudge to declare the primitive.
+- [x] **C-PROCESS-IDENT** `consistent-identification` finder for wcag22:3.2.4; emits zero candidates when no processes config (honest needs-config gap).
 
 ### v1.0.0 — conformance capstone
 
-- [ ] **C-PROFILE-WCAG21AA** Config `profiles` primitive + `--profile <name>` CLI alias. A profile pins the scope an agent claims against: `{ standards: ["wcag21"], level: "AA" }`, `{ standards: ["wcag22"], level: "AA" }`, `{ standards: ["section508"] }`, `{ standards: ["en301549"] }`. Today an agent told "make this WCAG 2.1 AA conformant" reconstructs the criterion scope every call; the profile makes that canonical. Drives scope filters in `C-COVERAGE-MERGE` and `C-CONFORM-STATEMENT` (refuses to emit unless every criterion *in the profile's scope* has a positive source). Touches `src/config/schema.ts` (add `profiles` field), new `src/config/profiles.ts` (built-in profile records, pure data — same shape discipline as standards), `src/cli/args.ts` (`--profile`), `src/reports/coverage.ts` + `src/reports/certification.ts` (honor scope). Profiles are additive; existing `standards: [...]` config keeps working.
-- [ ] **C-CONFORM-ADR** ADR `docs/adr/0015-conformance-statement-output.md` — what a formal claim emits; how agent evidence is cited; distinction from VPAT (procurement-facing) vs conformance statement (claim-facing). (ADR 0014 now holds inherited findings; this slot bumped to 0015 at backlog tick time.)
-- [ ] **C-CONFORM-STATEMENT** New report `src/reports/conformance-statement.ts` — emits the formal claim per W3C's conformance-claim requirements: scope, conformance level (A/AA/AAA), date, WCAG version, technologies relied upon, user agents tested, evaluator identity, evidence bundle (findingIds + attestation IDs + runtime-result hashes). **Refuses to emit when coverage is incomplete** — honest failure over false claim.
-- [ ] **C-CONFORM-SIGN** Signed evidence bundle — SHA-256 over (attestation ledger + runtime results + commit hash) stamped into the conformance statement. Tamper-evident; re-emit on any change. Zero-dep (Node's `crypto` module is already allowed by the network-isolation rule).
-- [ ] **C-CONFORM-DOC** `docs/conformance.md` — end-to-end guide: how an agent takes a project from "scanned clean" through "fully attested" to "signed conformance statement." Cites every tool call in order with expected output shapes; the canonical reference for an agent being handed "make this AA-conformant" with no prior context.
+- [x] **C-PROFILE-WCAG21AA** `ConformanceProfile` primitive + 8 built-ins (wcag21-a/aa, wcag22-a/aa/aaa, section508, en301549, ada); `--profile` CLI flag with explicit-override warning. Profile→reports scope filtering wired in turn 8.
+- [x] **C-CONFORM-ADR** ADR 0017 (conformance-statement-output) landed.
+- [x] **C-CONFORM-STATEMENT** `conformance_statement` MCP tool + `src/reports/conformance.ts` landed; refuses when coverage is incomplete; blocker list cites missing criteria.
+- [x] **C-CONFORM-SIGN** SHA-256 digest over (commit hash + attestations + in-scope criteria + config fingerprint); canonical JSON; `verifyConformanceBundle` for drift detection.
+- [x] **C-CONFORM-DOC** `docs/conformance.md` end-to-end agent guide: scan → checklist → attest → coverage → signed statement.
 
 ### Dependencies + interactions with Track S
 
