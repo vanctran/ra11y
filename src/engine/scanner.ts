@@ -43,6 +43,7 @@ import { computeGroupKey, UNKNOWN_SHAPE } from "../utils/group-key.ts";
 import { describeNodeShape, findTargetNodeAtLocation } from "./ast-helpers.ts";
 import { runFindersForFile } from "./candidate-runner.ts";
 import { buildEvidenceLedger } from "./evidence-ledger.ts";
+import { synthesizeInheritedFindings } from "./inherited-findings.ts";
 import { buildPerRuleCoverage } from "./per-rule-coverage.ts";
 import { CriteriaRegistry } from "./registry/criteria.ts";
 import { RulesRegistry } from "./registry/rules.ts";
@@ -180,6 +181,14 @@ export function runScan(inputs: ScanInputs): ScanProducts {
   for (const v of runProjectRules(inputs, enabled, filter)) {
     allViolations.push(v);
   }
+  // Q2R2-INHERITED post-pass (ADR 0012): attribute definition-site findings
+  // out to every wrapper call site across the parsed files.
+  for (const v of synthesizeInheritedFindings({
+    violations: allViolations,
+    files: inputs.files,
+    nativeWrapperElements: inputs.nativeWrapperElements ?? {},
+  }))
+    allViolations.push(v);
   allViolations.sort(compareViolations);
 
   const allCandidates = collectCandidatesFromFiles(inputs, enabled, standardsRegistry);
@@ -259,10 +268,8 @@ function runProjectRules(
   // target node for `groupKey` (docs/adr/0008-violation-group-key.md).
   const astsByPath = new Map<string, Ast>();
   for (const f of inputs.files) astsByPath.set(f.filePath, f.ast);
-  for (const f of projectFiles) {
-    disableMaps.set(f.filePath, f.disableMap);
-    sourcesByPath.set(f.filePath, f.source);
-  }
+  for (const f of projectFiles) disableMaps.set(f.filePath, f.disableMap);
+  for (const f of projectFiles) sourcesByPath.set(f.filePath, f.source);
   const out: Violation[] = [];
   for (const rule of inputs.rules) {
     invokeOneProjectRule(
@@ -383,8 +390,7 @@ function shapeAtEmission(
   column: number,
 ): string {
   const ast = astsByPath.get(filePath);
-  if (!ast) return UNKNOWN_SHAPE;
-  const node = findTargetNodeAtLocation(ast.root, line, column);
+  const node = ast ? findTargetNodeAtLocation(ast.root, line, column) : null;
   return node ? describeNodeShape(node) : UNKNOWN_SHAPE;
 }
 
