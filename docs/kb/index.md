@@ -144,6 +144,7 @@ Generated — do not edit. Regenerate via `bun scripts/generate-kb-index.ts`.
 - [semantics/nested-interactive](./rules/semantics__nested-interactive.md)
 - [semantics/table-headers](./rules/semantics__table-headers.md)
 - [tooltip/dismissable](./rules/tooltip__dismissable.md)
+- [wrapper/drift](./rules/wrapper__drift.md)
 
 ## standards
 
