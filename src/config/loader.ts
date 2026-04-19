@@ -27,12 +27,14 @@ import type {
   Config,
   ConfigOverride,
   ConfigPreset,
+  ConformanceProfile,
   LoadedConfig,
   NativeWrapperMap,
   Process,
   RuleSetting,
 } from "../types/config.ts";
 import { DEFAULT_CONFIG } from "./defaults.ts";
+import { validateProfiles } from "./schema.ts";
 
 /**
  * Accepted `preset` values. Any other value from a user config file is
@@ -145,6 +147,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
   const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
   const projects = user.projects ?? DEFAULT_CONFIG.projects;
   const processes = normalizeProcesses(user.processes);
+  const profiles: readonly ConformanceProfile[] = validateProfiles(user.profiles);
   const preset = normalizePreset(user.preset, sourcePath);
 
   return {
@@ -158,6 +161,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
     overrides,
     projects,
     processes,
+    profiles,
     sourcePath,
   };
 }

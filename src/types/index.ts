@@ -37,6 +37,7 @@ export type {
 export type {
   Config,
   ConfigOverride,
+  ConformanceProfile,
   LoadedConfig,
   Process,
   ProjectConfig,

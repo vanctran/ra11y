@@ -15,5 +15,6 @@ export const DEFAULT_CONFIG: LoadedConfig = {
   overrides: [],
   projects: [],
   processes: [],
+  profiles: [],
   sourcePath: null,
 };

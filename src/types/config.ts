@@ -20,6 +20,24 @@ import type { Severity } from "./violation.ts";
 /** Rule-level severity override. `"off"` disables the rule entirely. */
 export type RuleSetting = Severity | "off";
 
+/**
+ * Named conformance scope an agent claims against — `{ standards, level
+ * }` pre-bundled behind a stable handle. See
+ * `src/config/profiles.ts` for the built-in set shipped with ra11y and
+ * the `ConformanceProfile` shape the type re-exports.
+ *
+ * A profile pins what "WCAG 2.1 AA conformant" means in a reproducible
+ * way: downstream reports (coverage merge, conformance statement)
+ * filter against the same tuple every call, so an agent doesn't
+ * reconstruct scope from two separate flags per invocation.
+ */
+export interface ConformanceProfile {
+  readonly name: string;
+  readonly standards: readonly string[];
+  readonly level?: "A" | "AA" | "AAA";
+  readonly description: string;
+}
+
 /** Per-directory override (same shape as ESLint's overrides). */
 export interface ConfigOverride {
   readonly files: readonly string[];
@@ -164,6 +182,18 @@ export interface Config {
    * success.
    */
   readonly processes?: readonly Process[];
+  /**
+   * User-defined conformance profiles that layer on top of the
+   * built-in set (`wcag22-aa`, `section508`, …). Useful when a team
+   * needs to claim against a narrower or wider scope than the shipped
+   * profiles cover (e.g. `{ name: "internal-aa-plus", standards:
+   * ["wcag22", "section508"], level: "AA", description: "…" }`).
+   *
+   * Names cannot collide with built-in profile names; the schema
+   * validator rejects collisions at load time. Empty arrays are treated
+   * the same as an unset field.
+   */
+  readonly profiles?: readonly ConformanceProfile[];
 }
 
 /** Fully resolved config after loading, env vars, and defaults. */
@@ -201,5 +231,13 @@ export interface LoadedConfig {
    * rather than defaulting to `pass`.
    */
   readonly processes: readonly Process[];
+  /**
+   * User-defined profiles resolved from {@link Config.profiles}. Empty
+   * array when the user did not declare any. Built-in profiles
+   * (`wcag22-aa`, …) are *not* copied into this array — callers resolve
+   * by name against the built-in list first, then this overlay (see
+   * `resolveProfile` in `src/config/profiles.ts`).
+   */
+  readonly profiles: readonly ConformanceProfile[];
   readonly sourcePath: string | null;
 }
