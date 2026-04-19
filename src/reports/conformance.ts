@@ -82,6 +82,13 @@ export interface ConformanceBlocker {
   readonly staticSources: number;
   /** Count of candidate pointers surfaced by review finders. */
   readonly candidateSources: number;
+  /**
+   * Present when `reason === "partially-attested"`: the rule IDs under
+   * this criterion that have not yet been attested. The agent can pass
+   * these directly to `attest({ criterionId, ruleIds })` to close the
+   * coverage gap. Omitted for other blocker reasons.
+   */
+  readonly missingRuleIds?: readonly string[];
 }
 
 export interface ConformanceStatement {
@@ -109,6 +116,16 @@ export interface BuildConformanceStatementInputs {
   readonly ledger: EvidenceLedger;
   readonly profile: ConformanceProfile;
   readonly standards: readonly Standard[];
+  /**
+   * Returns the rule IDs that satisfy the given criterion (via the
+   * satisfying-rules index on the scanner's registries). Used by this
+   * builder only to populate `missingRuleIds` on `partially-attested`
+   * blockers so agents can call `attest` with an actionable ruleIds
+   * list. When omitted, `missingRuleIds` is not populated — today's
+   * callers that don't have a rules registry still get a correct
+   * statement, just without the drill-down hint. See ADR 0012.
+   */
+  readonly rulesForCriterion?: (criterionId: string) => readonly string[];
 }
 
 /**
@@ -130,33 +147,17 @@ export function buildConformanceStatement(
   const ledgerByCriterion = new Map(inputs.ledger.entries.map((e) => [e.criterionId, e] as const));
 
   const blockers: ConformanceBlocker[] = [];
-  let pass = 0;
-  let fail = 0;
-  let partial = 0;
-  let unknown = 0;
-  let na = 0;
+  const summary = { pass: 0, fail: 0, partial: 0, unknown: 0, na: 0 };
   for (const criterion of inScope) {
     const entry = ledgerByCriterion.get(criterion.id);
     const counts = countSources(entry?.sources ?? []);
     const status: EvidenceStatus = entry?.status ?? "unknown";
-    if (status === "pass") pass += 1;
-    else if (status === "fail") fail += 1;
-    else if (status === "partial") partial += 1;
-    else if (status === "n/a") na += 1;
-    else unknown += 1;
-
+    tallySummary(summary, status);
     const reason = classifyBlocker(status, counts, entry);
     if (reason !== null) {
-      blockers.push({
-        criterionId: criterion.id,
-        title: criterion.title,
-        level: criterion.level,
-        status,
-        reason,
-        attestedSources: counts.attested,
-        staticSources: counts.static,
-        candidateSources: counts.candidate,
-      });
+      blockers.push(
+        buildBlocker(criterion, status, reason, counts, entry, inputs.rulesForCriterion),
+      );
     }
   }
 
@@ -166,7 +167,48 @@ export function buildConformanceStatement(
     conformant: blockers.length === 0,
     criteriaInScope: inScope.length,
     blockers,
-    summary: { pass, fail, partial, unknown, na },
+    summary,
+  };
+}
+
+interface SummaryTally {
+  pass: number;
+  fail: number;
+  partial: number;
+  unknown: number;
+  na: number;
+}
+
+function tallySummary(summary: SummaryTally, status: EvidenceStatus): void {
+  if (status === "pass") summary.pass += 1;
+  else if (status === "fail") summary.fail += 1;
+  else if (status === "partial") summary.partial += 1;
+  else if (status === "n/a") summary.na += 1;
+  else summary.unknown += 1;
+}
+
+function buildBlocker(
+  criterion: Standard["criteria"][number],
+  status: EvidenceStatus,
+  reason: ConformanceBlockerReason,
+  counts: SourceCounts,
+  entry: CriterionEvidence | undefined,
+  rulesForCriterion: ((criterionId: string) => readonly string[]) | undefined,
+): ConformanceBlocker {
+  const missingRuleIds =
+    reason === "partially-attested" && rulesForCriterion !== undefined
+      ? computeMissingRuleIds(rulesForCriterion(criterion.id), entry?.sources ?? [])
+      : undefined;
+  return {
+    criterionId: criterion.id,
+    title: criterion.title,
+    level: criterion.level,
+    status,
+    reason,
+    attestedSources: counts.attested,
+    staticSources: counts.static,
+    candidateSources: counts.candidate,
+    ...(missingRuleIds !== undefined && { missingRuleIds }),
   };
 }
 
@@ -232,6 +274,26 @@ function countSources(sources: readonly EvidenceSource[]): SourceCounts {
     else if (src.kind === "sampled") sp += 1;
   }
   return { static: s, attested: a, candidate: c, sampled: sp };
+}
+
+function computeMissingRuleIds(
+  satisfyingRules: readonly string[],
+  sources: readonly EvidenceSource[],
+): readonly string[] {
+  const covered = new Set<string>();
+  let isUniversal = false;
+  for (const s of sources) {
+    if (s.kind !== "attested") continue;
+    const verdict = s.verdict ?? "pass";
+    if (verdict !== "pass") continue;
+    if (s.ruleIds === undefined) {
+      isUniversal = true;
+      break;
+    }
+    for (const r of s.ruleIds) covered.add(r);
+  }
+  if (isUniversal) return [];
+  return satisfyingRules.filter((r) => !covered.has(r));
 }
 
 function classifyBlocker(

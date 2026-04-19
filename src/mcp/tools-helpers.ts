@@ -8,6 +8,8 @@
 
 import { isAbsolute, resolve } from "node:path";
 import { readAttestations } from "../config/attestation-store.ts";
+import { CriteriaRegistry } from "../engine/registry/criteria.ts";
+import { RulesRegistry } from "../engine/registry/rules.ts";
 import { type ParsedFile, runScan } from "../engine/scanner.ts";
 import { discoverExplicitPaths, discoverFiles } from "../input/discover.ts";
 import {
@@ -70,6 +72,11 @@ export type StructuredErrorCode =
   | "rule-not-found"
   | "standard-not-found"
   | "criterion-not-found"
+  // attest: a ruleId was provided that doesn't satisfy the given
+  // criterionId. Distinct from rule-not-found — the rule may exist,
+  // but it wouldn't contribute to this criterion's coverage so the
+  // attestation is nonsensical. See ADR 0012.
+  | "rule-not-under-criterion"
   | "mode-invalid"
   // scan/resource IO
   | "file-not-found"
@@ -685,6 +692,26 @@ export function findRule(ruleId: string): Rule | undefined {
 
 export function findStandard(standardId: string): Standard | undefined {
   return BUILTIN_STANDARDS.find((s) => s.id === standardId);
+}
+
+/**
+ * IDs of every built-in rule that satisfies the given criterion, including
+ * equivalence closure across loaded standards. Used by MCP tools that need
+ * to disclose or validate per-rule coverage claims (see ADR 0012) — the
+ * `attest` tool fans a criterion-wide attestation across this set, and
+ * validates that explicit `ruleIds` actually satisfy the criterion.
+ *
+ * Does not apply session rule overrides; an `"off"` rule still satisfies
+ * the criterion in principle, and the coverage fan-out reflects the rule
+ * surface at check-time, not this call's config.
+ */
+export function satisfyingRulesForCriterion(criterionId: string): readonly string[] {
+  const criteriaReg = new CriteriaRegistry();
+  criteriaReg.rebuild(BUILTIN_STANDARDS);
+  const rulesReg = new RulesRegistry();
+  for (const rule of BUILTIN_RULES) rulesReg.register(rule);
+  rulesReg.rebuild(criteriaReg);
+  return [...rulesReg.rulesFor(criterionId)].sort();
 }
 
 /**

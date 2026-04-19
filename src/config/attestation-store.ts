@@ -122,11 +122,18 @@ function coerceAttestationRecord(value: unknown): AttestationRecord | null {
     by: v["by"],
     reason: v["reason"],
     attestedAt: v["attestedAt"],
+    ...(isRuleIds(v["ruleIds"]) ? { ruleIds: v["ruleIds"] } : {}),
     ...(isScope(v["scope"]) ? { scope: v["scope"] } : {}),
     ...(isLocation(v["location"]) ? { location: v["location"] } : {}),
     ...(isVerdict(v["verdict"]) ? { verdict: v["verdict"] } : {}),
   };
   return record;
+}
+
+function isRuleIds(v: unknown): v is readonly string[] {
+  if (!Array.isArray(v)) return false;
+  if (v.length === 0) return false;
+  return v.every((x) => typeof x === "string" && x.length > 0);
 }
 
 /**

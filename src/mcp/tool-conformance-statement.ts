@@ -34,6 +34,7 @@ import {
   parseFiles,
   resolveLevel,
   resolveStandards,
+  satisfyingRulesForCriterion,
   strArrayParam,
   strParam,
   textResult,
@@ -43,7 +44,7 @@ export const conformanceStatementTool: McpTool = {
   def: {
     name: "conformance_statement",
     description:
-      'Produce a conformance claim for this project against a WCAG (or other standard) profile. Returns `conformant: true` only when every in-scope criterion is backed by a non-candidate evidence source (static pass, attested, or sampled) with a final status of pass or n/a. Otherwise returns `conformant: false` plus a `blockers` list — one entry per criterion still missing evidence, with a `reason` routing the agent to the next tool:\n\n  - `"failing"` → call `suggest_fix` on the cited findings.\n  - `"candidate-only"` → call `attest` after reviewing, or dismiss with a source pragma.\n  - `"no-evidence"` → call `attest` to record the evidence, or run `checklist` to work through manual review.\n\nThe response also carries a Markdown rendering (`markdown` field) suitable for dropping into a release note or audit bundle. Read-only.',
+      'Produce a conformance claim for this project against a WCAG (or other standard) profile. Returns `conformant: true` only when every in-scope criterion is backed by a non-candidate evidence source (static pass, attested, or sampled) with a final status of pass or n/a. Otherwise returns `conformant: false` plus a `blockers` list — one entry per criterion still missing evidence, with a `reason` routing the agent to the next tool:\n\n  - `"failing"` → call `suggest_fix` on the cited findings.\n  - `"candidate-only"` → call `attest` after reviewing, or dismiss with a source pragma.\n  - `"no-evidence"` → call `attest` to record the evidence, or run `checklist` to work through manual review.\n  - `"partially-attested"` → some rules under the criterion have been attested but the union does not yet cover every satisfying rule. Call `attest` with the missing `ruleIds` to close the gap (see ADR 0012).\n\nThe response also carries a Markdown rendering (`markdown` field) suitable for dropping into a release note or audit bundle. Read-only.',
     inputSchema: {
       type: "object",
       properties: {
@@ -124,6 +125,7 @@ export const conformanceStatementTool: McpTool = {
       ledger,
       profile,
       standards: BUILTIN_STANDARDS,
+      rulesForCriterion: satisfyingRulesForCriterion,
     });
 
     return textResult({
@@ -131,7 +133,7 @@ export const conformanceStatementTool: McpTool = {
       markdown: renderConformanceMarkdown(statement),
       nextStep: statement.conformant
         ? "Conformant. Drop the `markdown` block into your release notes or audit bundle; commit `.ra11y/attestations.jsonl` so the evidence trail persists."
-        : "Not conformant — read `blockers[]`. Each entry's `reason` tells you which tool to call next: `failing` → suggest_fix; `candidate-only` or `no-evidence` → attest (or checklist).",
+        : "Not conformant — read `blockers[]`. Each entry's `reason` tells you which tool to call next: `failing` → suggest_fix; `candidate-only` or `no-evidence` → attest (or checklist); `partially-attested` → attest with the missing ruleIds.",
     });
   },
 };

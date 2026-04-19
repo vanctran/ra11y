@@ -168,4 +168,85 @@ describe("attest: error envelopes", () => {
       expect(body["code"]).toBe("invalid-param");
     });
   });
+
+  it("rejects ruleIds that do not satisfy the given criterion", async () => {
+    await withScratch(async (cwd) => {
+      const session = allowWriteSession();
+      const { isError, body } = await call(session, {
+        criterionId: "wcag22:2.4.7",
+        reason: "scoping to a rule that actually covers 4.1.2",
+        ruleIds: ["aria/required-attrs"],
+        cwd,
+      });
+      expect(isError).toBe(true);
+      expect(body["code"]).toBe("rule-not-under-criterion");
+    });
+  });
+
+  it("rejects an empty ruleIds array as ambiguous", async () => {
+    await withScratch(async (cwd) => {
+      const session = allowWriteSession();
+      const { isError, body } = await call(session, {
+        criterionId: "wcag22:2.4.7",
+        reason: "x",
+        ruleIds: [],
+        cwd,
+      });
+      expect(isError).toBe(true);
+      expect(body["code"]).toBe("invalid-param");
+    });
+  });
+});
+
+describe("attest: ruleIds (ADR 0012)", () => {
+  it("accepts an explicit ruleIds list and writes it to the durable store", async () => {
+    await withScratch(async (cwd) => {
+      const session = allowWriteSession();
+      const { isError, body } = await call(session, {
+        criterionId: "wcag22:4.1.2",
+        reason: "verified aria-required attrs for every input in checkout flow",
+        ruleIds: ["aria/required-attrs"],
+        cwd,
+      });
+      expect(isError).toBe(false);
+      expect(body["applied"]).toBe(true);
+      const read = await readAttestations(cwd);
+      expect(read[0]?.ruleIds).toEqual(["aria/required-attrs"]);
+      const coverage = body["coverage"] as { readonly kind: string } | undefined;
+      expect(coverage?.kind).toBe("rule-scoped");
+    });
+  });
+
+  it("discloses the criterion-wide fan-out when ruleIds is omitted", async () => {
+    await withScratch(async (cwd) => {
+      const session = allowWriteSession();
+      const { isError, body } = await call(session, {
+        criterionId: "wcag22:4.1.2",
+        reason: "full manual audit of every interactive surface",
+        cwd,
+      });
+      expect(isError).toBe(false);
+      const coverage = body["coverage"] as { readonly kind: string } | undefined;
+      expect(coverage?.kind).toBe("criterion-wide");
+      const covered = body["coveredRules"] as readonly string[];
+      expect(covered.length).toBeGreaterThan(1);
+      const read = await readAttestations(cwd);
+      expect(read[0]?.ruleIds).toBeUndefined();
+    });
+  });
+
+  it("dedupes repeated ruleIds within one call", async () => {
+    await withScratch(async (cwd) => {
+      const session = allowWriteSession();
+      const { isError } = await call(session, {
+        criterionId: "wcag22:4.1.2",
+        reason: "dedupe test",
+        ruleIds: ["aria/required-attrs", "aria/required-attrs"],
+        cwd,
+      });
+      expect(isError).toBe(false);
+      const read = await readAttestations(cwd);
+      expect(read[0]?.ruleIds).toEqual(["aria/required-attrs"]);
+    });
+  });
 });

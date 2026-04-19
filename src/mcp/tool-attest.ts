@@ -36,6 +36,8 @@ import {
   errorResult,
   type McpTool,
   type McpToolResult,
+  satisfyingRulesForCriterion,
+  strArrayParam,
   strParam,
   textResult,
 } from "./tools-helpers.ts";
@@ -54,6 +56,12 @@ export const attestTool: McpTool = {
           type: "string",
           description:
             "Canonical criterion ID (`<standardId>:<localId>`, e.g. `wcag22:2.4.7`). Must resolve to a loaded standard; unknown IDs are rejected with `criterion-not-found`.",
+        },
+        ruleIds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "OPTIONAL rule IDs this attestation covers. Omit to claim the attestation covers every rule that satisfies the criterion — the response lists that fan-out explicitly so you see what you just asserted. Present with one or more rule IDs to scope the attestation to those specific checks; the criterion only flips to `pass` on the evidence ledger once the union of attested `ruleIds` across all attestations covers every satisfying rule. Rule IDs that don't actually satisfy the given criterion are rejected with `rule-not-under-criterion`.",
         },
         reason: {
           type: "string",
@@ -107,7 +115,7 @@ export const attestTool: McpTool = {
   async handler(params, session): Promise<McpToolResult> {
     const pre = preflight(params, session);
     if ("error" in pre) return pre.error;
-    const { record, cwd } = pre;
+    const { record, cwd, satisfyingRules } = pre;
 
     try {
       await appendAttestation(cwd, record);
@@ -120,12 +128,31 @@ export const attestTool: McpTool = {
       });
     }
 
+    const coveredRules = record.ruleIds ?? satisfyingRules;
+    const isCriterionWide = record.ruleIds === undefined;
     return textResult({
       applied: true,
       record,
       cwd,
+      // Fan-out disclosure: always list what the attestation claims to
+      // cover so the agent sees the scope of the assertion it just
+      // made. For a criterion-wide attestation, this is the list the
+      // agent would otherwise have to derive by hand.
+      coveredRules,
+      coverage: isCriterionWide
+        ? {
+            kind: "criterion-wide" as const,
+            message:
+              satisfyingRules.length === 0
+                ? `Criterion-wide attestation. No built-in rules satisfy '${record.criterionId}', so this claim stands on its reason text alone.`
+                : `Criterion-wide attestation. You just claimed coverage for ${satisfyingRules.length} rule${satisfyingRules.length === 1 ? "" : "s"} under '${record.criterionId}'. To scope the claim narrower, re-call attest with an explicit ruleIds[].`,
+          }
+        : {
+            kind: "rule-scoped" as const,
+            message: `Rule-scoped attestation covering ${coveredRules.length} of ${satisfyingRules.length} satisfying rules under '${record.criterionId}'. The criterion flips to pass only once attestations across callers cover every satisfying rule.`,
+          },
       nextStep:
-        "Attestation appended to .ra11y/attestations.jsonl. Re-run `scan_project` or `coverage` — the attested source will appear on the ledger entry for " +
+        "Attestation appended to .ra11y/attestations.jsonl. Re-run `conformance_statement` (or `scan_project` / `coverage`) — the attested source will appear on the ledger entry for " +
         record.criterionId +
         ". Commit the updated .jsonl so the audit trail persists across developers and CI.",
     });
@@ -135,6 +162,7 @@ export const attestTool: McpTool = {
 interface PreflightOk {
   readonly record: AttestationRecord;
   readonly cwd: string;
+  readonly satisfyingRules: readonly string[];
 }
 
 type PreflightResult = PreflightOk | { readonly error: McpToolResult };
@@ -157,6 +185,10 @@ function preflight(
   const required = readRequired(params);
   if ("error" in required) return required;
   const { criterionId, reason } = required;
+  const satisfyingRules = satisfyingRulesForCriterion(criterionId);
+
+  const ruleIds = readRuleIds(params, criterionId, satisfyingRules);
+  if ("error" in ruleIds) return ruleIds;
 
   const verdict = readVerdict(params);
   if (verdict instanceof Error) {
@@ -181,11 +213,47 @@ function preflight(
     by: by.length === 0 ? DEFAULT_BY : by,
     reason: reason.trim(),
     attestedAt,
+    ...(ruleIds.value !== undefined && { ruleIds: ruleIds.value }),
     ...(scope !== undefined && { scope }),
     ...(location !== undefined && { location }),
     ...(verdict !== undefined && { verdict }),
   };
-  return { record, cwd };
+  return { record, cwd, satisfyingRules };
+}
+
+function readRuleIds(
+  params: Record<string, unknown>,
+  criterionId: string,
+  satisfyingRules: readonly string[],
+): { readonly value: readonly string[] | undefined } | { readonly error: McpToolResult } {
+  const raw = strArrayParam(params, "ruleIds");
+  if (raw === undefined) return { value: undefined };
+  if (raw.length === 0) {
+    return {
+      error: errorResult({
+        code: "invalid-param",
+        message:
+          "attest.ruleIds must be omitted (for a criterion-wide claim) or contain at least one rule ID. Empty arrays are ambiguous — did you mean 'covers everything' or 'covers nothing'?",
+      }),
+    };
+  }
+  const satisfyingSet = new Set(satisfyingRules);
+  const unknown = raw.filter((id) => !satisfyingSet.has(id));
+  if (unknown.length > 0) {
+    return {
+      error: errorResult({
+        code: "rule-not-under-criterion",
+        message: `The following rule IDs do not satisfy '${criterionId}': ${unknown.join(", ")}. Attesting them would not contribute to this criterion's coverage — drop them or pick a different criterionId.`,
+        details: {
+          criterionId,
+          unknownRuleIds: unknown,
+          satisfyingRules,
+        },
+      }),
+    };
+  }
+  const deduped = [...new Set(raw)].sort();
+  return { value: deduped };
 }
 
 function readRequired(
