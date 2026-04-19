@@ -11,6 +11,8 @@ import { BUILTIN_CANDIDATE_FINDERS } from "../review/index.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { BUILTIN_STANDARDS } from "../standards/index.ts";
 import { detectApplicability, splitManualCriteria } from "./manual-applicability.ts";
+import { applyMetaCacheMode, metaModeSchema, readMetaMode } from "./meta-cache.ts";
+import type { McpSession } from "./session.ts";
 import {
   applyRuleSettings,
   errorResult,
@@ -52,6 +54,7 @@ export const coverageTool: McpTool = {
           description:
             "Include the full `untargetedCriteriaList` (bare WCAG titles for criteria no finder grounded in code). Default false; `untargetedCriteria` (the count) is always returned. Mirrors the `checklist` tool so both surfaces behave consistently.",
         },
+        metaMode: metaModeSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -154,6 +157,23 @@ export const coverageTool: McpTool = {
       analysisCoverage: undefined,
       filesByExtension: undefined,
     });
+    // `meta` is opt-in per `metaMode` — legacy callers (no metaMode)
+    // never saw a `meta` block on this tool, and additive surface
+    // creep is avoided by emitting under `metaMode: "delta"` only so
+    // the session meta-cache has something to collapse on repeat
+    // calls. The telemetry we DO ship (filesScanned, rulesEvaluated,
+    // standards, level, cwd) is scan-confidence data an agent uses to
+    // cross-check parity with the scan-family tools (CLAUDE.md §1
+    // "Verbose meta is signal, not clutter").
+    const metaField = buildCoverageMetaField({
+      params,
+      session,
+      filesScanned: files.length,
+      rulesEvaluated: applyRuleSettings(BUILTIN_RULES, session.config.rules).length,
+      enabledStandards: standards,
+      level,
+      cwd,
+    });
     // Historical shape: single object when one standard is enabled,
     // array-of-entries when multiple. Warnings ride at the top level of
     // the response per doctrine. For the single-standard path (by far
@@ -185,11 +205,49 @@ export const coverageTool: McpTool = {
             level: strParam(params, "level"),
           })
         : {};
-      return textResult({ ...entry, ...nextStep, ...warnings });
+      return textResult({ ...entry, ...nextStep, ...metaField, ...warnings });
     }
     return textResult(entries);
   },
 };
+
+/**
+ * Assembles the optional `meta` field for `coverage`. Emitted only
+ * when `metaMode: "delta"` is requested so legacy callers see no shape
+ * change (the tool had no `meta` block historically). Under delta mode
+ * we collect scan-confidence telemetry (filesScanned, rulesEvaluated,
+ * enabled standards, level, cwd) and hand it to the shared meta-cache
+ * helper — repeat calls with the same signature collapse to a delta
+ * keyed by `sessionRef`. Scoped to the single-standard return shape
+ * (where the response envelope is an object); the multi-standard array
+ * shape stays unchanged until a concrete consumer needs opt-in there.
+ */
+function buildCoverageMetaField(args: {
+  readonly params: Record<string, unknown>;
+  readonly session: McpSession;
+  readonly filesScanned: number;
+  readonly rulesEvaluated: number;
+  readonly enabledStandards: readonly string[];
+  readonly level: "A" | "AA" | "AAA";
+  readonly cwd: string;
+}): { readonly meta?: Record<string, unknown> } {
+  if (readMetaMode(args.params) === "full") return {};
+  const fullMeta: Record<string, unknown> = {
+    cwd: args.cwd,
+    filesScanned: args.filesScanned,
+    rulesEvaluated: args.rulesEvaluated,
+    standards: [...args.enabledStandards],
+    level: args.level,
+  };
+  return {
+    meta: applyMetaCacheMode({
+      toolName: "coverage",
+      params: args.params,
+      fullMeta,
+      session: args.session,
+    }),
+  };
+}
 
 interface CoverageNextStepInputs {
   readonly manualWithCandidatesLen: number;

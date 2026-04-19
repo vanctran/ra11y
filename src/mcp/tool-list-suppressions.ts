@@ -46,6 +46,7 @@
 import { parseInlineDisablesDetailed } from "../config/inline-disables.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { gitRoot } from "../utils/git.ts";
+import { applyMetaCacheMode, metaModeSchema } from "./meta-cache.ts";
 import {
   applyRuleSettings,
   type McpTool,
@@ -92,6 +93,7 @@ export const listSuppressionsTool: McpTool = {
           description:
             "Paths to include in addition to the auto-discovered tree, bypassing `.gitignore` and default build-dir skips. Typically used for post-compile CSS/HTML that lives under `dist/` or `build/`. Relative paths resolve from `cwd`.",
         },
+        metaMode: metaModeSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -125,15 +127,16 @@ export const listSuppressionsTool: McpTool = {
     );
     const activeNativeWrappers = buildListSuppressionsWrappers(bySource);
 
+    const fullMeta: Record<string, unknown> = {
+      cwd: root,
+      configSource: projectConfig.sourcePath,
+      filesScanned: files.length,
+      rulesEvaluated,
+      ...(activeNativeWrappers.length > 0 ? { activeNativeWrappers } : {}),
+    };
     return textResult({
       suppressions: entries,
-      meta: {
-        cwd: root,
-        configSource: projectConfig.sourcePath,
-        filesScanned: files.length,
-        rulesEvaluated,
-        ...(activeNativeWrappers.length > 0 ? { activeNativeWrappers } : {}),
-      },
+      meta: applyMetaCacheMode({ toolName: "list_suppressions", params, fullMeta, session }),
       nextStep: buildNextStep(entries),
     });
   },

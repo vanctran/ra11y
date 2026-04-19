@@ -17,6 +17,7 @@ import {
   irrelevanceReason,
   isLikelyIrrelevant,
 } from "./manual-applicability.ts";
+import { applyMetaCacheMode, metaModeSchema, readMetaMode } from "./meta-cache.ts";
 import { skipCriterionSchema } from "./skip-criterion.ts";
 import { buildSnippetForReason, type SourceEntry, sourceIndex } from "./source-snippet.ts";
 import {
@@ -163,6 +164,7 @@ export const checklistTool: McpTool = {
             "Caps candidates per criterion within the returned page — orthogonal to `limit`. Defaults to 10, clamped to [1, 100]. Prevents one noisy criterion from consuming the whole page without hiding it. When any criterion is clipped, the response carries `perCriterionClipped: true`; `totalCandidates` still reports the pre-clip tally so the agent can see what was elided.",
         },
         skipCriterion: skipCriterionSchema,
+        metaMode: metaModeSchema,
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -330,6 +332,24 @@ export const checklistTool: McpTool = {
     // undefined` suppresses `no_config_found`. analysisCoverage /
     // filesByExtension aren't computed here — the other codes will
     // simply not fire until the tool plumbs that signal through.
+    //
+    // `meta` is opt-in per metaMode — legacy callers (no metaMode)
+    // never saw a `meta` block on this tool, and additive surface
+    // creep is avoided by only emitting under `metaMode: "delta"` so
+    // the session meta-cache has something to collapse on repeat
+    // calls (CLAUDE.md §1 "Verbose meta is signal, not clutter" — the
+    // telemetry we DO ship under delta mode is scan-confidence data
+    // the agent uses to cross-check parity with the scan-family
+    // tools, not trimmed for terseness).
+    const metaField = buildChecklistMetaField({
+      params,
+      session,
+      filesScanned: files.length,
+      rulesEvaluated: applyRuleSettings(BUILTIN_RULES, session.config.rules).length,
+      enabledStandards: standards,
+      level,
+      cwd,
+    });
     return textResult({
       summary,
       items: page.items,
@@ -338,6 +358,7 @@ export const checklistTool: McpTool = {
       ...(showUntargeted ? { untargetedCriteriaList: untargeted } : {}),
       likelyIrrelevant: filteredIrrelevant,
       ...checklistNextStep,
+      ...metaField,
       ...warningsField({
         filesScanned: files.length,
         rootSource: null,
@@ -348,6 +369,42 @@ export const checklistTool: McpTool = {
     });
   },
 };
+
+/**
+ * Assembles the optional `meta` field for `checklist`. Emitted only
+ * when `metaMode: "delta"` is requested so legacy callers see no shape
+ * change (the tool had no `meta` block historically). Under delta mode
+ * we collect scan-confidence telemetry (filesScanned, rulesEvaluated,
+ * enabled standards, level, cwd) and hand it to the shared meta-cache
+ * helper — repeat calls with the same signature collapse to a delta
+ * keyed by `sessionRef`.
+ */
+function buildChecklistMetaField(args: {
+  readonly params: Record<string, unknown>;
+  readonly session: import("./session.ts").McpSession;
+  readonly filesScanned: number;
+  readonly rulesEvaluated: number;
+  readonly enabledStandards: readonly string[];
+  readonly level: "A" | "AA" | "AAA";
+  readonly cwd: string;
+}): { readonly meta?: Record<string, unknown> } {
+  if (readMetaMode(args.params) === "full") return {};
+  const fullMeta: Record<string, unknown> = {
+    cwd: args.cwd,
+    filesScanned: args.filesScanned,
+    rulesEvaluated: args.rulesEvaluated,
+    standards: [...args.enabledStandards],
+    level: args.level,
+  };
+  return {
+    meta: applyMetaCacheMode({
+      toolName: "checklist",
+      params: args.params,
+      fullMeta,
+      session: args.session,
+    }),
+  };
+}
 
 function mapCandidates(
   criterionId: string,
