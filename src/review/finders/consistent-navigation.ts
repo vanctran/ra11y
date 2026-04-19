@@ -17,6 +17,14 @@
  * the same link set is the surface the agent wants to see. The reason
  * names the counterpart file:line so one read resolves the question.
  *
+ * Each `NavInstance` carries its role (`"nav"` vs `"navigation"`) and
+ * accessible name so downstream process-aware comparison (added in
+ * the follow-up commit) can key on `{ role, accessibleName }` without
+ * reshaping the collection pass. Reason text also names the
+ * config-primitive upgrade path (`processes: [...]` in
+ * `ra11y.config.ts`) so an agent reading a fallback finding can nudge
+ * the caller toward declarative evidence.
+ *
  * AI-first notes (CLAUDE.md §1):
  * - Surface, don't suppress. No filename / identifier filter on navs.
  * - No numeric-threshold gate ("at least N shared links"): the spec
@@ -65,6 +73,21 @@ interface NavInstance {
   readonly column: number;
   /** Ordered, normalized link labels — the thing 3.2.3 cares about. */
   readonly order: readonly string[];
+  /**
+   * Role carried by the landmark — `"nav"` for a literal `<nav>` tag,
+   * `"navigation"` for `role="navigation"` on any other element.
+   * Participates in the signature so two landmarks with different
+   * roles don't silently merge when the process-aware path picks a
+   * modal signature.
+   */
+  readonly role: "nav" | "navigation";
+  /**
+   * Accessible name declared on the landmark — the trimmed `aria-label`
+   * value when present, otherwise `""`. Used by the process-aware path
+   * to distinguish e.g. a "primary" nav from a "footer" nav when the
+   * same process page carries both.
+   */
+  readonly accessibleName: string;
 }
 
 export const finder = defineCandidateFinder({
@@ -104,19 +127,23 @@ function collectNavs(file: ProjectFile, out: NavInstance[]): void {
 
 function collectHtmlNavs(filePath: string, root: HtmlDocument, out: NavInstance[]): void {
   for (const el of walkHtmlElements(root)) {
-    if (!isHtmlNavContainer(el)) continue;
+    const role = htmlNavRole(el);
+    if (role === null) continue;
     const order = collectHtmlNavLabels(el);
     if (order.length === 0) continue;
-    out.push(instanceFromLoc(filePath, el.loc.start, order));
+    const accessibleName = normalizeLabel(getHtmlAttribute(el, "aria-label"));
+    out.push(instanceFromLoc(filePath, el.loc.start, order, role, accessibleName));
   }
 }
 
 function collectJsxNavs(filePath: string, root: TsxModule, out: NavInstance[]): void {
   for (const el of walkJsxElements(root)) {
-    if (!isJsxNavContainer(el)) continue;
+    const role = jsxNavRole(el);
+    if (role === null) continue;
     const order = collectJsxNavLabels(el);
     if (order.length === 0) continue;
-    out.push(instanceFromLoc(filePath, el.loc.start, order));
+    const accessibleName = normalizeLabel(getJsxAttributeString(el, "aria-label"));
+    out.push(instanceFromLoc(filePath, el.loc.start, order, role, accessibleName));
   }
 }
 
@@ -124,18 +151,29 @@ function instanceFromLoc(
   filePath: string,
   start: SourcePosition,
   order: readonly string[],
+  role: "nav" | "navigation",
+  accessibleName: string,
 ): NavInstance {
-  return { filePath, line: start.line, column: start.column, order };
+  return {
+    filePath,
+    line: start.line,
+    column: start.column,
+    order,
+    role,
+    accessibleName,
+  };
 }
 
-function isHtmlNavContainer(el: HtmlElement): boolean {
-  if (el.tagName.toLowerCase() === "nav") return true;
-  return normalizeLower(getHtmlAttribute(el, "role")) === "navigation";
+function htmlNavRole(el: HtmlElement): "nav" | "navigation" | null {
+  if (el.tagName.toLowerCase() === "nav") return "nav";
+  if (normalizeLower(getHtmlAttribute(el, "role")) === "navigation") return "navigation";
+  return null;
 }
 
-function isJsxNavContainer(el: JsxElement): boolean {
-  if (el.tagName === "nav") return true;
-  return normalizeLower(getJsxAttributeString(el, "role")) === "navigation";
+function jsxNavRole(el: JsxElement): "nav" | "navigation" | null {
+  if (el.tagName === "nav") return "nav";
+  if (normalizeLower(getJsxAttributeString(el, "role")) === "navigation") return "navigation";
+  return null;
 }
 
 /**
@@ -183,7 +221,8 @@ function* walkJsxDescendants(root: JsxElement): Iterable<JsxElement> {
   }
 }
 
-function normalizeLabel(value: string): string {
+function normalizeLabel(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "";
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
@@ -230,7 +269,9 @@ function emitGroupCandidates(members: readonly NavInstance[], out: ReviewCandida
     const reasonCore =
       `<nav> link order diverges from ${counterpart.filePath}:${counterpart.line} ` +
       `— this file: [${inst.order.join(", ")}]; counterpart: [${counterpart.order.join(", ")}]`;
-    const reason = `${reasonCore} — verify the repeated navigational mechanism appears in the same relative order on both pages`;
+    const reason =
+      `${reasonCore} — verify the repeated navigational mechanism appears in the same relative order on both pages. ` +
+      `Heuristic match across the whole scanned tree; declare \`processes: [...]\` in ra11y.config.ts to anchor this check deterministically to declared user journeys.`;
     for (const criterionId of CRITERION_IDS) {
       // Confidence "high": the divergent-ordering evidence is concrete
       // — two real navs in the scanned files share a link set and

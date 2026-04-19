@@ -286,6 +286,11 @@ function absorbAttestation(
     tally.hasNA = true;
     return;
   }
+  // `pending` is an unasserted claim (bare source-pragma awaiting a
+  // reason). It surfaces in `list_attestations` so agents can act on
+  // the gap, but it contributes neither pass nor fail to status —
+  // the author has not yet attested anything.
+  if (verdict === "pending") return;
   tally.hasPass = true;
   if (source.ruleIds === undefined) tally.hasUniversalPass = true;
   else for (const r of source.ruleIds) tally.passRules.add(r);

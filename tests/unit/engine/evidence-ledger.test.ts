@@ -313,6 +313,33 @@ describe("buildEvidenceLedger", () => {
     expect(ledger.entries[0]?.sources).toEqual([]);
   });
 
+  it("ignores pending attestations for status derivation (manual criterion stays unknown)", () => {
+    // Bare source-pragmas flow in as `verdict: "pending"`. Pending is
+    // an unasserted claim — it surfaces via `list_attestations` but
+    // must not move a manual criterion to "pass" (coverage) or "fail".
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
+    const ledger = buildEvidenceLedger({
+      result: mkResult([]),
+      report: mkReport([]),
+      standards: [wcag22],
+      enabled: new Set(["wcag22"]),
+      attestations: [
+        {
+          criterionId: "wcag22:2.4.5",
+          by: "source-pragma",
+          reason: "<pending: bare pragma awaits reason>",
+          attestedAt: FIXED_TIMESTAMP,
+          verdict: "pending",
+        },
+      ],
+      generatedAt: FIXED_TIMESTAMP,
+    });
+    expect(ledger.entries[0]?.status).toBe("unknown");
+    // The record still surfaces as an attested source — agents need to
+    // see the gap — it just doesn't count toward status.
+    expect(ledger.entries[0]?.sources.some((s) => s.kind === "attested")).toBe(true);
+  });
+
   it("defaults omitted attested verdict to pass", () => {
     const wcag22 = mkStandard("wcag22", [{ localId: "2.4.5", automatable: "manual" }]);
     const ledger = buildEvidenceLedger({

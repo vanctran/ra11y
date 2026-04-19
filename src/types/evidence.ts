@@ -110,8 +110,15 @@ export type EvidenceSource =
       readonly scope?: "project" | "file" | "line";
       /** Location the attestation pins to, when `scope !== "project"`. */
       readonly location?: Location;
-      /** Verdict the attestation asserts; defaults to `"pass"` when omitted. */
-      readonly verdict?: "pass" | "fail" | "n/a";
+      /**
+       * Verdict the attestation asserts; defaults to `"pass"` when
+       * omitted. `"pending"` is reserved for bare source-pragmas whose
+       * author punted the reason slot — the attestation exists in the
+       * ledger so agents see the unasserted claim via
+       * `list_attestations`, but it contributes neither pass nor fail
+       * evidence to status derivation.
+       */
+      readonly verdict?: "pass" | "fail" | "n/a" | "pending";
     }
   | {
       readonly kind: "sampled";
@@ -144,10 +151,14 @@ export interface CriterionEvidence {
  * `.ra11y/attestations.jsonl` by the `attest` MCP tool). Both feed the
  * same `attested` {@link EvidenceSource} kind on the ledger.
  *
- * A pragma without a reason does *not* produce an attestation — the
- * scanner still silences the matching violation, but no evidence lands
- * on the ledger. That's why `ra11y:suppression-no-reason` surfaces
- * bare pragmas as review candidates: the author punted the assertion.
+ * A bare pragma (no `reason=` text) still produces a record — one
+ * per concrete token per bare pragma — but stamped
+ * `verdict: "pending"` with a sentinel reason. The pending entry
+ * surfaces in `list_attestations` so agents see the unasserted claim
+ * as an actionable gap ("fill in the reason") rather than silence;
+ * it contributes neither pass nor fail evidence to the ledger's
+ * status derivation. The existing `ra11y:suppression-no-reason`
+ * review candidate remains the complementary source-level signal.
  *
  * Validation is lenient: records whose `criterionId` is not present in
  * any enabled standard are skipped silently by the ledger builder —
@@ -178,8 +189,14 @@ export interface AttestationRecord {
   readonly scope?: "project" | "file" | "line";
   /** Location the attestation pins to, when `scope !== "project"`. */
   readonly location?: Location;
-  /** Verdict the attestation asserts; defaults to `"pass"` when omitted. */
-  readonly verdict?: "pass" | "fail" | "n/a";
+  /**
+   * Verdict the attestation asserts; defaults to `"pass"` when
+   * omitted. `"pending"` is reserved for bare source-pragma records —
+   * the author punted the reason slot, so the attestation sits in the
+   * ledger as an unasserted claim that agents can surface via
+   * `list_attestations` without it counting as pass or fail evidence.
+   */
+  readonly verdict?: "pass" | "fail" | "n/a" | "pending";
 }
 
 /**

@@ -228,8 +228,8 @@ function isScope(v: unknown): v is "project" | "file" | "line" {
   return v === "project" || v === "file" || v === "line";
 }
 
-function isVerdict(v: unknown): v is "pass" | "fail" | "n/a" {
-  return v === "pass" || v === "fail" || v === "n/a";
+function isVerdict(v: unknown): v is "pass" | "fail" | "n/a" | "pending" {
+  return v === "pass" || v === "fail" || v === "n/a" || v === "pending";
 }
 
 function isLocation(v: unknown): v is { filePath: string; line: number; column: number } {

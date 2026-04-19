@@ -1,25 +1,28 @@
 /**
  * Unit tests for resolvePragmaAttestations — the pragma-to-attestation
- * bridge that turns reason-bearing `ra11y-disable` comments into
- * AttestationRecords.
+ * bridge that turns `ra11y-disable` comments into AttestationRecords.
  *
  * Shapes under test:
- *   - A pragma without a reason produces no attestation (silence
- *     without assertion).
  *   - A pragma with a reason and a rule-ID token fans out to every
  *     criterion in the rule's `satisfies`, expanded through the
- *     criteria registry's equivalence closure.
+ *     criteria registry's equivalence closure. `verdict` is omitted
+ *     (defaults to `"pass"`).
  *   - A pragma with a reason and a criterion-ID token resolves the
  *     token directly and fans out through equivalence.
+ *   - A bare pragma (no reason) still emits a record per resolved
+ *     criterion — stamped `verdict: "pending"` with a sentinel reason
+ *     string so agents see the unasserted claim as an actionable gap.
  *   - Wildcard tokens (`"*"`) produce no attestation — no concrete
- *     criterion to speak to.
+ *     criterion to speak to — regardless of reason presence.
  *   - Unknown rule-ID tokens are silently dropped.
  *   - Criterion IDs outside the enabled standards are dropped.
  *   - Every produced record carries scope: "line" plus the pragma's
  *     file+line location.
  *   - The `by` default is `"source-pragma"` and can be overridden.
  *   - Duplicates within a single declaration are coalesced (one
- *     record per unique criterionId).
+ *     record per unique (criterion, rule) pair).
+ *   - Reasoned and bare pragmas coexisting in one file emit both
+ *     kinds of records side by side.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -104,7 +107,12 @@ function mkCriteria(standards: readonly Standard[]): CriteriaRegistry {
 }
 
 describe("resolvePragmaAttestations", () => {
-  it("produces no attestation for a pragma without a reason", () => {
+  it("emits a pending attestation for a bare pragma (no reason)", () => {
+    // Bare pragmas no longer silence evidence — they still produce a
+    // record so agents see the unasserted claim in list_attestations
+    // as an actionable gap. The verdict is "pending" (contributes
+    // neither pass nor fail to status derivation) and the reason
+    // carries a sentinel marker so reason stays a non-empty string.
     const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
     const rule = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
     const reasonless: SuppressionDeclaration = {
@@ -120,7 +128,32 @@ describe("resolvePragmaAttestations", () => {
       enabled: new Set(["wcag22"]),
       attestedAt: FIXED_TIMESTAMP,
     });
-    expect(records).toEqual([]);
+    expect(records).toHaveLength(1);
+    const [record] = records;
+    expect(record?.criterionId).toBe("wcag22:2.1.1");
+    expect(record?.verdict).toBe("pending");
+    expect(record?.reason).toMatch(/^<pending:/);
+    expect(record?.ruleIds).toEqual(["keyboard/handler-missing"]);
+    expect(record?.scope).toBe("line");
+    expect(record?.location).toEqual({ filePath: "src/f.tsx", line: 42, column: 1 });
+    expect(record?.by).toBe("source-pragma");
+  });
+
+  it("omits verdict on reasoned pragmas (implicit pass)", () => {
+    // The default-pass contract is load-bearing for status derivation:
+    // a reasoned pragma should not need to explicitly set verdict.
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
+    const rule = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
+    const records = resolvePragmaAttestations({
+      files: [mkFile([mkDecl()])],
+      rules: [rule],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.verdict).toBeUndefined();
+    expect(records[0]?.reason).toBe("verified by manual keyboard test");
   });
 
   it("fans out a rule-ID pragma through the rule's satisfies list", () => {
@@ -190,7 +223,7 @@ describe("resolvePragmaAttestations", () => {
     ]);
   });
 
-  it("skips wildcard tokens", () => {
+  it("skips wildcard tokens on reasoned pragmas", () => {
     const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
     const records = resolvePragmaAttestations({
       files: [mkFile([mkDecl({ ruleIds: ["*"] })])],
@@ -200,6 +233,61 @@ describe("resolvePragmaAttestations", () => {
       attestedAt: FIXED_TIMESTAMP,
     });
     expect(records).toEqual([]);
+  });
+
+  it("skips wildcard tokens on bare pragmas (no criterion to speak to)", () => {
+    // Bare `ra11y-disable` with no token — parsed as `ruleIds: ["*"]`
+    // per `parseRuleList`. A pending attestation needs a concrete
+    // criterion; the `suppression/no-reason` review finder is the
+    // complementary surface for this shape.
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }]);
+    const bareWildcard: SuppressionDeclaration = {
+      kind: "disable-next-line",
+      line: 10,
+      ruleIds: ["*"],
+      tag: "ra11y-disable",
+    };
+    const records = resolvePragmaAttestations({
+      files: [mkFile([bareWildcard])],
+      rules: [],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
+    expect(records).toEqual([]);
+  });
+
+  it("emits both pending and pass records when bare and reasoned pragmas share a file", () => {
+    // Mixed-input invariant: each declaration is resolved independently.
+    const wcag22 = mkStandard("wcag22", [{ localId: "2.1.1" }, { localId: "1.4.3" }]);
+    const ruleA = mkRule("keyboard/handler-missing", ["wcag22:2.1.1"]);
+    const ruleB = mkRule("contrast/minimum", ["wcag22:1.4.3"]);
+    const reasoned: SuppressionDeclaration = {
+      kind: "disable-next-line",
+      line: 10,
+      ruleIds: ["keyboard/handler-missing"],
+      reason: "manual keyboard test covers this",
+      tag: "ra11y-disable",
+    };
+    const bare: SuppressionDeclaration = {
+      kind: "disable-next-line",
+      line: 20,
+      ruleIds: ["contrast/minimum"],
+      tag: "ra11y-disable",
+    };
+    const records = resolvePragmaAttestations({
+      files: [mkFile([reasoned, bare])],
+      rules: [ruleA, ruleB],
+      criteria: mkCriteria([wcag22]),
+      enabled: new Set(["wcag22"]),
+      attestedAt: FIXED_TIMESTAMP,
+    });
+    expect(records).toHaveLength(2);
+    const byCrit = new Map(records.map((r) => [r.criterionId, r]));
+    expect(byCrit.get("wcag22:2.1.1")?.verdict).toBeUndefined();
+    expect(byCrit.get("wcag22:2.1.1")?.reason).toBe("manual keyboard test covers this");
+    expect(byCrit.get("wcag22:1.4.3")?.verdict).toBe("pending");
+    expect(byCrit.get("wcag22:1.4.3")?.reason).toMatch(/^<pending:/);
   });
 
   it("silently drops unknown rule-ID tokens", () => {
