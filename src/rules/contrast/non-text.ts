@@ -37,13 +37,30 @@
  * Reuses the parser + color helpers from `./_shared.ts` so any extraction
  * fix (Tailwind theme resolution, CSS custom properties, etc.) lands in
  * one place for all three contrast rules.
+ *
+ * `couldBeWrongBecause` opt-in (project scope): when a scanned JSX or
+ * HTML consumer carries the CSS failure's class token AND a qualifying
+ * boundary Tailwind utility (`border-*`, `outline-*`, `ring-*`) on the
+ * same element, the finding is tagged `tailwind_class_on_consumer`.
+ * Informational only — the agent reads the consumer file and decides
+ * whether the consumer-site utility actually overrides the declared
+ * border/outline. See docs/adr/0009-violation-could-be-wrong-because.md.
+ * The boundary-override family set is distinct from the text-contrast
+ * rules' `text-*` / `bg-*` set (see `_shared.ts`).
  */
 
 import { defineRule } from "../../api/plugin.ts";
 import { findCssDeclaration, walkCssRules } from "../../engine/ast-helpers.ts";
 import type { CssRule, CssStylesheet } from "../../types/ast.ts";
+import type { EmittedViolation, ProjectContext } from "../../types/rule.ts";
 import { parseColor, type Rgb } from "../../utils/color.ts";
 import { contrast, WCAG_AA_MIN_NON_TEXT } from "../../utils/contrast.ts";
+import {
+  collectTailwindOverrideClasses,
+  extractPrimarySelectorClass,
+  NON_TEXT_CONTRAST_OVERRIDE_FAMILIES,
+  TAILWIND_CLASS_ON_CONSUMER,
+} from "./_shared.ts";
 
 const SC_LABEL = "WCAG 1.4.11";
 
@@ -51,7 +68,12 @@ export const rule = defineRule({
   id: "contrast/non-text",
   satisfies: ["wcag22:1.4.11", "wcag21:1.4.11"],
   severity: "error",
-  scope: "document",
+  // Project scope mirrors `contrast/minimum` / `contrast/enhanced`: the
+  // cross-reference is cross-file by nature (CSS failure, JSX/HTML
+  // consumer). Kept `appliesTo.fileExtensions: [".css"]` for per-rule
+  // coverage telemetry — the Tailwind pre-build acute case (0 eligible
+  // CSS files → low-confidence signal) still applies.
+  scope: "project",
   fixClass: "guidance",
   appliesTo: {
     fileExtensions: [".css"],
@@ -71,18 +93,27 @@ export const rule = defineRule({
       "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html",
     ],
   },
-  afterFile(ctx) {
-    if (ctx.language !== "css") return;
-    const stylesheet = ctx.ast as CssStylesheet;
-    for (const cssRule of walkCssRules(stylesheet)) {
-      checkRule(cssRule, ctx);
+  afterProject(ctx) {
+    const overrideClasses = collectTailwindOverrideClasses(
+      ctx,
+      NON_TEXT_CONTRAST_OVERRIDE_FAMILIES,
+    );
+    for (const file of ctx.files) {
+      if (file.language !== "css") continue;
+      const stylesheet = file.ast as CssStylesheet;
+      for (const cssRule of walkCssRules(stylesheet)) {
+        checkRule(cssRule, file.filePath, overrideClasses, ctx);
+      }
     }
   },
 });
 
-type Ctx = Parameters<NonNullable<typeof rule.afterFile>>[0];
-
-function checkRule(cssRule: CssRule, ctx: Ctx): void {
+function checkRule(
+  cssRule: CssRule,
+  filePath: string,
+  overrideClasses: ReadonlySet<string>,
+  ctx: ProjectContext,
+): void {
   if (isExempt(cssRule.selector)) return;
 
   const target = classifySelector(cssRule.selector);
@@ -92,29 +123,44 @@ function checkRule(cssRule: CssRule, ctx: Ctx): void {
   if (!bg) return;
 
   if (target === "interactive") {
-    checkBoundary(cssRule, bg, "border", ctx);
-    checkBoundary(cssRule, bg, "border-color", ctx);
-    checkBoundary(cssRule, bg, "outline", ctx);
-    checkBoundary(cssRule, bg, "outline-color", ctx);
+    checkBoundary(cssRule, bg, "border", filePath, overrideClasses, ctx);
+    checkBoundary(cssRule, bg, "border-color", filePath, overrideClasses, ctx);
+    checkBoundary(cssRule, bg, "outline", filePath, overrideClasses, ctx);
+    checkBoundary(cssRule, bg, "outline-color", filePath, overrideClasses, ctx);
     return;
   }
 
   // graphic
-  checkBoundary(cssRule, bg, "fill", ctx);
-  checkBoundary(cssRule, bg, "stroke", ctx);
+  checkBoundary(cssRule, bg, "fill", filePath, overrideClasses, ctx);
+  checkBoundary(cssRule, bg, "stroke", filePath, overrideClasses, ctx);
 }
 
-function checkBoundary(cssRule: CssRule, bg: ColorRead, prop: string, ctx: Ctx): void {
+function checkBoundary(
+  cssRule: CssRule,
+  bg: ColorRead,
+  prop: string,
+  filePath: string,
+  overrideClasses: ReadonlySet<string>,
+  ctx: ProjectContext,
+): void {
   const fg = readColor(cssRule, prop);
   if (!fg) return;
   const ratio = contrast(fg.rgb, bg.rgb);
   if (ratio >= WCAG_AA_MIN_NON_TEXT) return;
-  ctx.emit({
+
+  const primaryClass = extractPrimarySelectorClass(cssRule.selector);
+  const tailwindOverride = primaryClass !== null && overrideClasses.has(primaryClass);
+
+  const emitted: EmittedViolation = {
     severity: "error",
-    location: { filePath: "", line: cssRule.loc.start.line, column: cssRule.loc.start.column },
+    location: { filePath, line: cssRule.loc.start.line, column: cssRule.loc.start.column },
     message: buildMessage(cssRule.selector, prop, fg.source, bg.source, ratio),
     suggestion: buildSuggestion(prop, fg.source, bg.source, ratio),
-  });
+    // Conditional spread — `couldBeWrongBecause: []` would be a
+    // dishonest empty-vs-unpopulated sentinel per CLAUDE.md §1.
+    ...(tailwindOverride ? { couldBeWrongBecause: [TAILWIND_CLASS_ON_CONSUMER] } : {}),
+  };
+  ctx.emit(emitted);
 }
 
 interface ColorRead {

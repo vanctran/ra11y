@@ -194,55 +194,108 @@ function isBold(value: string): boolean {
 
 /**
  * Token code surfaced on `Violation.couldBeWrongBecause` when a CSS
- * contrast failure targets a class that co-occurs with a `text-*` /
- * `bg-*` Tailwind utility on a JSX/HTML consumer. Informational signal
- * only — the agent investigates the consumer file and decides. See
+ * contrast failure targets a class that co-occurs with a qualifying
+ * Tailwind utility on a JSX/HTML consumer. Informational signal only —
+ * the agent investigates the consumer file and decides. See
  * docs/adr/0009-violation-could-be-wrong-because.md.
+ *
+ * The same reason code is shared across every contrast rule; the
+ * utility *family* that qualifies as an override varies by rule (text
+ * vs. background for text contrast, border / outline / ring for the
+ * non-text boundary contrast). The axis lives in the rule, not the
+ * reason code — agents read the cited file and figure out which
+ * declaration the utility overrides.
  */
 export const TAILWIND_CLASS_ON_CONSUMER = "tailwind_class_on_consumer";
 
 /**
- * Utility families that override the contrast-failing declaration at
- * the consumer site. `text-*` overrides `color`; `bg-*` overrides
- * `background-color` / `background`. Scoped deliberately — other
- * families (borders, rings) don't override the text-vs-background pair
- * a contrast rule checks.
+ * Utility families that override the *text-vs-background* pair a
+ * text-contrast rule checks. `text-*` overrides `color`; `bg-*`
+ * overrides `background-color` / `background`. Scoped deliberately —
+ * border / outline / ring utilities live in a separate set consumed
+ * by `contrast/non-text`.
  */
-const OVERRIDING_UTILITY_FAMILIES: ReadonlySet<string> = new Set(["text", "bg"]);
+export const TEXT_CONTRAST_OVERRIDE_FAMILIES: ReadonlySet<string> = new Set(["text", "bg"]);
+
+/**
+ * Utility families that override the *boundary-vs-surroundings* pair
+ * the non-text contrast rule checks:
+ *
+ *   - `border-*` (including bare `border`, `border-{color}`,
+ *     `border-{width}`, `border-{side}-*`, and `border-[<arbitrary>]`)
+ *     — directly overrides the `border` / `border-color` declaration
+ *     the rule evaluated.
+ *   - `outline-*` — directly overrides the `outline` /
+ *     `outline-color` declaration.
+ *   - `ring-*` — applies a box-shadow-based boundary on the element.
+ *     The non-text rule's intent is "the user-visible boundary of the
+ *     control has 3:1 contrast." A ring utility places a visible
+ *     boundary on the same element; it's a credible override even
+ *     when the failing CSS declared `border-color`. Agent investigates
+ *     and decides.
+ *
+ * `divide-*` is intentionally excluded. It applies borders *between
+ * children of a container*, not on the element itself — the non-text
+ * rule fires on the failing element (the button, the svg, the `.btn`),
+ * not on its container, so `divide-*` on the failing element does not
+ * override the boundary the rule evaluated. Including it would dilute
+ * the signal with consumer elements whose `divide-*` utility affects
+ * unrelated children.
+ */
+export const NON_TEXT_CONTRAST_OVERRIDE_FAMILIES: ReadonlySet<string> = new Set([
+  "border",
+  "outline",
+  "ring",
+]);
 
 /**
  * Walks every JSX and HTML className in the project and returns the
  * set of plain class names that co-occur on an element with a
- * qualifying `text-*` or `bg-*` Tailwind utility. Variants are ignored
- * for the qualifier check (an `md:text-white` at the consumer site is
- * still an author-placed color override relative to the declared CSS).
+ * qualifying Tailwind utility from `families`. Variant-scoped
+ * utilities (e.g. `md:text-*`, `hover:border-*`) do NOT qualify — they
+ * are conditional and can't override the declared CSS at all viewport
+ * widths / states. Only unqualified utilities do.
  *
  * This is the same cross-file primitive `focus/outline-visible` uses
  * for its focus-visible ring cross-reference — tokenized via
  * `parseTailwind`, no new parser pass. Deterministic class-token link,
  * never heuristic.
  */
-export function collectTailwindOverrideClasses(ctx: ProjectContext): ReadonlySet<string> {
+export function collectTailwindOverrideClasses(
+  ctx: ProjectContext,
+  families: ReadonlySet<string> = TEXT_CONTRAST_OVERRIDE_FAMILIES,
+): ReadonlySet<string> {
   const usage = new Set<string>();
-  for (const file of ctx.files) indexFileForTailwindOverride(file.ast, file.language, usage);
+  for (const file of ctx.files) {
+    indexFileForTailwindOverride(file.ast, file.language, families, usage);
+  }
   return usage;
 }
 
-function indexFileForTailwindOverride(ast: unknown, language: Language, usage: Set<string>): void {
+function indexFileForTailwindOverride(
+  ast: unknown,
+  language: Language,
+  families: ReadonlySet<string>,
+  usage: Set<string>,
+): void {
   if (language === "tsx" || language === "jsx" || language === "ts" || language === "js") {
     for (const el of walkJsxElements(ast as TsxModule)) {
-      indexClassStringForOverride(jsxClassString(el), usage);
+      indexClassStringForOverride(jsxClassString(el), families, usage);
     }
     return;
   }
   if (language === "html") {
     for (const el of walkHtmlElements(ast as HtmlDocument)) {
-      indexClassStringForOverride(htmlClassString(el), usage);
+      indexClassStringForOverride(htmlClassString(el), families, usage);
     }
   }
 }
 
-function indexClassStringForOverride(classString: string | null, usage: Set<string>): void {
+function indexClassStringForOverride(
+  classString: string | null,
+  families: ReadonlySet<string>,
+  usage: Set<string>,
+): void {
   if (!classString) return;
   const tokens = parseTailwind(classString);
   const plainClasses: string[] = [];
@@ -257,15 +310,15 @@ function indexClassStringForOverride(classString: string | null, usage: Set<stri
     }
     if (tok.utility.length === 0) continue;
     plainClasses.push(tok.utility);
-    if (isOverridingUtility(tok.utility)) qualifies = true;
+    if (isOverridingUtility(tok.utility, families)) qualifies = true;
   }
   if (!qualifies) return;
   for (const cls of plainClasses) usage.add(cls);
 }
 
-function isOverridingUtility(utility: string): boolean {
+function isOverridingUtility(utility: string, families: ReadonlySet<string>): boolean {
   const family = utility.split("-")[0] ?? utility;
-  return OVERRIDING_UTILITY_FAMILIES.has(family);
+  return families.has(family);
 }
 
 function jsxClassString(element: JsxElement): string | null {

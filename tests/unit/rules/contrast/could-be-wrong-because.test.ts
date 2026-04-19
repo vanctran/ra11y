@@ -19,6 +19,7 @@ import { type ParsedFile, runScan } from "../../../../src/engine/scanner.ts";
 import { parseCss, parseHtml, parseTsx } from "../../../../src/input/parsers/index.ts";
 import { rule as contrastEnhanced } from "../../../../src/rules/contrast/enhanced.ts";
 import { rule as contrastMinimum } from "../../../../src/rules/contrast/minimum.ts";
+import { rule as contrastNonText } from "../../../../src/rules/contrast/non-text.ts";
 import { wcag22 } from "../../../../src/standards/wcag22/standard.ts";
 import type { Rule } from "../../../../src/types/rule.ts";
 import type { Violation } from "../../../../src/types/violation.ts";
@@ -174,5 +175,217 @@ describe("contrast/enhanced couldBeWrongBecause", () => {
     const violations = scanWithRule(contrastEnhanced, [css]);
     expect(violations).toHaveLength(1);
     expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+});
+
+describe("contrast/non-text couldBeWrongBecause", () => {
+  // The boundary-override family set is `{border, outline, ring}`.
+  // `text-*` / `bg-*` do NOT qualify here — they override the
+  // text-vs-background axis that `contrast/minimum` checks, not the
+  // border/outline/ring axis this rule evaluates. `divide-*` also
+  // does not qualify (applies to children of a container, not the
+  // element itself).
+  //
+  // The rule's selector classifier requires the CSS selector to
+  // identify an interactive element or role (`button`, `input`,
+  // `[role="button"]`, `svg`, …) before it fires. The tests below
+  // use selectors like `button.btn` / `input.email` / `svg.icon` so
+  // both the rule classifies the selector as interactive AND the
+  // class token is available for cross-reference against the
+  // consumer's Tailwind utilities.
+
+  it("tags finding when a JSX element uses the class plus a bare `border` utility", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary border">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("tags finding when a JSX element uses the class plus a `border-{color}` utility", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `input.email { background: #ffffff; border-color: #e0e0e0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Email.tsx",
+      `export function Email() { return <input className="email border-slate-900" />; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("tags finding when a JSX element uses the class plus an `outline-*` utility", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.chip { background: #ffffff; outline: 2px solid #e8e8e8; }`,
+    );
+    const tsx = tsxFile(
+      "src/Chip.tsx",
+      `export function Chip() { return <button className="chip outline-red-500">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("tags finding when a JSX element uses the class plus a `ring-*` utility", () => {
+    const css = cssFile("src/ui.css", `svg.icon { background: #ffffff; stroke: #d8d8d8; }`);
+    const tsx = tsxFile(
+      "src/Icon.tsx",
+      `export function Icon() { return <svg className="icon ring-2" />; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("tags finding when the consumer uses an arbitrary-value `border-[3px]` utility", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #dcdcdc; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary border-[3px]">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("tags finding when the consumer is HTML with a class plus a boundary utility", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border-color: #e4e4e4; }`,
+    );
+    const html = htmlFile(
+      "src/index.html",
+      `<!doctype html><html><body><button class="primary border-2">go</button></body></html>`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, html]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+  });
+
+  it("omits the field when the consumer carries only text-*/bg-* (wrong axis)", () => {
+    // `text-*` / `bg-*` override color/background — NOT the border.
+    // The non-text rule evaluated the border-vs-background pair, so
+    // the text/bg utility is not a credible escape hatch here.
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary text-slate-900 bg-blue-500">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("omits the field when the consumer has the class but no tailwind class at all", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("omits the field when the consumer className is empty", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("omits the field when the boundary utility is variant-scoped only", () => {
+    // `hover:border-*` is conditional — it doesn't override the
+    // declared border at rest. Only unqualified utilities qualify.
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary hover:border-slate-900">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("omits the field when a `divide-*` utility (wrong-element axis) is the only qualifier", () => {
+    // `divide-*` applies between children of the element, not on
+    // the element itself. It does NOT override the boundary this
+    // rule evaluated. Intentionally excluded from the family set.
+    const css = cssFile(
+      "src/ui.css",
+      `button.primary { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="primary divide-y divide-gray-500">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("omits the field when the selector is bare-element (no class to cross-reference)", () => {
+    const css = cssFile("src/ui.css", `button { background: #ffffff; border: 1px solid #d0d0d0; }`);
+    const tsx = tsxFile(
+      "src/Btn.tsx",
+      `export function Btn() { return <button className="border">go</button>; }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations).toHaveLength(1);
+    expect("couldBeWrongBecause" in violations[0]!).toBe(false);
+  });
+
+  it("tags only the matching finding when one class has a boundary override and another does not", () => {
+    const css = cssFile(
+      "src/ui.css",
+      `button.one { background: #ffffff; border: 1px solid #d0d0d0; }
+       button.two { background: #ffffff; border: 1px solid #d0d0d0; }`,
+    );
+    const tsx = tsxFile(
+      "src/App.tsx",
+      `export function App() {
+         return (
+           <div>
+             <button className="one border-2">a</button>
+             <button className="two">b</button>
+           </div>
+         );
+       }`,
+    );
+    const violations = scanWithRule(contrastNonText, [css, tsx]);
+    expect(violations.length).toBeGreaterThanOrEqual(2);
+    const one = violations.find((v) => v.message.includes(".one"));
+    const two = violations.find((v) => v.message.includes(".two"));
+    expect(one?.couldBeWrongBecause).toEqual(["tailwind_class_on_consumer"]);
+    expect("couldBeWrongBecause" in (two ?? {})).toBe(false);
   });
 });
