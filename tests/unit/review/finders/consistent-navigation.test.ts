@@ -14,6 +14,7 @@ import { type ParsedFile, runScan } from "../../../../src/engine/scanner.ts";
 import { parseHtml, parseTsx } from "../../../../src/input/parsers/index.ts";
 import { finder } from "../../../../src/review/finders/consistent-navigation.ts";
 import { wcag22 } from "../../../../src/standards/wcag22/standard.ts";
+import type { Process } from "../../../../src/types/config.ts";
 import type { ReviewCandidate } from "../../../../src/types/review.ts";
 
 const FIXTURE_ROOT = join(
@@ -43,13 +44,17 @@ function tsxFile(filePath: string, source: string): ParsedFile {
   return { filePath, source, ast: { language: "tsx", root: r.root, errors: r.errors } };
 }
 
-function runWith(files: readonly ParsedFile[]): readonly ReviewCandidate[] {
+function runWith(
+  files: readonly ParsedFile[],
+  processes?: readonly Process[],
+): readonly ReviewCandidate[] {
   const { report } = runScan({
     standards: [wcag22],
     rules: [],
     enabled: ["wcag22"],
     files,
     finders: [finder],
+    ...(processes === undefined ? {} : { processes }),
   });
   return report.candidates ?? [];
 }
@@ -265,6 +270,174 @@ describe("review/consistent-navigation (edge cases)", () => {
     );
     const candidates = runWith([a, b]).filter((c) => c.criterionId === "wcag22:3.2.3");
     expect(candidates.length).toBe(2);
+  });
+
+  // Guards the process-aware path's invariant that a `processes`
+  // config with two pages whose navs match exactly produces zero
+  // candidates. This is the canonical clean shape — config is
+  // declared, evidence is deterministic, and the landmarks agree.
+  it("process-aware: zero candidates when two process pages share an identical nav", () => {
+    const cart = htmlFile(
+      "/p/cart.html",
+      `<html><body><nav><a href="/">Home</a><a href="/cart">Cart</a><a href="/pay">Pay</a></nav></body></html>`,
+    );
+    const pay = htmlFile(
+      "/p/pay.html",
+      `<html><body><nav><a href="/">Home</a><a href="/cart">Cart</a><a href="/pay">Pay</a></nav></body></html>`,
+    );
+    const processes: readonly Process[] = [
+      { name: "checkout", pages: ["/p/cart.html", "/p/pay.html"] },
+    ];
+    expect(runWith([cart, pay], processes)).toEqual([]);
+  });
+
+  // Guards the core process-aware flag shape: two pages whose primary
+  // nav differs in ordered link labels emits exactly one candidate on
+  // the diverging page, scoped to the process name.
+  it("process-aware: flags the divergent page when two process pages disagree on nav link labels", () => {
+    const cart = htmlFile(
+      "/p/cart.html",
+      `<html><body><nav><a href="/">Home</a><a href="/cart">Cart</a><a href="/pay">Pay</a></nav></body></html>`,
+    );
+    const pay = htmlFile(
+      "/p/pay.html",
+      `<html><body><nav><a href="/cart">Cart</a><a href="/">Home</a><a href="/pay">Pay</a></nav></body></html>`,
+    );
+    const processes: readonly Process[] = [
+      { name: "checkout", pages: ["/p/cart.html", "/p/pay.html"] },
+    ];
+    const candidates = runWith([cart, pay], processes).filter(
+      (c) => c.criterionId === "wcag22:3.2.3",
+    );
+    // First-seen signature (cart.html) is modal; pay.html diverges.
+    expect(candidates.length).toBe(1);
+    expect(candidates[0]?.location.filePath).toBe("/p/pay.html");
+    expect(candidates[0]?.reason).toContain("checkout");
+    expect(candidates[0]?.reason).toContain("process-modal order");
+  });
+
+  // Guards the outlier-in-three case: two pages agree on the nav,
+  // one dissents. The modal is the pair's shared signature and the
+  // finder must flag only the outlier — the two agreeing pages are
+  // consistent with each other and consistent with the process
+  // modal.
+  it("process-aware: flags only the outlier when 2/3 process pages agree", () => {
+    const home = htmlFile(
+      "/p/home.html",
+      `<html><body><nav><a href="/">Home</a><a href="/shop">Shop</a><a href="/about">About</a></nav></body></html>`,
+    );
+    const shop = htmlFile(
+      "/p/shop.html",
+      `<html><body><nav><a href="/">Home</a><a href="/shop">Shop</a><a href="/about">About</a></nav></body></html>`,
+    );
+    const about = htmlFile(
+      "/p/about.html",
+      `<html><body><nav><a href="/about">About</a><a href="/shop">Shop</a><a href="/">Home</a></nav></body></html>`,
+    );
+    const processes: readonly Process[] = [
+      { name: "browse", pages: ["/p/home.html", "/p/shop.html", "/p/about.html"] },
+    ];
+    const candidates = runWith([home, shop, about], processes).filter(
+      (c) => c.criterionId === "wcag22:3.2.3",
+    );
+    expect(candidates.length).toBe(1);
+    expect(candidates[0]?.location.filePath).toBe("/p/about.html");
+  });
+
+  // Guards the link-count divergence path: same labels intersect but
+  // one page drops a link. Same-named landmark but different link
+  // count is a 3.2.3 question too, and the reason text calls out the
+  // count mismatch explicitly.
+  it("process-aware: flags when a process page's nav has a different link count", () => {
+    const a = htmlFile(
+      "/p/a.html",
+      `<html><body><nav><a href="/">Home</a><a href="/shop">Shop</a><a href="/help">Help</a></nav></body></html>`,
+    );
+    const b = htmlFile(
+      "/p/b.html",
+      `<html><body><nav><a href="/">Home</a><a href="/shop">Shop</a></nav></body></html>`,
+    );
+    const processes: readonly Process[] = [{ name: "browse", pages: ["/p/a.html", "/p/b.html"] }];
+    const candidates = runWith([a, b], processes).filter((c) => c.criterionId === "wcag22:3.2.3");
+    expect(candidates.length).toBe(1);
+    expect(candidates[0]?.location.filePath).toBe("/p/b.html");
+    expect(candidates[0]?.reason).toContain("link count");
+  });
+
+  // Guards the empty-landmark case: a page with no `<nav>` and no
+  // `role="navigation"` contributes nothing to the process group,
+  // so the finder has nothing to compare and stays silent. Without
+  // this guard, an agent auditing a partially-built app would get
+  // noise on every un-navved landing page.
+  it("process-aware: stays silent when a process page has no nav landmark", () => {
+    const a = htmlFile(
+      "/p/a.html",
+      `<html><body><nav><a href="/">Home</a><a href="/about">About</a></nav></body></html>`,
+    );
+    const b = htmlFile("/p/b.html", `<html><body><main>No nav here</main></body></html>`);
+    const processes: readonly Process[] = [{ name: "browse", pages: ["/p/a.html", "/p/b.html"] }];
+    expect(runWith([a, b], processes)).toEqual([]);
+  });
+
+  // Guards the `{ role, accessibleName }` keying: a page with both a
+  // "primary" nav (matching the other page) and a "footer" nav
+  // (singleton) must not flag the footer just because it is the only
+  // one of its kind. The process-aware path only compares landmarks
+  // that share role + accessible name across pages.
+  it("process-aware: separates primary and footer navs by accessible name", () => {
+    const a = htmlFile(
+      "/p/a.html",
+      `<html><body>
+         <nav aria-label="Primary"><a href="/">Home</a><a href="/shop">Shop</a></nav>
+         <nav aria-label="Footer"><a href="/terms">Terms</a></nav>
+       </body></html>`,
+    );
+    const b = htmlFile(
+      "/p/b.html",
+      `<html><body>
+         <nav aria-label="Primary"><a href="/">Home</a><a href="/shop">Shop</a></nav>
+       </body></html>`,
+    );
+    const processes: readonly Process[] = [{ name: "browse", pages: ["/p/a.html", "/p/b.html"] }];
+    expect(runWith([a, b], processes)).toEqual([]);
+  });
+
+  // Guards the heuristic-fallback reason text: when no `processes`
+  // config is declared the finder keeps firing (existing behavior)
+  // but the reason names the config-upgrade path so an agent can
+  // tell the caller how to anchor the check deterministically.
+  it("fallback: reason text points at the `processes` config upgrade", () => {
+    const a = htmlFile(
+      "/p/a.html",
+      `<html><body><nav><a href="/">Home</a><a href="/about">About</a></nav></body></html>`,
+    );
+    const b = htmlFile(
+      "/p/b.html",
+      `<html><body><nav><a href="/about">About</a><a href="/">Home</a></nav></body></html>`,
+    );
+    const candidates = runWith([a, b]).filter((c) => c.criterionId === "wcag22:3.2.3");
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const c of candidates) {
+      expect(c.reason).toContain("processes: [...]");
+      expect(c.reason).toContain("ra11y.config.ts");
+    }
+  });
+
+  // Guards the empty-processes case: an empty `processes` list is
+  // treated identically to "unset," so the heuristic fallback fires.
+  // This mirrors the doctrine in `ProjectCandidateContext.processes`
+  // that both `undefined` and `[]` mean "no process evidence."
+  it("fallback: empty processes list falls through to heuristic path", () => {
+    const a = htmlFile(
+      "/p/a.html",
+      `<html><body><nav><a href="/">Home</a><a href="/about">About</a></nav></body></html>`,
+    );
+    const b = htmlFile(
+      "/p/b.html",
+      `<html><body><nav><a href="/about">About</a><a href="/">Home</a></nav></body></html>`,
+    );
+    const candidates = runWith([a, b], []).filter((c) => c.criterionId === "wcag22:3.2.3");
+    expect(candidates.length).toBeGreaterThan(0);
   });
 
   // Guards the inline-disable pragma path: an agent that reviewed a
