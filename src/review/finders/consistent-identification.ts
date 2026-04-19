@@ -82,14 +82,11 @@ export const finder = defineCandidateFinder({
   },
   afterProject(ctx) {
     const processes = ctx.processes;
-    // Honest "needs config" — no `processes` declared, no cross-page
-    // evidence, no candidates. Absence of config ≠ clean result.
+    // Honest "needs config" — no `processes`, no cross-page evidence, no candidates.
     if (processes === undefined || processes.length === 0) return [];
     const fileByAbsPath = indexFilesByAbsPath(ctx.files);
     const out: ReviewCandidate[] = [];
-    for (const process of processes) {
-      collectProcessCandidates(process, fileByAbsPath, out);
-    }
+    for (const process of processes) collectProcessCandidates(process, fileByAbsPath, out);
     return out;
   },
 });
@@ -112,11 +109,7 @@ function indexFilesByAbsPath(files: readonly ProjectFile[]): ReadonlyMap<string,
   return out;
 }
 
-/**
- * For one process declaration: collect every identifiable component
- * across the process's pages, group by semantic key, and emit one
- * candidate per group whose visible labels disagree across ≥2 pages.
- */
+/** For one process: index keyed components across pages, emit one candidate per divergent key-group. */
 function collectProcessCandidates(
   process: Process,
   fileByAbsPath: ReadonlyMap<string, ProjectFile>,
