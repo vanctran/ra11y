@@ -99,8 +99,8 @@ violation fires.
 
 Verdict distribution:
 
-- context-aware: 40
-- generic: 12
+- context-aware: 41
+- generic: 11
 - caveat-only: 0
 
 Rules flagged `generic` (need per-rule `feat(rules): context-aware fix for <rule>` follow-up commits before v1.0):
