@@ -235,9 +235,10 @@ treat missing pages as clean.
   — alphabetical or depth-first order is not navigation order. Inference
   would be a heuristic, and a wrong order produces wrong consistency results.
   Explicit is the only honest option.
-- **URL patterns for `pages` (runtime-ingest scope).** Deferred — URL-pattern
-  matching requires a running server. Out of scope for the static-analysis
-  track; runtime-ingest cases (ADR 0015) will extend the `pages` field later.
+- **URL patterns for `pages` (runtime-ingest scope).** Rejected — URL-pattern
+  matching requires runtime evidence, which is outside ra11y's scope.
+  Agents that run runtime checks bridge their results through the `attest`
+  tool, not a vendor-specific ingest pipeline. `pages` is file-paths only.
 - **`scan_project` automatically running process checks when config is
   present.** Rejected — `scan_project` is already scoped to per-file static
   analysis. Mixing page-level and process-level results in one response
@@ -254,11 +255,7 @@ treat missing pages as clean.
 
 ## Open questions
 
-1. **Process-level runtime evidence.** When an agent runs axe across a process
-   (multi-page Playwright run), should `ingest_runtime_results` (ADR 0015)
-   accept a `processName` to scope results? The `RuntimeResult` shape has no
-   process field today. Deferred to ADR 0015's follow-up open question 3.
-2. **Cross-process page membership.** Should a page be allowed to appear in
+1. **Cross-process page membership.** Should a page be allowed to appear in
    more than one process? No restriction is proposed here — the schema does
    not enforce uniqueness across processes. An agent may want the same
    checkout confirmation page in both a "checkout" and a "guest-checkout"
@@ -281,8 +278,6 @@ treat missing pages as clean.
   follows the same tool-response discipline.
 - [ADR 0013](./0013-rule-scoped-attestations.md) — attestation scope model
   that process-level attestations will extend.
-- [ADR 0015](./0015-runtime-evidence-ingest.md) — runtime ingest; open
-  question 3 is the cross-ADR dependency.
 - [`docs/kb/architecture/ai-first-consumer.md`](../kb/architecture/ai-first-consumer.md)
   — doctrine cited for honest-failure vs silent-partial, and for keeping
   scan_project and scan_process as separate surfaces.

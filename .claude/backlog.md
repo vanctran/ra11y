@@ -306,13 +306,13 @@ Sequencing (cross-gap, soft): attestations first (unlocks evidence semantics eve
 - [ ] **C-ATTEST-CHECKLIST** `checklist` response surfaces per-criterion `attestation?: { verdict, stale?, evidence }`. Agents skip verdicted non-stale criteria; surface stale + un-attested only. Keeps the "surface, don't suppress" doctrine — stale attestations resurface automatically on code change.
 - [ ] **C-SUPPRESSION-ATTEST** `ra11y-disable` pragmas with reason text become attestation entries at scan time (one per pragma). Pairs with Q2-REASON + Q2-LISTSUPP — the reason IS the evidence. Bare pragmas (flagged by Q2-REASON's `suppression/no-reason` finder) get `verdict: "pending"` until reason is filled in.
 
-### v0.3.0 — runtime evidence bridge
+### Rejected — runtime evidence bridge (2026-04-19)
 
-- [ ] **C-RUNTIME-ADR** ADR `docs/adr/0010-runtime-evidence-ingest.md` — scope boundary: which runtime sources ra11y accepts (axe-core first; Pa11y, Lighthouse, manual keyboard tests later), normalized internal shape, reconciliation rules when a finding exists in both static + runtime.
-- [ ] **C-AXE-SCHEMA** Normalized runtime-result type in `src/types/runtime-result.ts`. Axe-core's JSON output maps to `{ ruleId, criterionId, nodes: [{ filePath?, selector, html }], verdict }`. Reuse `findingId` + `groupKey` hashing so identity works across static + runtime without a parallel keyspace.
-- [ ] **C-AXE-INGEST** `ingest_runtime_results` MCP tool — accepts a path to an axe-core JSON file (or inline JSON), normalizes, stamps commit, stores alongside attestations. Agents run axe in their Playwright/Vitest suite and hand the path to ra11y. No network; no axe-core runtime dep (we parse its output, we don't embed it — zero-deps invariant holds).
-- [ ] **C-RUNTIME-MAP** Axe-rule → WCAG criterion mapping table in `src/standards/axe-mappings.ts`. Pure data, same shape discipline as standard `equivalentTo`. Covers the runtime-only criteria called out in the gap analysis: 4.1.3 status messages, 1.4.10 reflow, 1.4.11 non-text contrast under computed styles, 2.1.2 keyboard trap, 2.4.3 focus order, 2.4.7 focus visible state-dependent cases, 2.2.1 session timing.
-- [ ] **C-COVERAGE-MERGE** `coverage` report integrates runtime results + attestations — per-criterion status becomes `{ static: "pass"|"fail"|"manual", runtime?: "pass"|"fail"|"absent", attested?: "pass"|"fail"|"stale" }`. The aggregate "pass" requires at least one positive source; `manual` criteria fall back to the attestation ledger. Agents see exactly which source signed off on each criterion.
+A prior plan proposed ingesting vendor runtime results (axe-core JSON → normalized shape → ledger) as the path to close runtime-only WCAG criteria. Rejected by the project owner: vendor-specific ingest adapters weaken the moat and point the tool at another tool's output instead of the source. Agents that run runtime checks in their own harness bridge results through the existing `attest` tool — the reason text is the evidence, and the attestation ledger is the durable channel.
+
+Items struck: C-RUNTIME-ADR, C-AXE-SCHEMA, C-AXE-INGEST, C-RUNTIME-MAP. C-COVERAGE-MERGE is re-scoped below.
+
+- [ ] **C-COVERAGE-MERGE** `coverage` report integrates attestations — per-criterion status becomes `{ static: "pass"|"fail"|"manual", attested?: "pass"|"fail"|"stale" }`. The aggregate "pass" requires at least one positive source; `manual` criteria fall back to the attestation ledger. No runtime column — runtime outcomes reach the ledger as agent-authored attestations.
 
 ### v0.3.0 — process-level scope
 
