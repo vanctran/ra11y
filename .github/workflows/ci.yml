@@ -67,6 +67,36 @@ jobs:
       - name: Verify lockfile matches package.json
         run: bun install --frozen-lockfile
 
+  # Self-scan: produce a SARIF report of ra11y's own source and upload it
+  # to GitHub's Security tab. Eats our own dog food + gives contributors
+  # an annotated view of any accessibility drift in examples/ and docs.
+  self-scan:
+    name: self-scan (sarif)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Scan src/ and emit SARIF
+        run: bun src/cli.ts scan src/ --format sarif --fail-on never > ra11y.sarif
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ra11y.sarif
+          category: ra11y-self-scan
+
   plugin-examples:
     name: plugin examples
     runs-on: ubuntu-latest
