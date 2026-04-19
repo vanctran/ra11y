@@ -29,6 +29,7 @@ import type {
   ConfigPreset,
   LoadedConfig,
   NativeWrapperMap,
+  Process,
   RuleSetting,
 } from "../types/config.ts";
 import { DEFAULT_CONFIG } from "./defaults.ts";
@@ -143,6 +144,7 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
   const { nativeWrappers, nativeWrapperElements } = normalizeNativeWrappers(user.nativeWrappers);
   const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
   const projects = user.projects ?? DEFAULT_CONFIG.projects;
+  const processes = normalizeProcesses(user.processes);
   const preset = normalizePreset(user.preset, sourcePath);
 
   return {
@@ -155,8 +157,76 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
     nativeWrapperElements,
     overrides,
     projects,
+    processes,
     sourcePath,
   };
+}
+
+/**
+ * Validates and normalizes `Config.processes`. The primitive exists so
+ * process-level WCAG criteria (3.2.3, 3.2.4, 2.4.5) have a deterministic
+ * page set to evaluate against — an empty or malformed declaration is
+ * worse than no declaration, because downstream coverage would silently
+ * mark the criteria as clean. Every invalid shape throws; the loader's
+ * outer try/catch surfaces the error to stderr and falls back to
+ * defaults (`processes: []`), which in turn makes the criteria report
+ * as `absent` — honest failure rather than silent partial success.
+ *
+ * Validations:
+ *   - `name` must be a non-empty string
+ *   - `name` must be unique across the process list
+ *   - `pages` must be a non-empty array
+ *   - every entry in `pages` must be a non-empty string
+ *
+ * Duplicate pages *within* a single process are not an error (ADR 0016
+ * classifies that as a future validation warning) — the primitive here
+ * just guarantees the shape the downstream finders can trust.
+ */
+function normalizeProcesses(raw: readonly Process[] | undefined): readonly Process[] {
+  if (raw === undefined) return DEFAULT_CONFIG.processes;
+  if (!Array.isArray(raw)) {
+    throw new Error(`processes must be an array of { name, pages } entries`);
+  }
+  const seen = new Set<string>();
+  const out: Process[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    out.push(normalizeProcessEntry(raw[i], i, seen));
+  }
+  return out;
+}
+
+function normalizeProcessEntry(entry: unknown, i: number, seen: Set<string>): Process {
+  if (entry === undefined || entry === null || typeof entry !== "object") {
+    throw new Error(`processes[${i}] must be an object with name and pages`);
+  }
+  const name = (entry as { name?: unknown }).name;
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error(`processes[${i}].name must be a non-empty string`);
+  }
+  if (seen.has(name)) {
+    throw new Error(`processes[${i}].name duplicates an earlier entry: ${name}`);
+  }
+  seen.add(name);
+  const pages = validateProcessPages((entry as { pages?: unknown }).pages, i);
+  return { name, pages };
+}
+
+function validateProcessPages(raw: unknown, i: number): readonly string[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`processes[${i}].pages must be an array of file paths`);
+  }
+  if (raw.length === 0) {
+    throw new Error(
+      `processes[${i}].pages is empty — a process with zero pages cannot run process-level criteria`,
+    );
+  }
+  for (let j = 0; j < raw.length; j++) {
+    const page = raw[j];
+    if (typeof page !== "string" || page.length === 0) {
+      throw new Error(`processes[${i}].pages[${j}] must be a non-empty string`);
+    }
+  }
+  return [...raw] as readonly string[];
 }
 
 /**

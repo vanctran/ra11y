@@ -14,5 +14,6 @@ export const DEFAULT_CONFIG: LoadedConfig = {
   nativeWrapperElements: {},
   overrides: [],
   projects: [],
+  processes: [],
   sourcePath: null,
 };

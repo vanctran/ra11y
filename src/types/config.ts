@@ -57,6 +57,28 @@ export interface ProjectConfig {
 }
 
 /**
+ * A named, explicitly-ordered set of pages that together form a user
+ * journey (checkout, signup, account management, etc.). Process-level
+ * WCAG criteria — 3.2.3 Consistent navigation, 3.2.4 Consistent
+ * identification, 2.4.5 Multiple ways — evaluate across the full set;
+ * they cannot be answered from a single page in isolation.
+ *
+ * Page ordering is explicit and authoritative. ra11y does not infer
+ * order from file names, directory structure, or import graphs — the
+ * caller specifies order, matching the "deterministic evidence beats
+ * inference" doctrine (alphabetical order is not navigation order).
+ *
+ * Paths are resolved relative to the config file's directory, same as
+ * `include` / `exclude` globs. The `pages` field is typed
+ * `readonly string[]` so URL strings can be added later (for
+ * runtime-ingest scopes) without a breaking change.
+ */
+export interface Process {
+  readonly name: string;
+  readonly pages: readonly string[];
+}
+
+/**
  * Preset name. Presets engage framework-specific transparency so the
  * scanner can see through layers of indirection that would otherwise
  * classify framework primitives as opaque custom components. Each
@@ -128,6 +150,20 @@ export interface Config {
   readonly overrides?: readonly ConfigOverride[];
   /** Monorepo/workspace projects. */
   readonly projects?: readonly ProjectConfig[];
+  /**
+   * Named, explicitly-ordered page sets that form user journeys. Each
+   * process is the unit of evaluation for process-level WCAG criteria
+   * (3.2.3, 3.2.4, 2.4.5) — criteria that compare behavior across a
+   * page set cannot be answered from a single page. See {@link Process}
+   * for the per-entry shape.
+   *
+   * Unset when the project has no process-level criteria to evaluate,
+   * in which case process-level criteria report as `absent` in
+   * coverage (they cannot be evaluated without a page set) rather
+   * than silently clean. Absence is honest failure, not partial
+   * success.
+   */
+  readonly processes?: readonly Process[];
 }
 
 /** Fully resolved config after loading, env vars, and defaults. */
@@ -157,5 +193,13 @@ export interface LoadedConfig {
   readonly nativeWrapperElements: Readonly<Record<string, string>>;
   readonly overrides: readonly ConfigOverride[];
   readonly projects: readonly ProjectConfig[];
+  /**
+   * Process page sets resolved from {@link Config.processes}. Empty
+   * array when the user did not declare any — downstream consumers
+   * (coverage, `scan_process`) treat `[]` as "no process evidence
+   * available" and emit `absent` verdicts for process-level criteria
+   * rather than defaulting to `pass`.
+   */
+  readonly processes: readonly Process[];
   readonly sourcePath: string | null;
 }

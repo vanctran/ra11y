@@ -38,6 +38,7 @@ export type {
   Config,
   ConfigOverride,
   LoadedConfig,
+  Process,
   ProjectConfig,
   RuleSetting,
 } from "./config.ts";
