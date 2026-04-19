@@ -82,13 +82,18 @@ function mkCandidate(criterionId: string): ReviewCandidate {
   };
 }
 
-function mkAttestation(criterionId: string, verdict?: "pass" | "fail" | "n/a"): AttestationRecord {
+function mkAttestation(
+  criterionId: string,
+  verdict?: "pass" | "fail" | "n/a",
+  ruleIds?: readonly string[],
+): AttestationRecord {
   return {
     criterionId,
     by: "tester",
     reason: "confirmed",
     attestedAt: FIXED_TIMESTAMP,
     ...(verdict !== undefined && { verdict }),
+    ...(ruleIds !== undefined && { ruleIds }),
   };
 }
 
@@ -98,6 +103,7 @@ function buildLedger(
     readonly violations?: readonly Violation[];
     readonly candidates?: readonly ReviewCandidate[];
     readonly attestations?: readonly AttestationRecord[];
+    readonly rulesForCriterion?: (criterionId: string) => readonly string[];
   } = {},
 ): EvidenceLedger {
   return buildEvidenceLedger({
@@ -116,6 +122,7 @@ function buildLedger(
     standards: [standard],
     enabled: new Set([standard.id]),
     ...(opts.attestations ? { attestations: opts.attestations } : {}),
+    ...(opts.rulesForCriterion ? { rulesForCriterion: opts.rulesForCriterion } : {}),
     generatedAt: FIXED_TIMESTAMP,
   });
 }
@@ -228,6 +235,84 @@ describe("buildConformanceStatement", () => {
         standards: [standard],
       }),
     ).toThrow(/is not loaded/);
+  });
+});
+
+describe("buildConformanceStatement: rule-scoped attestations (ADR 0012)", () => {
+  const RULES = ["aria/role-invalid", "aria/required-attrs", "semantics/button-name"];
+  const rulesForCriterion = (id: string): readonly string[] => (id === "wcag22:4.1.2" ? RULES : []);
+
+  it("routes a partial-coverage attestation to a partially-attested blocker", () => {
+    const standard = mkStandard([{ localId: "4.1.2", level: "A", automatable: "full" }]);
+    const statement = buildConformanceStatement({
+      ledger: buildLedger(standard, {
+        attestations: [mkAttestation("wcag22:4.1.2", "pass", ["aria/role-invalid"])],
+        rulesForCriterion,
+      }),
+      profile: AA_PROFILE,
+      standards: [standard],
+      rulesForCriterion,
+    });
+    expect(statement.conformant).toBe(false);
+    expect(statement.blockers).toHaveLength(1);
+    expect(statement.blockers[0]).toMatchObject({
+      criterionId: "wcag22:4.1.2",
+      status: "partial",
+      reason: "partially-attested",
+    });
+    expect(statement.blockers[0]?.missingRuleIds).toEqual([
+      "aria/required-attrs",
+      "semantics/button-name",
+    ]);
+    expect(statement.summary.partial).toBe(1);
+  });
+
+  it("clears a partial blocker when remaining ruleIds get attested", () => {
+    const standard = mkStandard([{ localId: "4.1.2", level: "A", automatable: "full" }]);
+    const statement = buildConformanceStatement({
+      ledger: buildLedger(standard, {
+        attestations: [
+          mkAttestation("wcag22:4.1.2", "pass", ["aria/role-invalid", "aria/required-attrs"]),
+          mkAttestation("wcag22:4.1.2", "pass", ["semantics/button-name"]),
+        ],
+        rulesForCriterion,
+      }),
+      profile: AA_PROFILE,
+      standards: [standard],
+      rulesForCriterion,
+    });
+    expect(statement.conformant).toBe(true);
+    expect(statement.blockers).toEqual([]);
+  });
+
+  it("a criterion-wide attestation fans out to cover every satisfying rule", () => {
+    const standard = mkStandard([{ localId: "4.1.2", level: "A", automatable: "full" }]);
+    const statement = buildConformanceStatement({
+      ledger: buildLedger(standard, {
+        attestations: [mkAttestation("wcag22:4.1.2", "pass")],
+        rulesForCriterion,
+      }),
+      profile: AA_PROFILE,
+      standards: [standard],
+      rulesForCriterion,
+    });
+    expect(statement.conformant).toBe(true);
+  });
+
+  it("omits missingRuleIds when rulesForCriterion is not supplied", () => {
+    const standard = mkStandard([{ localId: "4.1.2", level: "A", automatable: "full" }]);
+    const statement = buildConformanceStatement({
+      ledger: buildLedger(standard, {
+        attestations: [mkAttestation("wcag22:4.1.2", "pass", ["aria/role-invalid"])],
+        rulesForCriterion,
+      }),
+      profile: AA_PROFILE,
+      standards: [standard],
+    });
+    // Partial status is still derived by the ledger, but the builder
+    // has no rule set to compute missingRuleIds from.
+    expect(statement.blockers[0]?.reason).toBe("partially-attested");
+    expect(statement.blockers[0]?.missingRuleIds).toBeUndefined();
   });
 });
 
