@@ -142,8 +142,9 @@ export const WCAG22_ROWS: readonly WcagRow[] = [
 ].sort((a, b) => compareScId(a.id, b.id));
 
 /**
- * All 87 WCAG 2.2 success criteria as `Criterion` records, ready to register
- * into the standards/criteria registries.
+ * WCAG 2.2 success criteria as `Criterion` records, ready to register
+ * into the standards/criteria registries. Excludes 4.1.1 (removed in 2.2);
+ * includes the nine new 2.2 criteria.
  */
 export const WCAG22_CRITERIA: readonly Criterion[] = WCAG22_ROWS.map((row) => ({
   id: `wcag22:${row.id}`,
