@@ -392,7 +392,7 @@ Source: coverage sweep during second-pass gap scan — MCP surface and several C
 
 - [ ] **V1-TEST-MCP-SERVER** `src/mcp/server.ts` at 8.28% line coverage. Tool dispatch, session lifecycle, logging / completions / roots / resources glue — nearly untested by static coverage. Integration tests may compensate but the gap is real for regression surface. Target: ≥80% lines. Owner: `test-author`.
 - [ ] **V1-TEST-MCP-SCAN-DIFF** `src/mcp/tool-scan-diff.ts` at 17.70%. Lines 140–351, 385–406 untested. Target: ≥80%. Owner: `test-author`.
-- [ ] **V1-TEST-MCP-APPLY-FIX** `src/mcp/tool-apply-fix.ts` at 43.71%. Write-gate + patch-application paths under-exercised. Target: ≥80%. Owner: `test-author`.
+- [x] **V1-TEST-MCP-APPLY-FIX** `src/mcp/tool-apply-fix.ts` raised from 43.71% → 100% lines / 95.49% branches (120569d + 6f36e30). 26 new unit tests drive the handler in-process (existing integration tests drive the subprocess, which instrumentation doesn't cross). Internals file `tool-apply-fix-internals.ts` rode along to 96.55%/95.91%.
 - [ ] **V1-TEST-CLI-CMDS** Six CLI commands at 0% function coverage: `certification`, `checklist`, `coverage`, `doctor`, `init`, `vpat` under `src/cli/commands/`. Add integration tests that exercise each via the CLI binary against a small fixture project. Target: ≥80% functions per command. Owner: `test-author`.
 - [ ] **V1-TEST-MCP-GLUE** Zero-coverage MCP helper modules: `src/mcp/completions.ts`, `src/mcp/deprecation-warning.ts`, `src/mcp/outbound.ts`, `src/mcp/logging.ts`, `src/mcp/resources/index.ts`. Add unit tests; each file earns its keep only if it's reachable from a tested path. Owner: `test-author`.
 - [x] **V1-TEST-CONFIG-SCHEMA** `src/config/schema.ts` raised from 6.94% → 100% lines / 100% funcs (4dfd9d6). 42 new tests in `tests/unit/config/schema.test.ts` covering accepted shapes, rejection paths, error-path indices, and output normalization.
@@ -404,7 +404,7 @@ Source: coverage sweep during second-pass gap scan — MCP surface and several C
 - [ ] **V1-CI-SARIF-UPLOAD** CI self-scan: run `ra11y scan src/ --format sarif > ra11y.sarif` + `github/codeql-action/upload-sarif@v3`. Both documentation (`docs/ci.md`) and README reference the pattern — implement it for our own repo as the reference. Owner: main session.
 - [ ] **V1-CI-DEP-REVIEW** Add `.github/workflows/dependency-review.yml` as a soft gate on PRs alongside the in-house `scripts/check-zero-deps.ts`. Redundancy is intentional — zero-dep is an invariant. Owner: main session.
 - [ ] **V1-EXIT-CODES** Centralize CLI exit codes into `src/cli/exit-codes.ts` enum (today each command defines its own constants; `scan.ts:48` uses 3 for "new violations" — undocumented). Wire every command to the enum; print a legend under `ra11y --help`; document in `docs/cli.md`. Semver-relevant: once v1.0 ships, exit-code table is frozen. Owner: main session.
-- [ ] **V1-MCP-ERRORS-DOC** Create `docs/errors.md` indexing every `StructuredErrorCode` emitted by the MCP surface (central registry already lives at `src/mcp/tools-helpers.ts:67–119`) + every CLI exit code. One canonical page agents link to when an error surfaces. Owner: `doc-writer`.
+- [x] **V1-MCP-ERRORS-DOC** `docs/errors.md` created (5bfcf34). 26 MCP structured errors indexed (24 from the central union + 2 suppress-local cast-through codes documented as intentional), 4 CLI exit codes indexed. Canonical error + exit-code reference.
 
 ### v1.0.0 — code-quality polish (second-pass scan, 2026-04-19)
 
@@ -416,7 +416,7 @@ Source: coverage sweep during second-pass gap scan — MCP surface and several C
   Owner: main session.
 - [ ] **V1-COMMENT-DRIFT** `src/standards/wcag22/criteria.ts:145` — comment says "All 87 WCAG 2.2 rows" but code filters to 86 (78 shared + 9 new − 1 obsolete 4.1.1). Update the comment. Owner: main session.
 - [ ] **V1-README-PLUGIN-LINK** `README.md:197` links to `docs/plugin-authoring.md` which does not exist (real path is `docs/plugins/authoring-a-rule.md`). Either create an index page at the referenced path or fix the link. Owner: `doc-writer`.
-- [ ] **V1-DOCS-CLI-COMMANDS** `docs/cli.md` treats the CLI as a flag reference only. Twelve commands exist (`scan`, `coverage`, `vpat`, `certification`, `checklist`, `baseline`, `list-rules`, `list-standards`, `explain`, `init`, `doctor`, `attestations`); several have no top-level heading in the doc. Add a commands section enumerating each with its purpose + representative invocation. Owner: `doc-writer`.
+- [x] **V1-DOCS-CLI-COMMANDS** Per-command reference section added to `docs/cli.md` (192cf0d). Each command gets a subsection with purpose + representative invocation + key non-global flags; `baseline prune` + `attestations prune` subcommands now documented; `--profile` flag added; usage synopsis updated to reflect command dispatch.
 - [ ] **V1-MIGRATION-0.2-TO-1.0** Author `docs/migrations/0.2-to-1.0.md` capturing every breaking change landing at v1.0 (rule renames if V1-RULE-RENAME-DECIDE accepts renames, coverage/checklist merge if V1-COV-CHECK-MERGE accepts the merge, parser subpackage if V1-PARSER-SUBPKG-DECIDE accepts extraction, exit-code freeze from V1-EXIT-CODES, any sampling-tool public surface from V1-SAMPLING-TOOL-PICK). Owner: `migration-author`. Depends on the four deferred-decision items above.
 
 ### Considered but not elevated to Track V
