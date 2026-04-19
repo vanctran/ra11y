@@ -21,6 +21,7 @@
  * can't enter the store through the sanctioned path.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AttestationRecord } from "../types/evidence.ts";
@@ -103,6 +104,78 @@ async function readRaw(path: string): Promise<string> {
     if (isNotFound(err)) return "";
     throw err;
   }
+}
+
+/**
+ * Rewrites the attestation store with the given records, replacing
+ * any existing content. Creates `.ra11y/` and the file if neither
+ * exists. Each record is validated through the same strict gate as
+ * {@link appendAttestation} so the store remains well-formed.
+ *
+ * This is the sibling of {@link appendAttestation} used by prune-like
+ * operations that legitimately need to rewrite history (dropping
+ * entries whose files have been deleted). Unlike `appendAttestation`,
+ * this intentionally replaces the file — callers must already own the
+ * full desired ledger state.
+ */
+export async function rewriteAttestations(
+  projectRoot: string,
+  records: readonly AttestationRecord[],
+): Promise<void> {
+  const validated = records.map((r) => requireValidRecord(r));
+  const path = resolveAttestationStorePath(projectRoot);
+  await mkdir(dirname(path), { recursive: true });
+  const body = validated.map((r) => JSON.stringify(r)).join("\n");
+  const contents = body.length > 0 ? `${body}\n` : "";
+  await writeFile(path, contents, "utf8");
+}
+
+/**
+ * Result of a prune pass over the attestation store. `kept` is every
+ * record that survives; `dropped` is every record removed because a
+ * file it pins to no longer exists. Structural so callers (CLI,
+ * future MCP tool) can report what changed.
+ */
+export interface AttestationPruneResult {
+  readonly kept: AttestationRecord[];
+  readonly dropped: AttestationRecord[];
+}
+
+/**
+ * Drops attestation records whose pinned file locations no longer
+ * exist on disk. A record is a prune candidate only when it carries a
+ * {@link AttestationRecord.location} (scope `"file"` or `"line"`) —
+ * project-scope records (no location) are file-agnostic and always
+ * kept, even when authored alongside deleted files.
+ *
+ * The predicate is injectable so tests don't need a real filesystem.
+ * Production callers pass `fs.existsSync`. The function is pure —
+ * same input, same output, no I/O of its own.
+ *
+ * @param records - The loaded attestation ledger.
+ * @param fileExists - Predicate called with the absolute or
+ *   record-supplied `location.filePath`. Defaults to `fs.existsSync`.
+ * @returns `{ kept, dropped }` — both arrays preserve input order.
+ *
+ * @example
+ * ```ts
+ * const records = await readAttestations(root);
+ * const { kept, dropped } = pruneAttestations(records, existsSync);
+ * if (dropped.length > 0) await rewriteAttestations(root, kept);
+ * ```
+ */
+export function pruneAttestations(
+  records: readonly AttestationRecord[],
+  fileExists: (path: string) => boolean = existsSync,
+): AttestationPruneResult {
+  const kept: AttestationRecord[] = [];
+  const dropped: AttestationRecord[] = [];
+  for (const record of records) {
+    const pinnedPath = record.location?.filePath;
+    if (pinnedPath !== undefined && !fileExists(pinnedPath)) dropped.push(record);
+    else kept.push(record);
+  }
+  return { kept, dropped };
 }
 
 /**
