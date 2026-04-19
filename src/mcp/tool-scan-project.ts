@@ -5,14 +5,15 @@
  */
 
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
 import type { ParsedFile } from "../engine/scanner.ts";
 import { BUILTIN_RULES } from "../rules/index.ts";
 import { filesChangedSince, gitRoot, stagedFiles } from "../utils/git.ts";
 import { logger } from "../utils/logger.ts";
 import { baselineStatusField, probeBaselineStatus } from "./baseline-status.ts";
 import { collectBuildArtifacts } from "./build-artifacts.ts";
+import { buildConfigHint } from "./config-hint.ts";
 import { classifyWrapperCandidates, collectWrapperCandidates } from "./detect-wrappers-core.ts";
+import { applyMetaCacheMode, metaModeSchema } from "./meta-cache.ts";
 import { buildNextStep } from "./next-step.ts";
 import { referenceGuideField } from "./reference-guide.ts";
 import { includeRuleDetailsSchema, ruleCatalogField } from "./rule-catalog.ts";
@@ -76,6 +77,7 @@ export const scanProjectTool: McpTool = {
           description:
             "When true, analysisCoverage expands its counts into the actual lists — `parseErrorFiles` (paths that failed to parse), `opaqueCustomComponentNames` (PascalCase tags not in nativeWrappers), and `rulesByExtension` (which rules ran against which file types). Off by default to keep responses terse; enable when triaging coverage gaps.",
         },
+        metaMode: metaModeSchema,
         autoDetectWrappers: {
           type: "boolean",
           description:
@@ -197,6 +199,37 @@ export const scanProjectTool: McpTool = {
     // omitted when the whole result fits.
     const pageParams = readPageParams(params);
     const page = paginateFiles(formatted.files, pageParams);
+    const fullMeta = {
+      ...formatted.meta,
+      ...skippedByCallerField(skipCriterion),
+      scannedRoot: root,
+      scanMode: actualMode,
+      ...(fallbackReason === undefined ? {} : { fallbackReason }),
+      rootSource,
+      ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
+      configSource: projectConfig.sourcePath,
+      configSearchedFrom: root,
+      ...baselineStatusField(baselineStatus),
+      ...buildArtifacts.metaField,
+      ...(projectConfig.sourcePath === null
+        ? {
+            configNote: `No ra11y.config found at ${root} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
+          }
+        : {}),
+      ...(configHint === null ? {} : { configHint }),
+      ...buildWrapperMeta({ autoDetect, configMissing, detectedNames }),
+      ...(additionalPaths.length > 0
+        ? {
+            additionalPathsScanned: {
+              paths: additionalPaths,
+              filesAdded: files.length - baseFiles.length,
+              note: "These paths bypassed `.gitignore` and the default build-dir skips. User `exclude` patterns still applied.",
+            },
+          }
+        : {}),
+      nextStep: nextStep.prose,
+      ...nextStepStructuredField,
+    };
     return textResult({
       plan: formatted.plan,
       files: page.files,
@@ -210,37 +243,7 @@ export const scanProjectTool: McpTool = {
         scannedBuildArtifactsPresent: buildArtifacts.present,
         storybookPresetActive,
       }),
-      meta: {
-        ...formatted.meta,
-        ...skippedByCallerField(skipCriterion),
-        scannedRoot: root,
-        scanMode: actualMode,
-        ...(fallbackReason === undefined ? {} : { fallbackReason }),
-        rootSource,
-        ...buildRootsOverlapMeta({ explicitCwd, hostRoot, root, session }),
-        configSource: projectConfig.sourcePath,
-        configSearchedFrom: root,
-        ...baselineStatusField(baselineStatus),
-        ...buildArtifacts.metaField,
-        ...(projectConfig.sourcePath === null
-          ? {
-              configNote: `No ra11y.config found at ${root} — using built-in defaults (no nativeWrappers, no per-rule overrides). Drop a ra11y.config.ts at the project root to register design-system wrappers and customize severities.`,
-            }
-          : {}),
-        ...(configHint === null ? {} : { configHint }),
-        ...buildWrapperMeta({ autoDetect, configMissing, detectedNames }),
-        ...(additionalPaths.length > 0
-          ? {
-              additionalPathsScanned: {
-                paths: additionalPaths,
-                filesAdded: files.length - baseFiles.length,
-                note: "These paths bypassed `.gitignore` and the default build-dir skips. User `exclude` patterns still applied.",
-              },
-            }
-          : {}),
-        nextStep: nextStep.prose,
-        ...nextStepStructuredField,
-      },
+      meta: applyMetaCacheMode({ toolName: "scan_project", params, fullMeta, session }),
     });
   },
 };
@@ -378,68 +381,6 @@ function buildWrapperMeta(args: {
     };
   }
   return {};
-}
-
-/**
- * When config discovery failed AND the caller didn't pass `cwd` explicitly,
- * warn that the server's spawn directory is almost certainly the wrong
- * place to look. If a ra11y.config.* file is reachable by walking up the
- * filesystem from the spawn dir (past the .git barrier that stops the
- * loader), name its exact path so agents can retry with the right cwd in
- * one step instead of spelunking.
- */
-function buildConfigHint(
-  sourcePath: string | null,
-  explicitCwd: string | undefined,
-  resolvedCwd: string,
-  autoPromoted: boolean,
-): string | null {
-  if (sourcePath !== null) return null;
-  // Only surface the hint when there's something actionable the agent
-  // can do about it. A project that genuinely has no ra11y.config and
-  // is scanned with the correct cwd needs no repeated warning — the
-  // hint must earn its place in every response, not be wallpaper.
-  const nearby = findNearbyConfig(resolvedCwd);
-  if (nearby !== null) {
-    return `No ra11y.config found walking up from ${resolvedCwd}${explicitCwd === undefined ? " (the MCP server's spawn directory)" : ""}. A config exists at ${nearby} — retry with \`cwd: "${dirname(nearby)}"\` to load it.`;
-  }
-  // No nearby config and caller was explicit about cwd: they're
-  // running on defaults intentionally. Silent.
-  if (explicitCwd !== undefined) return null;
-  // No explicit cwd, no config, no nearby candidate — warn that the
-  // spawn directory probably isn't the project root.
-  if (!autoPromoted) {
-    return `No ra11y.config was found walking up from ${resolvedCwd} (the MCP server's spawn directory). If your project root is elsewhere, pass \`cwd\` pointing at it — the loader will then find both the config and the project's .gitignore.`;
-  }
-  return null;
-}
-
-const CONFIG_FILENAMES = [
-  "ra11y.config.ts",
-  "ra11y.config.js",
-  "ra11y.config.mjs",
-  "ra11y.config.json",
-] as const;
-
-const MAX_ANCESTORS_TO_SEARCH = 6;
-
-/**
- * Searches ancestor directories (past .git, which the normal loader
- * stops at) for a ra11y.config.* file. Bounded to a few levels so we
- * don't crawl the entire filesystem on every scan.
- */
-function findNearbyConfig(startDir: string): string | null {
-  let dir = startDir;
-  for (let i = 0; i < MAX_ANCESTORS_TO_SEARCH; i += 1) {
-    for (const filename of CONFIG_FILENAMES) {
-      const candidate = join(dir, filename);
-      if (existsSync(candidate)) return candidate;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-  return null;
 }
 
 // Next-step prose is built by the shared `buildNextStep` helper
