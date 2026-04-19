@@ -21,6 +21,17 @@ export type {
   ConformanceStatement,
 } from "./conformance.ts";
 export { buildConformanceStatement, renderConformanceMarkdown } from "./conformance.ts";
+export type {
+  ConformanceSignature,
+  ConformanceVerificationReason,
+  ConformanceVerificationResult,
+  SignatureInput,
+} from "./conformance-signature.ts";
+export {
+  signConformanceBundle,
+  signConformanceBundleAt,
+  verifyConformanceBundle,
+} from "./conformance-signature.ts";
 export type { PerStandardCoverage } from "./coverage.ts";
 export { buildCoverageReport, toEngineCoverageEntry } from "./coverage.ts";
 export type {

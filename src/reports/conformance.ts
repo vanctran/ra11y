@@ -25,12 +25,18 @@
  */
 
 import type {
+  AttestationRecord,
   CriterionEvidence,
   EvidenceLedger,
   EvidenceSource,
   EvidenceStatus,
 } from "../types/evidence.ts";
 import type { Standard } from "../types/standard.ts";
+import {
+  type ConformanceSignature,
+  type SignatureInput,
+  signConformanceBundleAt,
+} from "./conformance-signature.ts";
 
 /**
  * Defines the scope of a conformance claim. For WCAG, `level` narrows
@@ -110,6 +116,14 @@ export interface ConformanceStatement {
     readonly unknown: number;
     readonly na: number;
   };
+  /**
+   * Tamper-evident signature over the inputs the claim stands on —
+   * commit hash, attestation ledger, in-scope criterion set, and
+   * config fingerprint. Present only when the statement is conformant
+   * and the caller supplied the signing inputs. Omitted on refusal
+   * so the field is not a false assurance over a partial claim.
+   */
+  readonly signature?: ConformanceSignature;
 }
 
 export interface BuildConformanceStatementInputs {
@@ -126,6 +140,23 @@ export interface BuildConformanceStatementInputs {
    * statement, just without the drill-down hint. See ADR 0013.
    */
   readonly rulesForCriterion?: (criterionId: string) => readonly string[];
+  /**
+   * Signing inputs for the tamper-evident signature stamped on a
+   * conformant statement. When present and the claim is conformant,
+   * the builder computes a SHA-256 over the canonicalized
+   * (commit hash, attestation ledger, in-scope criterion set, config
+   * fingerprint) bundle and attaches it as `statement.signature`.
+   * Omitted → no signature field is emitted. The statement is still
+   * refused (no signature) when any blocker remains.
+   */
+  readonly signing?: {
+    readonly commitHash: string;
+    readonly attestations: readonly AttestationRecord[];
+    readonly configFingerprint: {
+      readonly standards: readonly string[];
+      readonly level?: string;
+    };
+  };
 }
 
 /**
@@ -161,13 +192,41 @@ export function buildConformanceStatement(
     }
   }
 
+  const conformant = blockers.length === 0;
+  const signature =
+    conformant && inputs.signing !== undefined
+      ? signConformanceBundleAt(
+          buildSignatureInput(inputs.signing, inScope),
+          inputs.ledger.meta.generatedAt,
+        )
+      : undefined;
   return {
     profile: inputs.profile,
     generatedAt: inputs.ledger.meta.generatedAt,
-    conformant: blockers.length === 0,
+    conformant,
     criteriaInScope: inScope.length,
     blockers,
     summary,
+    ...(signature !== undefined && { signature }),
+  };
+}
+
+/**
+ * Packs the caller-supplied signing inputs together with the derived
+ * in-scope criterion ID list into the {@link SignatureInput} the
+ * signing module canonicalizes. The builder owns the in-scope list
+ * (it already walked the profile to compute blockers), so the caller
+ * only supplies the pieces the builder can't infer.
+ */
+function buildSignatureInput(
+  signing: NonNullable<BuildConformanceStatementInputs["signing"]>,
+  inScope: readonly Standard["criteria"][number][],
+): SignatureInput {
+  return {
+    commitHash: signing.commitHash,
+    attestations: signing.attestations,
+    inScopeCriterionIds: inScope.map((c) => c.id),
+    configFingerprint: signing.configFingerprint,
   };
 }
 
