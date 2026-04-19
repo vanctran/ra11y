@@ -125,7 +125,8 @@ export const scanProjectTool: McpTool = {
     if (scanScope.kind === "error") return scopeErrorToResult(scanScope);
     const { roots, mode: actualMode, fallbackReason } = scanScope;
     const t0 = performance.now();
-    const baseFiles = await parseFiles(roots, session, root);
+    const storybookPresetActive = projectConfig.preset === "storybook";
+    const baseFiles = await parseFiles(roots, session, root, discoverOptionsFor(projectConfig));
     const additionalPaths = strArrayParam(params, "additionalPaths") ?? [];
     const additionalFiles =
       additionalPaths.length > 0 ? await parseExplicitPaths(additionalPaths, session, root) : [];
@@ -165,6 +166,7 @@ export const scanProjectTool: McpTool = {
       root,
       params["verboseMeta"] === true,
       skipCriterion,
+      projectConfig.preset,
     );
     logger.debug(
       `scan_project: ${files.length} files, parse ${parseMs}ms + scan ${ms(t1)}ms = ${ms(t0)}ms`,
@@ -206,6 +208,7 @@ export const scanProjectTool: McpTool = {
         rootSource,
         configSource: projectConfig.sourcePath,
         scannedBuildArtifactsPresent: buildArtifacts.present,
+        storybookPresetActive,
       }),
       meta: {
         ...formatted.meta,
@@ -241,6 +244,20 @@ export const scanProjectTool: McpTool = {
     });
   },
 };
+
+/**
+ * Maps a loaded project config onto the discovery-side options
+ * `parseFiles` accepts. Today only `preset: "storybook"` widens
+ * discovery to include `*.stories.*` / `*.story.*` files; the helper
+ * keeps the conditional spread out of the handler so
+ * `scan_project`'s cognitive-complexity budget doesn't grow every
+ * time a preset-driven flag is added.
+ */
+function discoverOptionsFor(projectConfig: import("../types/config.ts").LoadedConfig): {
+  readonly includeStoryFiles?: boolean;
+} {
+  return projectConfig.preset === "storybook" ? { includeStoryFiles: true } : {};
+}
 
 /**
  * One-hop AST probe (P1-F): when autoDetect is on, split detected

@@ -30,7 +30,25 @@
 
 import { walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
+import type { ConfigPreset } from "../types/config.ts";
 import type { Rule } from "../types/rule.ts";
+import { isStorybookStoryFile } from "../utils/path.ts";
+
+/**
+ * Storybook primitives that should render transparent under
+ * `preset: "storybook"`. Rendering them as opaque custom components
+ * would inflate the opaque-component count for every story file and
+ * bury the real findings on the UNDERLYING component the story wraps.
+ * Matched as exact JSX tag names on a per-file basis — only story
+ * files (see {@link isStorybookStoryFile}) get the exemption, so an
+ * unrelated `<Story />` component in product code stays opaque.
+ */
+const STORYBOOK_TRANSPARENT_TAGS: ReadonlySet<string> = new Set([
+  "Meta",
+  "Story",
+  "StoryFn",
+  "StoryObj",
+]);
 
 interface OpaqueComponentUsage {
   callSites: number;
@@ -146,6 +164,7 @@ export function buildAnalysisCoverage(
   activeRules: readonly Rule[],
   verbose: boolean,
   autoDetectConfirmedCount = 0,
+  preset?: ConfigPreset,
 ): { analysisCoverage?: Record<string, unknown> } {
   const acc: CoverageAccumulator = {
     opaqueComponents: new Map(),
@@ -153,7 +172,7 @@ export function buildAnalysisCoverage(
     parseErrorFiles: [],
   };
   const wrapperSet = new Set(wrappers);
-  for (const file of files) accumulateCoverageForFile(file, wrapperSet, acc);
+  for (const file of files) accumulateCoverageForFile(file, wrapperSet, acc, preset);
 
   const coverage: {
     opaqueCustomComponents?: number;
@@ -440,6 +459,7 @@ function accumulateCoverageForFile(
   file: ParsedFile,
   wrapperSet: ReadonlySet<string>,
   acc: CoverageAccumulator,
+  preset: ConfigPreset | undefined,
 ): void {
   if (file.ast.errors.length > 0) acc.parseErrorFiles.push(file.filePath);
   if (file.ast.language === "html") {
@@ -447,18 +467,55 @@ function accumulateCoverageForFile(
     return;
   }
   if (file.ast.language === "css") return;
+  // Per-file Storybook transparency: only story files get the
+  // primitive exemption, so a stray `<Story />` in product code is
+  // still counted as opaque. Computed once per file so the hot JSX
+  // walk below stays a set lookup.
+  const storyFile = preset === "storybook" && isStorybookStoryFile(file.filePath);
   for (const el of walkJsxElements(file.ast.root)) {
-    if (!/^[A-Z]/.test(el.tagName)) continue;
-    if (wrapperSet.has(el.tagName)) continue;
-    const interactive = elementIsInteractive(el);
-    const existing = acc.opaqueComponents.get(el.tagName);
-    if (existing) {
-      existing.callSites += 1;
-      if (interactive) existing.interactive = true;
-    } else {
-      acc.opaqueComponents.set(el.tagName, { callSites: 1, interactive });
-    }
+    if (!isOpaqueCandidate(el.tagName, wrapperSet, storyFile)) continue;
+    recordOpaqueSighting(acc.opaqueComponents, el.tagName, elementIsInteractive(el));
   }
+}
+
+/**
+ * True when a JSX tag should be counted toward the opaque-component
+ * inventory. Filters: PascalCase only, not already a registered
+ * wrapper, and — when `preset: "storybook"` has tagged this file as a
+ * story — not one of the Storybook primitives (`Meta`, `StoryObj`,
+ * `StoryFn`, `Story`). Extracted so the per-file loop stays under the
+ * cognitive-complexity cap while keeping the transparency decision on
+ * one line.
+ */
+function isOpaqueCandidate(
+  tagName: string,
+  wrapperSet: ReadonlySet<string>,
+  storyFile: boolean,
+): boolean {
+  if (!/^[A-Z]/.test(tagName)) return false;
+  if (wrapperSet.has(tagName)) return false;
+  if (storyFile && STORYBOOK_TRANSPARENT_TAGS.has(tagName)) return false;
+  return true;
+}
+
+/**
+ * Increments the call-site count for `tagName` in `opaque`, flipping
+ * the `interactive` flag when any sighting carries an interactive
+ * attribute. Extracted so {@link accumulateCoverageForFile} stays
+ * flat — the map get/update branch is otherwise repeated noise.
+ */
+function recordOpaqueSighting(
+  opaque: Map<string, OpaqueComponentUsage>,
+  tagName: string,
+  interactive: boolean,
+): void {
+  const existing = opaque.get(tagName);
+  if (existing) {
+    existing.callSites += 1;
+    if (interactive) existing.interactive = true;
+    return;
+  }
+  opaque.set(tagName, { callSites: 1, interactive });
 }
 
 function detectTemplateEngines(source: string, into: Set<string>): void {

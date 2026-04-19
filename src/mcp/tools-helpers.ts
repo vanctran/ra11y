@@ -223,15 +223,25 @@ export function resolveLevel(level: string | undefined, session: McpSession): "A
  * Resolves input paths, discovers files, and parses them. Relative paths
  * resolve against `cwd` if provided — the server's own cwd is fixed at
  * spawn time, which breaks when agents work in git worktrees.
+ *
+ * `options.includeStoryFiles` flips the Storybook-story unfilter in
+ * `discoverFiles`. `scan_project` passes `true` when the project
+ * config sets `preset: "storybook"`, so `*.stories.*` and
+ * `stories/**` reach the scanner alongside the framework-aware
+ * transparency applied downstream.
  */
 export async function parseFiles(
   paths: readonly string[],
   session: McpSession,
   cwd?: string,
+  options: { readonly includeStoryFiles?: boolean } = {},
 ): Promise<readonly ParsedFile[]> {
   const base = cwd ?? process.cwd();
   const absPaths = paths.map((p) => (isAbsolute(p) ? p : resolve(base, p)));
-  const discovered = await discoverFiles(absPaths, { excludes: session.config.exclude });
+  const discovered = await discoverFiles(absPaths, {
+    excludes: session.config.exclude,
+    ...(options.includeStoryFiles === true ? { includeStoryFiles: true } : {}),
+  });
   const parsed: ParsedFile[] = [];
   for (const filePath of discovered) {
     const result = await session.parseFile(filePath, cwd);
@@ -453,6 +463,11 @@ export async function runScanAndFormat(
   // is the caller filtering its own result. The `skippedByCaller`
   // meta field surfaces the filter input verbatim.
   skipCriteria?: readonly string[],
+  // Resolved `LoadedConfig.preset`. When `"storybook"`, story files
+  // scan with framework-aware transparency (Storybook primitives
+  // don't inflate the opaque-component count). Undefined = default
+  // behavior, story files — if present — scan as plain TSX.
+  preset?: import("../types/config.ts").ConfigPreset,
 ): Promise<{
   readonly formatted: ScanFormatted;
   readonly durationMs: number;
@@ -612,6 +627,7 @@ export async function runScanAndFormat(
         activeRules,
         verboseMeta,
         wrapperProvenance.fromAutoDetect.confirmed.length,
+        preset,
       ),
       // Audit trail for every in-source `ra11y-disable` pragma the scan
       // encountered, with the captured reason text when supplied. Keeps

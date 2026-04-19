@@ -435,4 +435,77 @@ describe("buildAnalysisCoverage — hints", () => {
       expect(analysisCoverage?.["templateDirectiveHandling"]).toBeUndefined();
     });
   });
+
+  describe("preset: 'storybook'", () => {
+    it("counts Storybook primitives as opaque when preset is not active", () => {
+      // Story file scanned as plain TSX: every primitive inflates the
+      // opaque count and lands in the ranked list. This is the
+      // status-quo behavior the preset is designed to improve.
+      const files = [
+        tsxFile("Button.stories.tsx", ["Meta", "StoryObj", "StoryFn", "Story"], {
+          interactive: true,
+        }),
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(files, [], NO_RULES, false);
+      expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(4);
+    });
+
+    it("exempts Storybook primitives from the opaque count in story files when preset is active", () => {
+      const files = [
+        tsxFile("Button.stories.tsx", ["Meta", "StoryObj", "StoryFn", "Story"], {
+          interactive: true,
+        }),
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(
+        files,
+        [],
+        NO_RULES,
+        false,
+        0,
+        "storybook",
+      );
+      // With the preset, Storybook primitives render transparent in
+      // the opaque telemetry — no `analysisCoverage` block at all
+      // when there's nothing else to report.
+      expect(analysisCoverage?.["opaqueCustomComponents"]).toBeUndefined();
+    });
+
+    it("still surfaces non-Storybook components in story files when preset is active", () => {
+      // The wrapped component (`Button`) is not exempt — that's the
+      // point: the preset surfaces findings on the underlying JSX
+      // rather than the wrapper.
+      const files = [
+        tsxFile("Button.stories.tsx", ["Meta", "StoryObj", "Button"], { interactive: true }),
+      ];
+      const { analysisCoverage } = buildAnalysisCoverage(
+        files,
+        [],
+        NO_RULES,
+        false,
+        0,
+        "storybook",
+      );
+      expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(1);
+      const top = analysisCoverage?.["opaqueCustomComponentsTop"] as
+        | { name: string; callSites: number }[]
+        | undefined;
+      expect(top?.map((e) => e.name)).toEqual(["Button"]);
+    });
+
+    it("does not exempt Storybook tags in non-story files even with preset on", () => {
+      // An unrelated product-code file that happens to render a
+      // component literally called `Meta` is not a Storybook call
+      // site — keep it opaque so real findings aren't suppressed.
+      const files = [tsxFile("src/MetaTag.tsx", ["Meta"], { interactive: true })];
+      const { analysisCoverage } = buildAnalysisCoverage(
+        files,
+        [],
+        NO_RULES,
+        false,
+        0,
+        "storybook",
+      );
+      expect(analysisCoverage?.["opaqueCustomComponents"]).toBe(1);
+    });
+  });
 });
