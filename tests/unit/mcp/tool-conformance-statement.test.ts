@@ -91,6 +91,49 @@ describe("conformance_statement: profile validation", () => {
   });
 });
 
+describe("conformance_statement: named profile scope", () => {
+  it("profile: wcag22-aa narrows the statement to wcag22 criteria at AA", async () => {
+    await withScratch(async (cwd) => {
+      await writeFile(join(cwd, "app.tsx"), "export const App = () => null;\n");
+      const session = new McpSession();
+      const { isError, body } = await call(session, {
+        standard: "wcag22",
+        level: "AAA",
+        profile: "wcag22-aa",
+        cwd,
+      });
+      expect(isError).toBe(false);
+      // The profile.level override narrows the claim to AA even though
+      // the caller passed AAA — downstream renderers key off this and
+      // every blocker must be an A/AA criterion.
+      expect((body["profile"] as Record<string, unknown>)["level"]).toBe("AA");
+      const blockers = body["blockers"] as { criterionId: string; level: string }[];
+      expect(blockers.every((b) => b.level === "A" || b.level === "AA")).toBe(true);
+      expect(blockers.every((b) => b.criterionId.startsWith("wcag22:"))).toBe(true);
+    });
+  });
+
+  it("rejects an unknown profile with invalid-param and the valid-profile list", async () => {
+    await withScratch(async (cwd) => {
+      const session = new McpSession();
+      const { isError, body } = await call(session, {
+        standard: "wcag22",
+        profile: "nonexistent-profile",
+        cwd,
+      });
+      expect(isError).toBe(true);
+      expect(body["code"]).toBe("invalid-param");
+      expect(String(body["error"])).toContain("nonexistent-profile");
+      const details = body["details"] as Record<string, unknown>;
+      const valid = details["valid"] as string[];
+      // Built-ins must show up so the agent can self-correct in one
+      // response.
+      expect(valid).toContain("wcag22-aa");
+      expect(valid).toContain("section508");
+    });
+  });
+});
+
 describe("conformance_statement: durable attestations clear blockers", () => {
   it("picks up attestations from .ra11y/attestations.jsonl", async () => {
     await withScratch(async (cwd) => {

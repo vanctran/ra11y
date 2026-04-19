@@ -16,6 +16,12 @@
  * `.ra11y/attestations.jsonl` (via `attest`).
  */
 
+import {
+  BUILTIN_PROFILES,
+  getProfile,
+  type ConformanceProfile as NamedConformanceProfile,
+  resolveProfile,
+} from "../config/profiles.ts";
 import { runScan } from "../engine/scanner.ts";
 import {
   buildConformanceStatement,
@@ -69,6 +75,11 @@ export const conformanceStatementTool: McpTool = {
           description:
             "Project root — used to resolve paths and load `.ra11y/attestations.jsonl`. Defaults to the MCP server's spawn directory.",
         },
+        profile: {
+          type: "string",
+          description:
+            "Named conformance profile (e.g. `wcag22-aa`, `wcag21-aa`, `section508`, `en301549`). When supplied the claim's in-scope criterion set narrows to the profile's `standards` + `level?` tuple — the same scope `/coverage` honors — so the statement only stands on evidence for criteria inside the profile. Resolves against built-in profiles first, then `Config.profiles` user overrides. Omit to claim against the full `standard` + `level` pair above.",
+        },
       },
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -76,6 +87,38 @@ export const conformanceStatementTool: McpTool = {
   async handler(params, session) {
     const cwd = strParam(params, "cwd") ?? process.cwd();
     const paths = strArrayParam(params, "paths") ?? [cwd];
+
+    const profileName = strParam(params, "profile");
+    let namedProfile: NamedConformanceProfile | undefined;
+    if (profileName !== undefined) {
+      // Load project config only when the caller asked for a profile —
+      // built-ins cover the common case without touching disk. User
+      // overrides layer on top via `LoadedConfig.profiles`; resolution
+      // falls through built-ins → user-declared per `resolveProfile`'s
+      // contract in src/config/profiles.ts.
+      let userProfiles: readonly NamedConformanceProfile[] = [];
+      try {
+        const loaded = await session.loadProjectConfig(cwd);
+        userProfiles = loaded.profiles;
+      } catch {
+        // Config-load failures (malformed user config) fall through to
+        // built-in-only resolution. The validity of user profiles is
+        // already enforced by the config loader; the tool should still
+        // be callable against the built-in set when no user config
+        // exists or fails to load.
+      }
+      namedProfile = getProfile(profileName) ?? resolveProfile(profileName, userProfiles);
+      if (namedProfile === undefined) {
+        const valid = [...BUILTIN_PROFILES.map((p) => p.name), ...userProfiles.map((p) => p.name)];
+        return errorResult({
+          code: "invalid-param",
+          message: `Unknown profile '${profileName}'. Valid profiles: ${valid.join(", ")}.`,
+          details: { requested: profileName, valid },
+          remediation:
+            "Pass a named profile from the built-in set (wcag22-aa, wcag21-aa, section508, en301549, …) or declare one in `ra11y.config.ts` `profiles[]`.",
+        });
+      }
+    }
 
     const standards = resolveStandards(strParam(params, "standard"), session);
     const unknown = firstUnknownStandard(standards);
@@ -126,6 +169,7 @@ export const conformanceStatementTool: McpTool = {
       profile,
       standards: BUILTIN_STANDARDS,
       rulesForCriterion: satisfyingRulesForCriterion,
+      ...(namedProfile !== undefined && { scope: namedProfile }),
     });
 
     return textResult({
