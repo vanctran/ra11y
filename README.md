@@ -226,7 +226,7 @@ export default defineRule({
 });
 ```
 
-End-to-end templates: [`examples/plugin-rule/`](./examples/plugin-rule/) and [`examples/plugin-standard/`](./examples/plugin-standard/). Architecture deep-dive: [`docs/architecture.md`](./docs/architecture.md).
+Authoring guides: [`docs/plugins/authoring-a-rule.md`](./docs/plugins/authoring-a-rule.md), [`docs/plugins/authoring-a-standard.md`](./docs/plugins/authoring-a-standard.md), [`docs/plugins/authoring-a-formatter.md`](./docs/plugins/authoring-a-formatter.md). End-to-end templates: [`examples/plugin-rule/`](./examples/plugin-rule/) and [`examples/plugin-standard/`](./examples/plugin-standard/). Architecture deep-dive: [`docs/architecture.md`](./docs/architecture.md).
 
 ## MCP Server (AI Agent Integration)
 
