@@ -12,8 +12,12 @@ The `/bench` skill automates the workflow:
 
 | date | commit | scenario | ms | budget | margin | notes |
 |------|--------|----------|----|--------|--------|-------|
+| 2026-04-19 | 343bd30 | cold-start | 41.0 | 200 | -79.5% | v1.0 baseline (median of 11 iterations, bun scripts/bench.ts --json) |
+| 2026-04-19 | 343bd30 | 10-files-1k-loc | 5.2 | 100 | -94.8% | v1.0 baseline |
+| 2026-04-19 | 343bd30 | 100-files-10k-loc | 28.5 | 500 | -94.3% | v1.0 baseline |
+| 2026-04-19 | 343bd30 | 1000-files-100k-loc | 272.3 | 3000 | -90.9% | v1.0 baseline |
 
-The table starts empty; `/bench` will populate it on the next successful run. Scenarios mirror the budget table in CLAUDE.md § 11 (`cold-start`, `10-files-1k-loc`, `100-files-10k-loc`, `1000-files-100k-loc`).
+Scenarios mirror the budget table in CLAUDE.md § 11 (`cold-start`, `10-files-1k-loc`, `100-files-10k-loc`, `1000-files-100k-loc`). `ms` is the median sample; `margin` is median-minus-budget as a percentage of budget (negative = headroom). The v1.0 baseline row anchors regressions — future `/bench` runs append rows here so deltas are visible over time.
 
 ## Regressions and fixes
 
