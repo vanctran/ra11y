@@ -34,6 +34,7 @@ import { proposeBaselineTool } from "./tool-propose-baseline.ts";
 import { proposeConfigTool } from "./tool-propose-config.ts";
 import { reviewCandidatesTool } from "./tool-review-candidates.ts";
 import { scanDiffTool } from "./tool-scan-diff.ts";
+import { scanProcessTool } from "./tool-scan-process.ts";
 import { scanProjectTool } from "./tool-scan-project.ts";
 import { suggestFixTool } from "./tool-suggest-fix.ts";
 import { suppressTool } from "./tool-suppress.ts";
@@ -511,6 +512,7 @@ export const MCP_TOOLS: readonly McpTool[] = [
   scanProjectTool,
   scanFileTool,
   scanDiffTool,
+  scanProcessTool,
   detectNativeWrappersTool,
   wrapperIntrospectTool,
   explainRuleTool,
