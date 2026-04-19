@@ -26,16 +26,31 @@
  * The walker + color extraction + large-text heuristic live in
  * `./_shared.ts` and are reused by `contrast/enhanced` (AAA).
  *
+ * `couldBeWrongBecause` opt-in (project scope): when a scanned JSX
+ * or HTML consumer carries the CSS failure's class token AND a
+ * `text-*` / `bg-*` Tailwind utility on the same element, the finding
+ * is tagged `tailwind_class_on_consumer`. Informational only — the
+ * agent reads the consumer file and decides whether the consumer-site
+ * utility actually overrides the declared color. See
+ * docs/adr/0009-violation-could-be-wrong-because.md.
+ *
  * v0.0.x coverage: in-file CSS rules (standalone .css and <style>
- * blocks). Does NOT yet resolve inherited styles, Tailwind classes,
- * CSS custom properties, or theme variables — those land in Phase 5
- * polish with the theme resolver.
+ * blocks). Does NOT yet resolve inherited styles or CSS custom
+ * properties — those land in Phase 5 polish with the theme resolver.
  */
 
 import { defineRule } from "../../api/plugin.ts";
 import type { CssStylesheet } from "../../types/ast.ts";
+import type { EmittedViolation, ProjectContext } from "../../types/rule.ts";
 import { WCAG_AA_MIN_LARGE, WCAG_AA_MIN_NORMAL } from "../../utils/contrast.ts";
-import { buildContrastMessage, buildContrastSuggestion, findContrastFailures } from "./_shared.ts";
+import {
+  buildContrastMessage,
+  buildContrastSuggestion,
+  collectTailwindOverrideClasses,
+  extractPrimarySelectorClass,
+  findContrastFailures,
+  TAILWIND_CLASS_ON_CONSUMER,
+} from "./_shared.ts";
 
 const SC_LABEL = "WCAG 1.4.3 AA";
 
@@ -43,8 +58,13 @@ export const rule = defineRule({
   id: "contrast/minimum",
   satisfies: ["wcag22:1.4.3", "wcag21:1.4.3"],
   severity: "error",
-  scope: "document",
+  scope: "project",
   fixClass: "guidance",
+  // Kept for per-rule coverage telemetry — the canonical Tailwind
+  // pre-build acute case (0 eligible CSS files → low-confidence
+  // signal) still applies. The rule itself runs in `afterProject`, so
+  // the per-file runner never invokes it, but the runner threads every
+  // rule's extension gate through the evaluation tracker.
   appliesTo: {
     fileExtensions: [".css"],
   },
@@ -62,21 +82,38 @@ export const rule = defineRule({
       "https://www.w3.org/WAI/WCAG22/Techniques/general/G18",
     ],
   },
-  afterFile(ctx) {
-    if (ctx.language !== "css") return;
-    const stylesheet = ctx.ast as CssStylesheet;
-    const failures = findContrastFailures(stylesheet, {
-      minNormal: WCAG_AA_MIN_NORMAL,
-      minLarge: WCAG_AA_MIN_LARGE,
-      scLabel: SC_LABEL,
-    });
-    for (const finding of failures) {
-      ctx.emit({
-        severity: "error",
-        location: { filePath: "", line: finding.line, column: finding.column },
-        message: buildContrastMessage(finding, SC_LABEL),
-        suggestion: buildContrastSuggestion(finding),
+  afterProject(ctx) {
+    const overrideClasses = collectTailwindOverrideClasses(ctx);
+    for (const file of ctx.files) {
+      if (file.language !== "css") continue;
+      const failures = findContrastFailures(file.ast as CssStylesheet, {
+        minNormal: WCAG_AA_MIN_NORMAL,
+        minLarge: WCAG_AA_MIN_LARGE,
+        scLabel: SC_LABEL,
       });
+      for (const finding of failures) {
+        emitFinding(ctx, file.filePath, finding, overrideClasses);
+      }
     }
   },
 });
+
+function emitFinding(
+  ctx: ProjectContext,
+  filePath: string,
+  finding: ReturnType<typeof findContrastFailures>[number],
+  overrideClasses: ReadonlySet<string>,
+): void {
+  const primaryClass = extractPrimarySelectorClass(finding.selector);
+  const tailwindOverride = primaryClass !== null && overrideClasses.has(primaryClass);
+  const emitted: EmittedViolation = {
+    severity: "error",
+    location: { filePath, line: finding.line, column: finding.column },
+    message: buildContrastMessage(finding, SC_LABEL),
+    suggestion: buildContrastSuggestion(finding),
+    // Conditional spread — `couldBeWrongBecause: []` would be a
+    // dishonest empty-vs-unpopulated sentinel per CLAUDE.md §1.
+    ...(tailwindOverride ? { couldBeWrongBecause: [TAILWIND_CLASS_ON_CONSUMER] } : {}),
+  };
+  ctx.emit(emitted);
+}

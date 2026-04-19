@@ -9,10 +9,32 @@
  * the minima they want applied and the SC they cite. Keeps both
  * rule files short and ensures any extraction bug gets fixed in
  * one place.
+ *
+ * Cross-file Tailwind cross-reference (`couldBeWrongBecause` opt-in):
+ *   `collectTailwindOverrideClasses` walks every JSX / HTML element
+ *   in the scan and returns the set of plain class names that co-occur
+ *   with a `text-*` or `bg-*` Tailwind utility. When a CSS contrast
+ *   failure targets one of those classes, the consumer-site Tailwind
+ *   utility overrides the declared color/background and the scanner's
+ *   attribute-level evidence is categorically weaker than the agent's
+ *   file-level evidence — the rule surfaces `tailwind_class_on_consumer`
+ *   as informational signal. Deterministic class-token link, NOT
+ *   heuristic suppression (CLAUDE.md §1). See
+ *   docs/adr/0009-violation-could-be-wrong-because.md.
  */
 
-import { walkCssRules } from "../../engine/ast-helpers.ts";
-import type { CssRule as CssCssRule, CssDeclaration, CssStylesheet } from "../../types/ast.ts";
+import { walkCssRules, walkHtmlElements, walkJsxElements } from "../../engine/ast-helpers.ts";
+import { parseTailwind } from "../../input/parsers/tailwind.ts";
+import type {
+  CssRule as CssCssRule,
+  CssDeclaration,
+  CssStylesheet,
+  HtmlDocument,
+  HtmlElement,
+  JsxElement,
+  TsxModule,
+} from "../../types/ast.ts";
+import type { Language, ProjectContext } from "../../types/rule.ts";
 import { parseColor, type Rgb } from "../../utils/color.ts";
 import { contrast } from "../../utils/contrast.ts";
 
@@ -164,4 +186,113 @@ function isBold(value: string): boolean {
   if (trimmed === "bolder") return true;
   const n = Number.parseInt(trimmed, 10);
   return Number.isFinite(n) && n >= 700;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-file Tailwind cross-reference — `couldBeWrongBecause` opt-in.
+// ---------------------------------------------------------------------------
+
+/**
+ * Token code surfaced on `Violation.couldBeWrongBecause` when a CSS
+ * contrast failure targets a class that co-occurs with a `text-*` /
+ * `bg-*` Tailwind utility on a JSX/HTML consumer. Informational signal
+ * only — the agent investigates the consumer file and decides. See
+ * docs/adr/0009-violation-could-be-wrong-because.md.
+ */
+export const TAILWIND_CLASS_ON_CONSUMER = "tailwind_class_on_consumer";
+
+/**
+ * Utility families that override the contrast-failing declaration at
+ * the consumer site. `text-*` overrides `color`; `bg-*` overrides
+ * `background-color` / `background`. Scoped deliberately — other
+ * families (borders, rings) don't override the text-vs-background pair
+ * a contrast rule checks.
+ */
+const OVERRIDING_UTILITY_FAMILIES: ReadonlySet<string> = new Set(["text", "bg"]);
+
+/**
+ * Walks every JSX and HTML className in the project and returns the
+ * set of plain class names that co-occur on an element with a
+ * qualifying `text-*` or `bg-*` Tailwind utility. Variants are ignored
+ * for the qualifier check (an `md:text-white` at the consumer site is
+ * still an author-placed color override relative to the declared CSS).
+ *
+ * This is the same cross-file primitive `focus/outline-visible` uses
+ * for its focus-visible ring cross-reference — tokenized via
+ * `parseTailwind`, no new parser pass. Deterministic class-token link,
+ * never heuristic.
+ */
+export function collectTailwindOverrideClasses(ctx: ProjectContext): ReadonlySet<string> {
+  const usage = new Set<string>();
+  for (const file of ctx.files) indexFileForTailwindOverride(file.ast, file.language, usage);
+  return usage;
+}
+
+function indexFileForTailwindOverride(ast: unknown, language: Language, usage: Set<string>): void {
+  if (language === "tsx" || language === "jsx" || language === "ts" || language === "js") {
+    for (const el of walkJsxElements(ast as TsxModule)) {
+      indexClassStringForOverride(jsxClassString(el), usage);
+    }
+    return;
+  }
+  if (language === "html") {
+    for (const el of walkHtmlElements(ast as HtmlDocument)) {
+      indexClassStringForOverride(htmlClassString(el), usage);
+    }
+  }
+}
+
+function indexClassStringForOverride(classString: string | null, usage: Set<string>): void {
+  if (!classString) return;
+  const tokens = parseTailwind(classString);
+  const plainClasses: string[] = [];
+  let qualifies = false;
+  for (const tok of tokens) {
+    if (tok.malformed) continue;
+    if (tok.variants.length > 0) {
+      // Variant-scoped utilities (e.g. `md:text-*`, `hover:bg-*`) are
+      // conditional; they can't override the declared CSS at all
+      // viewport widths / states. Only unqualified utilities qualify.
+      continue;
+    }
+    if (tok.utility.length === 0) continue;
+    plainClasses.push(tok.utility);
+    if (isOverridingUtility(tok.utility)) qualifies = true;
+  }
+  if (!qualifies) return;
+  for (const cls of plainClasses) usage.add(cls);
+}
+
+function isOverridingUtility(utility: string): boolean {
+  const family = utility.split("-")[0] ?? utility;
+  return OVERRIDING_UTILITY_FAMILIES.has(family);
+}
+
+function jsxClassString(element: JsxElement): string | null {
+  for (const attr of element.attributes) {
+    if (attr.name !== "className" && attr.name !== "class") continue;
+    if (!attr.value || attr.value.kind !== "StringLiteral") return null;
+    return attr.value.value;
+  }
+  return null;
+}
+
+function htmlClassString(element: HtmlElement): string | null {
+  for (const attr of element.attributes) {
+    if (attr.name.toLowerCase() === "class") return attr.value ?? null;
+  }
+  return null;
+}
+
+/**
+ * First `.<ident>` token in a selector's subject compound. Mirrors the
+ * helper in `focus/outline-visible` — compound selectors like
+ * `.card.active` cross-reference on `card`. Returns `null` when the
+ * selector is bare-element or otherwise not class-scoped.
+ */
+export function extractPrimarySelectorClass(selector: string): string | null {
+  const parts = selector.split(/\s+/);
+  const subject = parts[parts.length - 1] ?? selector;
+  const head = subject.split(/:(?!:)/)[0] ?? subject;
+  return /\.([A-Za-z_][\w-]*)/.exec(head)?.[1] ?? null;
 }
