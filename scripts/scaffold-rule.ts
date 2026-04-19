@@ -42,6 +42,7 @@ const VALID_DOMAINS = new Set([
   "semantics",
   "tooltip",
   "orientation",
+  "wrapper",
 ]);
 const VALID_SEVERITIES = new Set(["error", "warning", "info"]);
 const VALID_SCOPES = new Set(["node", "file"]);

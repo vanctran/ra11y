@@ -57,6 +57,7 @@ import { rule as listStructure } from "./semantics/list-structure.ts";
 import { rule as nestedInteractive } from "./semantics/nested-interactive.ts";
 import { rule as tableHeaders } from "./semantics/table-headers.ts";
 import { rule as tooltipDismissable } from "./tooltip/dismissable.ts";
+import { rule as wrapperDrift } from "./wrapper/drift.ts";
 
 export const BUILTIN_RULES: readonly Rule[] = [
   accesskeyDuplicate,
@@ -110,6 +111,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
+  wrapperDrift,
 ];
 
 export {
@@ -164,4 +166,5 @@ export {
   validAttr,
   videoCaptionsMissing,
   viewportZoom,
+  wrapperDrift,
 };

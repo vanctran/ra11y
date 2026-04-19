@@ -26,6 +26,11 @@
 
 import { hasJsxAttribute, walkJsxElements } from "../engine/ast-helpers.ts";
 import type { ParsedFile } from "../engine/scanner.ts";
+import {
+  firstJsxRootTag,
+  indexFilesByComponentName as indexProbeFiles,
+  type ProbeFile,
+} from "../engine/wrapper-probe.ts";
 import type { JsxElement, TsxModule } from "../types/ast.ts";
 
 /** Max example call sites per component in the structured result. */
@@ -92,7 +97,7 @@ export function collectWrapperCandidates(
       groups.set(el.tagName, entry);
     }
   }
-  const definitions = indexFilesByComponentName(files);
+  const definitions = indexProbeFiles(files.map(toProbeFile));
   return [...groups.entries()]
     .sort(([a, x], [b, y]) => y.count - x.count || a.localeCompare(b))
     .map(([component, { count, locations }]) => ({
@@ -101,6 +106,11 @@ export function collectWrapperCandidates(
       sampleLocations: locations,
       definitionFile: definitions.get(component)?.filePath ?? null,
     }));
+}
+
+/** Maps a scanner `ParsedFile` onto the minimal shape the probe needs. */
+function toProbeFile(file: ParsedFile): ProbeFile {
+  return { filePath: file.filePath, language: file.ast.language, root: file.ast.root };
 }
 
 /**
@@ -141,9 +151,6 @@ const CONFIRMED_NATIVE_ROOT_TAGS: ReadonlySet<string> = new Set([
   "textarea",
   "select",
 ]);
-
-/** Extensions the probe recognises as potential component source files. */
-const CANDIDATE_SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([".tsx", ".jsx", ".ts", ".js"]);
 
 /**
  * Classification of auto-detected wrapper candidates split by how much
@@ -198,11 +205,12 @@ export function classifyWrapperCandidates(
   candidates: readonly string[],
 ): ClassifiedWrapperCandidates {
   if (candidates.length === 0) return { confirmed: [], assumed: [] };
-  const filesByComponent = indexFilesByComponentName(files);
+  const filesByComponent = indexProbeFiles(files.map(toProbeFile));
   const confirmed: string[] = [];
   const assumed: string[] = [];
   for (const name of candidates) {
-    if (isRootNativeInteractive(filesByComponent.get(name))) {
+    const tag = firstJsxRootTag(filesByComponent.get(name));
+    if (tag !== null && CONFIRMED_NATIVE_ROOT_TAGS.has(tag)) {
       confirmed.push(name);
     } else {
       assumed.push(name);
@@ -211,67 +219,4 @@ export function classifyWrapperCandidates(
   confirmed.sort();
   assumed.sort();
   return { confirmed, assumed };
-}
-
-/**
- * Builds a `ComponentName → ParsedFile` index by basename match.
- * Only TSX/JSX/TS/JS files qualify; only PascalCase basenames are
- * recorded. When two files share a basename (rare: e.g., two
- * components both named `Button` under different roots), the first
- * seen wins — the probe is a best-effort structural check, not a
- * module resolver.
- */
-function indexFilesByComponentName(files: readonly ParsedFile[]): ReadonlyMap<string, ParsedFile> {
-  const out = new Map<string, ParsedFile>();
-  for (const file of files) {
-    if (file.ast.language !== "tsx" && file.ast.language !== "jsx") {
-      if (file.ast.language !== "ts" && file.ast.language !== "js") continue;
-    }
-    const name = componentNameFromPath(file.filePath);
-    if (name === null) continue;
-    if (!out.has(name)) out.set(name, file);
-  }
-  return out;
-}
-
-/**
- * Extracts the component name from a file path by taking the basename
- * and stripping the extension. Returns null when the extension isn't
- * one of the supported source kinds, the basename doesn't start with
- * an uppercase letter (PascalCase convention), or the stem is empty.
- * Accepts both `/` and `\` path separators so Windows paths work.
- */
-function componentNameFromPath(filePath: string): string | null {
-  const lastSep = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-  const basename = lastSep === -1 ? filePath : filePath.slice(lastSep + 1);
-  const dot = basename.lastIndexOf(".");
-  if (dot <= 0) return null;
-  const stem = basename.slice(0, dot);
-  const ext = basename.slice(dot).toLowerCase();
-  if (!CANDIDATE_SOURCE_EXTENSIONS.has(ext)) return null;
-  const first = stem[0];
-  if (first === undefined || first < "A" || first > "Z") return null;
-  return stem;
-}
-
-/**
- * True when the first top-level JSX element in the module has a
- * native-interactive tag. Fragments, `ts`/`js` files without JSX, and
- * the "no JSX at all" case all resolve to false — only a direct hit
- * on a native tag earns `confirmed`.
- */
-function isRootNativeInteractive(file: ParsedFile | undefined): boolean {
-  if (!file) return false;
-  if (
-    file.ast.language !== "tsx" &&
-    file.ast.language !== "jsx" &&
-    file.ast.language !== "ts" &&
-    file.ast.language !== "js"
-  ) {
-    return false;
-  }
-  const root = file.ast.root as TsxModule;
-  const first = root.jsxElements[0];
-  if (!first) return false;
-  return CONFIRMED_NATIVE_ROOT_TAGS.has(first.tagName.toLowerCase());
 }
