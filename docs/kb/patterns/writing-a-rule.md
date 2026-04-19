@@ -70,7 +70,7 @@ export const rule = defineRule({
 |---|---|---|
 | `node` | `check(ctx)` called once per file; rule iterates nodes itself | The rule inspects individual elements in isolation. Examples: `media/alt-text-missing`, `aria/invalid-role`. |
 | `document` | `afterFile(ctx)` called once per file | The rule needs cross-element state within a single file — duplicate IDs, heading-order continuity, parent→child relationships. Examples: `semantics/heading-hierarchy`, `parsing/duplicate-id`, `semantics/list-structure`. |
-| `project` | `afterProject(ctx)` called once at end of scan | The rule needs state across all files — cross-file ID references, orphaned exports. Not yet used in v0.0.x. |
+| `project` | `afterProject(ctx)` called once at end of scan | The rule needs state across all files — cross-file ID references, orphaned exports. Used by review finders for cross-file candidates (e.g. `consistent-navigation`). |
 
 Default is `node` — only bump to `document` if you genuinely need whole-file state.
 

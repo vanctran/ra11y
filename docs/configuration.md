@@ -136,7 +136,7 @@ CLI flags always win over config-file values. The full precedence (highest to lo
 3. **Config file** — `ra11y.config.ts` walking up from cwd
 4. **Built-in defaults** — `DEFAULT_CONFIG`
 
-In v0.0.x the CLI vs. config-file merge is "CLI value wins unless it's the default." When ra11y v0.1.0 ships, the args parser will track explicit vs. default so the merge becomes unambiguous.
+The CLI vs. config-file merge rule is "CLI value wins unless it's the default." A future release will improve this by tracking explicit vs. default values in the args parser so the merge becomes unambiguous; for now, passing a flag explicitly always takes precedence over the config file.
 
 ## Inline disables
 

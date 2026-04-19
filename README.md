@@ -12,7 +12,7 @@
 
 That doesn't make it agent-only. ra11y ships a CLI with beautiful terminal output, multiple report formats, and precommit integration. It covers JSX/TSX, HTML, and CSS across WCAG 2.2, WCAG 2.1, Section 508, and EN 301 549 out of the box — and a plugin API for adding more. Coverage reports and a VPAT-ready certification scorecard sit alongside line-level violations, so the same tool your agent runs in Cursor also tells your legal team where you stand on ADA conformance.
 
-> **Status: pre-release (v0.0.x).** The engine, plugin API, rule catalog, built-in standards (WCAG 2.2/2.1, Section 508, EN 301 549), output formatters, report kinds (coverage, checklist, VPAT, certification), and the MCP server are in place. The v0.1.0 milestone targets the first npm release. See [`CHANGELOG.md`](./CHANGELOG.md) for what's landed.
+> **Status: v0.1.0 released.** The engine, plugin API, rule catalog, built-in standards (WCAG 2.2/2.1, Section 508, EN 301 549), output formatters, report kinds (coverage, checklist, VPAT, certification), and the MCP server are in place. See [`CHANGELOG.md`](./CHANGELOG.md) for the full history and what's in progress for v0.2.0.
 
 ## Design priorities
 
@@ -45,7 +45,7 @@ npx ra11y src/
 The following output comes from running ra11y against its own test fixtures (`tests/fixtures/bad/contrast-minimum/` and `tests/fixtures/bad/alt-text-missing/`):
 
 ```
-  ra11y v0.0.0
+  ra11y v0.1.0
 
 ┌─ tests/fixtures/bad/alt-text-missing/img-no-alt.html ─────────
 │
@@ -112,8 +112,8 @@ ra11y --vpat                        # Generate VPAT-ready report
 ra11y --certification               # Generate readiness scorecard
 ra11y --checklist                   # Manual review checklist
 ra11y --explain contrast/minimum    # Rule detail, spec quote, examples
-ra11y --list-rules                  # All 49 built-in rules
-ra11y --list-standards              # All 4 built-in standards
+ra11y --list-rules                  # All built-in rules
+ra11y --list-standards              # All built-in standards
 ```
 
 Full CLI reference: [`docs/cli.md`](./docs/cli.md).
