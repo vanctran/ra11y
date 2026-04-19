@@ -21,6 +21,7 @@ export interface CliOptions {
     | "init"
     | "doctor"
     | "baseline"
+    | "attestations"
     | "help"
     | "version";
   readonly positionals: readonly string[];
@@ -54,6 +55,10 @@ export interface CliOptions {
   readonly baselineAction: "prune" | undefined;
   /** `--dry-run` flag for `ra11y baseline prune`. */
   readonly baselineDryRun: boolean;
+  /** Action for `ra11y attestations <action>` subcommand (currently only `prune`). */
+  readonly attestationsAction: "prune" | undefined;
+  /** `--dry-run` flag for `ra11y attestations prune`. */
+  readonly attestationsDryRun: boolean;
 }
 
 /**
@@ -157,6 +162,12 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     return baseOpts(parsed.positionals.slice(1), "baseline", opts);
   }
 
+  // `ra11y attestations <action>` — sibling subcommand namespace for
+  // managing the attestation ledger. Same slice-and-dispatch shape.
+  if (parsed.positionals[0] === "attestations") {
+    return baseOpts(parsed.positionals.slice(1), "attestations", opts);
+  }
+
   return baseOpts(parsed.positionals, "scan", opts);
 }
 
@@ -250,6 +261,9 @@ function baseOpts(
     baselineFile: raw?.baselineFile,
     baselineAction: command === "baseline" && positionals[0] === "prune" ? "prune" : undefined,
     baselineDryRun: raw?.dryRun === true,
+    attestationsAction:
+      command === "attestations" && positionals[0] === "prune" ? "prune" : undefined,
+    attestationsDryRun: raw?.dryRun === true,
   };
 }
 

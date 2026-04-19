@@ -40,6 +40,10 @@ BASELINE
   ra11y baseline prune [--dry-run]
                          Remove baseline entries pointing at deleted files
 
+ATTESTATIONS
+  ra11y attestations prune [--dry-run]
+                         Drop attestations pinned to deleted files
+
 META
   -h, --help             Show this help
   -v, --version          Print version
