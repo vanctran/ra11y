@@ -125,4 +125,55 @@ describe("runCli", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stdout).toContain("media/alt-text-missing");
   });
+
+  describe("processes config threading", () => {
+    // Guards the CLI-side wiring: `runScan({ processes })` must receive
+    // `LoadedConfig.processes` so project-scoped finders (WCAG 3.2.3 /
+    // 3.2.4) fire when a config declares `processes`. The test scans a
+    // scratch tree where two pages share `data-testid="primary"` but
+    // carry divergent visible labels — the canonical
+    // consistent-identification divergence. With `processes` threaded,
+    // the `agent` formatter's `reviewCandidates` array carries a
+    // `wcag22:3.2.4` entry; without threading, the finder returns no
+    // candidates (honest "needs processes config" per ADR 0016).
+    it("surfaces a wcag22:3.2.4 review candidate when processes config is declared", async () => {
+      const { mkdtemp, writeFile } = await import("node:fs/promises");
+      const { realpathSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join: joinPath } = await import("node:path");
+
+      const raw = await mkdtemp(joinPath(tmpdir(), "ra11y-cli-proc-"));
+      const dir = realpathSync(raw);
+      // Full <head> so rule-level violations (missing title/lang) don't
+      // fire and the scan exit code reflects only the threading delta.
+      await writeFile(
+        joinPath(dir, "cart.html"),
+        '<!doctype html><html lang="en"><head><title>Cart</title></head><body><button data-testid="primary">Save</button></body></html>',
+      );
+      await writeFile(
+        joinPath(dir, "checkout.html"),
+        '<!doctype html><html lang="en"><head><title>Checkout</title></head><body><button data-testid="primary">Submit</button></body></html>',
+      );
+      await writeFile(
+        joinPath(dir, "ra11y.config.json"),
+        JSON.stringify({
+          processes: [{ name: "checkout", pages: ["cart.html", "checkout.html"] }],
+        }),
+      );
+
+      const savedCwd = cwd();
+      chdir(dir);
+      try {
+        const r = await runCli(["--format", "agent"]);
+        expect(r.exitCode).toBe(0);
+        const data = JSON.parse(r.stdout) as {
+          reviewCandidates: readonly { criterionId: string }[];
+        };
+        const has324 = data.reviewCandidates.some((c) => c.criterionId === "wcag22:3.2.4");
+        expect(has324).toBe(true);
+      } finally {
+        chdir(savedCwd);
+      }
+    });
+  });
 });

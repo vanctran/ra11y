@@ -129,6 +129,14 @@ export async function runScanCommand(options: CliOptions): Promise<ScanExit> {
     isTTY: (process.stdout as { isTTY?: boolean }).isTTY === true,
     level: effectiveLevel,
     nativeWrapperElements: fileConfig.nativeWrapperElements,
+    // Thread declared process page-sets (ADR 0016) so project-scoped
+    // finders (WCAG 3.2.3 Consistent Navigation, 3.2.4 Consistent
+    // Identification) fire when the user has configured them. The CLI
+    // runs with `process.cwd()` aligned to the config directory in the
+    // common case, so the finders' relative-path resolution matches the
+    // `ParsedFile.filePath` values the discovery pass produces without
+    // further transformation.
+    ...processesInput(fileConfig),
   });
 
   // Baseline mode — create, check, or update. Each branch returns
@@ -357,4 +365,17 @@ function applySeverityOverride(rule: Rule, setting: unknown): Rule {
     return { ...rule, severity: setting };
   }
   return rule;
+}
+
+/**
+ * Spreadable `processes` input for the `runScan({ ... })` call. Returns
+ * `{ processes }` when the config declared any page-sets, `{}` otherwise.
+ * Extracted from the handler so its cognitive-complexity score stays
+ * under the lint cap.
+ */
+function processesInput(fileConfig: LoadedConfig): {
+  readonly processes?: LoadedConfig["processes"];
+} {
+  if (fileConfig.processes.length === 0) return {};
+  return { processes: fileConfig.processes };
 }
