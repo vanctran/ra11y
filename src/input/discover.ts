@@ -36,6 +36,17 @@ export interface DiscoverOptions {
   readonly excludes?: readonly string[];
   /** When true, skip default test-file exclusions. */
   readonly includeTests?: boolean;
+  /**
+   * When true, drop the `*.stories.*` / `*.story.*` / `stories/**`
+   * entries from the default-excluded patterns so story files reach
+   * the scanner. Engaged by `preset: "storybook"` — the preset pairs
+   * discovery with framework-aware transparency in
+   * `analysis-coverage.ts`, so the stories are scanned but Storybook
+   * primitives (`Meta`, `StoryObj`, `StoryFn`, `Story`) don't inflate
+   * the opaque-component count. Test / mock / dev-tool patterns stay
+   * excluded regardless — those are orthogonal to stories.
+   */
+  readonly includeStoryFiles?: boolean;
   /** When false, don't auto-load .gitignore. Default true. */
   readonly respectGitignore?: boolean;
 }
@@ -57,6 +68,20 @@ const DEFAULT_EXCLUDED_PATTERNS: readonly string[] = [
   "**/dev-tools/**",
   "**/devtools/**",
 ];
+
+/**
+ * Subset of {@link DEFAULT_EXCLUDED_PATTERNS} that covers Storybook
+ * story files and the conventional `stories/` directory. When
+ * `preset: "storybook"` is active these come OUT of the exclude list
+ * so the scanner walks them — the preset then takes care of treating
+ * Storybook primitives transparently so the result is signal, not
+ * noise.
+ */
+const STORY_FILE_PATTERNS: ReadonlySet<string> = new Set([
+  "**/*.stories.*",
+  "**/*.story.*",
+  "**/stories/**",
+]);
 
 /**
  * Opt-in discovery that treats each path as an explicit "please scan
@@ -107,7 +132,12 @@ export async function discoverFiles(
 ): Promise<string[]> {
   const userExcludes = options.excludes ?? [];
   const gitignore = options.respectGitignore === false ? [] : await loadGitignoreForRoots(roots);
-  const dirPatterns = buildDirExcludes(userExcludes, gitignore, options.includeTests === true);
+  const dirPatterns = buildDirExcludes(
+    userExcludes,
+    gitignore,
+    options.includeTests === true,
+    options.includeStoryFiles === true,
+  );
   const dirMatcher = compileGlobs(dirPatterns);
   const userMatcher = compileGlobs([...userExcludes, ...gitignore]);
   const out = new Set<string>();
@@ -121,13 +151,23 @@ export async function discoverFiles(
   return [...out].sort();
 }
 
-/** Merges default test-file patterns with user excludes for directory walks. */
+/**
+ * Merges default test-file patterns with user excludes for directory
+ * walks. `includeTests: true` drops every default. `includeStoryFiles:
+ * true` narrows that override to the story-file subset so the preset
+ * engages only the Storybook-specific unfilter without dragging tests
+ * / mocks / dev-tools back in.
+ */
 function buildDirExcludes(
   userExcludes: readonly string[],
   gitignore: readonly string[],
   includeTests: boolean,
+  includeStoryFiles: boolean,
 ): readonly string[] {
-  const defaults = includeTests ? [] : DEFAULT_EXCLUDED_PATTERNS;
+  if (includeTests) return [...gitignore, ...userExcludes];
+  const defaults = includeStoryFiles
+    ? DEFAULT_EXCLUDED_PATTERNS.filter((p) => !STORY_FILE_PATTERNS.has(p))
+    : DEFAULT_EXCLUDED_PATTERNS;
   return [...defaults, ...gitignore, ...userExcludes];
 }
 

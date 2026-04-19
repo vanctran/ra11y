@@ -6,6 +6,10 @@ All notable changes to ra11y are documented in this file. The format is based on
 
 ### Added
 
+#### Configuration
+
+- **`preset: "storybook"` config option** — opt-in framework preset that pairs two behaviors: `*.stories.{tsx,jsx,ts,js}` / `*.story.{…}` / `stories/**` files reach the scanner (they're excluded by default), and Storybook primitives (`Meta`, `StoryObj`, `StoryFn`, `Story`) render transparent in the opaque-component telemetry when they appear inside a story file. Findings on the underlying JSX still surface — the preset removes the wrapper-noise inflation, not the signal. `scan_project` responses carry a `storybook_preset_active` warning code so the agent can tell non-default behavior engaged. Invalid preset values are rejected at load time with a stderr warning; unknown or unsupplied values keep the default behavior. Follow-up (deferred): StoryObj `args` binding onto the underlying component's JSX.
+
 #### MCP server — new tools
 
 - **`scan_diff` tool** — per-scan baseline delta. Returns only violations that are new since the baseline snapshot, giving agents a clean "what regressed?" view without reprocessing unchanged findings.

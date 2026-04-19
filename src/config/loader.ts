@@ -26,11 +26,21 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import type {
   Config,
   ConfigOverride,
+  ConfigPreset,
   LoadedConfig,
   NativeWrapperMap,
   RuleSetting,
 } from "../types/config.ts";
 import { DEFAULT_CONFIG } from "./defaults.ts";
+
+/**
+ * Accepted `preset` values. Any other value from a user config file is
+ * rejected by {@link normalizePreset} — silently-ignored-bad-input was
+ * the antipattern from the opt-in config flow where a typo (`"storyBook"`)
+ * would fall through to "no preset" with zero feedback. Keep this list
+ * in sync with `ConfigPreset` in `src/types/config.ts`.
+ */
+const ACCEPTED_PRESETS: ReadonlySet<ConfigPreset> = new Set<ConfigPreset>(["storybook"]);
 
 const CONFIG_FILENAMES = [
   "ra11y.config.ts",
@@ -133,10 +143,12 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
   const { nativeWrappers, nativeWrapperElements } = normalizeNativeWrappers(user.nativeWrappers);
   const overrides: readonly ConfigOverride[] = user.overrides ?? DEFAULT_CONFIG.overrides;
   const projects = user.projects ?? DEFAULT_CONFIG.projects;
+  const preset = normalizePreset(user.preset, sourcePath);
 
   return {
     standards: standardsAsStrings,
     level: user.level ?? DEFAULT_CONFIG.level,
+    ...(preset === undefined ? {} : { preset }),
     rules,
     exclude,
     nativeWrappers,
@@ -145,6 +157,26 @@ function mergeConfig(user: Config, sourcePath: string): LoadedConfig {
     projects,
     sourcePath,
   };
+}
+
+/**
+ * Validates `user.preset` against {@link ACCEPTED_PRESETS}. A missing
+ * value returns `undefined` (no preset engaged). An invalid value
+ * writes a warning to stderr and also returns `undefined` — the
+ * loader's broader "fall back, don't crash" policy — but the warning
+ * makes the silently-ignored-typo failure mode observable per
+ * CLAUDE.md §1 "Ambiguous field shapes are dishonest."
+ */
+function normalizePreset(raw: unknown, sourcePath: string): ConfigPreset | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "string" && ACCEPTED_PRESETS.has(raw as ConfigPreset)) {
+    return raw as ConfigPreset;
+  }
+  const accepted = [...ACCEPTED_PRESETS].map((p) => `"${p}"`).join(", ");
+  process.stderr.write(
+    `ra11y: ignoring invalid preset \`${String(raw)}\` in ${sourcePath}; accepted values: ${accepted}.\n`,
+  );
+  return undefined;
 }
 
 /**

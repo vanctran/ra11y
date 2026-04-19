@@ -28,6 +28,23 @@ const PARSEABLE_EXTENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * True when the file's basename matches the Storybook story-file
+ * convention: `Foo.stories.{tsx,jsx,ts,js}` or `Foo.story.{tsx,jsx,ts,js}`.
+ * Used by `preset: "storybook"` plumbing to decide per-file whether
+ * Storybook-specific transparency applies. Case-sensitive on the
+ * `.stories` / `.story` marker (Storybook itself is) and accepts both
+ * `/` and `\` path separators for Windows paths.
+ */
+export function isStorybookStoryFile(filePath: string): boolean {
+  const lastSep = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  const basename = lastSep === -1 ? filePath : filePath.slice(lastSep + 1);
+  return STORY_BASENAME_RE.test(basename);
+}
+
+/** Matches `<name>.stories.<ext>` or `<name>.story.<ext>` basenames. */
+const STORY_BASENAME_RE = /^[^.]+\.(?:stories|story)\.(?:tsx|jsx|ts|js)$/;
+
+/**
  * True if `fileExt` matches any entry in `allowList`. A rule that declares
  * `.jsx` implicitly covers `.js` too, and `.tsx` implicitly covers `.ts` —
  * Next.js and other frameworks routinely ship JSX inside `.js` files, and

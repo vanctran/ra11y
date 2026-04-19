@@ -217,4 +217,33 @@ describe("loadConfig precedence", () => {
     expect(loaded.nativeWrappers).toEqual(["Card.*Section"]);
     expect(loaded.nativeWrapperElements).toEqual({ "Card.*Section": "div" });
   });
+
+  it("omits preset when the config file does not supply one", async () => {
+    writeFileSync(join(dir, "ra11y.config.json"), JSON.stringify({}));
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.preset).toBeUndefined();
+  });
+
+  it("accepts preset: 'storybook' and surfaces it on LoadedConfig", async () => {
+    writeFileSync(join(dir, "ra11y.config.json"), JSON.stringify({ preset: "storybook" }));
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.preset).toBe("storybook");
+  });
+
+  it("rejects an unknown preset by omitting it from the loaded config", async () => {
+    writeFileSync(join(dir, "ra11y.config.json"), JSON.stringify({ preset: "storyBook" }));
+    const loaded = await loadConfig({ cwd: dir });
+    // Invalid value is silently dropped (with a stderr warning, per
+    // the loader's "fall back, don't crash" policy). The field is
+    // omitted entirely — never sentinel-empty.
+    expect(loaded.preset).toBeUndefined();
+  });
+
+  it("rejects a non-string preset value without crashing the loader", async () => {
+    writeFileSync(join(dir, "ra11y.config.json"), JSON.stringify({ preset: 42 }));
+    const loaded = await loadConfig({ cwd: dir });
+    expect(loaded.preset).toBeUndefined();
+    // Loader still completed — other fields reach their defaults.
+    expect(loaded.level).toBe(DEFAULT_CONFIG.level);
+  });
 });

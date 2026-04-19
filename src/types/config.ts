@@ -56,12 +56,40 @@ export interface ProjectConfig {
   readonly rules?: Readonly<Record<string, RuleSetting>>;
 }
 
+/**
+ * Preset name. Presets engage framework-specific transparency so the
+ * scanner can see through layers of indirection that would otherwise
+ * classify framework primitives as opaque custom components. Each
+ * preset names one framework; opt-in only, no default.
+ *
+ *   - `"storybook"` — `*.stories.{tsx,jsx,ts,js}` and `*.story.{…}`
+ *     files get framework-aware treatment: `Meta`, `StoryObj`,
+ *     `StoryFn`, `Story` imports from `@storybook/*` render as
+ *     transparent wrappers (they don't inflate the opaque-component
+ *     count). Without the preset, story files scan as regular TSX and
+ *     every `<Story />` / `<Meta />` call site lands in
+ *     `opaqueCustomComponents` — noise that buries real findings. The
+ *     preset is opt-in because without the Storybook signal we have
+ *     no structural way to tell a literal `Meta` component apart from
+ *     the Storybook one. See
+ *     `@docs/kb/architecture/ai-first-consumer.md` — this is honest
+ *     transparency, not suppression: findings on the underlying JSX
+ *     still surface, just not on the Storybook wrappers themselves.
+ */
+export type ConfigPreset = "storybook";
+
 /** The user-facing config shape (what `defineConfig` accepts). */
 export interface Config {
   /** Standard IDs or Standard objects to enforce. Default: `["wcag22"]`. */
   readonly standards?: ReadonlyArray<string | Standard>;
   /** Conformance level within standards (`A`, `AA`, `AAA`). Default: `"AA"`. */
   readonly level?: "A" | "AA" | "AAA";
+  /**
+   * Framework preset. See {@link ConfigPreset}. When unset, the
+   * scanner applies no framework-specific transparency — story files,
+   * `_app.tsx`, `layout.tsx`, etc. scan as plain TSX.
+   */
+  readonly preset?: ConfigPreset;
   /** Rule-level settings. */
   readonly rules?: Readonly<Record<string, RuleSetting>>;
   /** Glob patterns to exclude from scanning. */
@@ -106,6 +134,12 @@ export interface Config {
 export interface LoadedConfig {
   readonly standards: readonly string[];
   readonly level: "A" | "AA" | "AAA";
+  /**
+   * Resolved preset, or `undefined` when no preset was supplied. See
+   * {@link ConfigPreset} for accepted values. An invalid user-supplied
+   * value is rejected at load time rather than silently ignored.
+   */
+  readonly preset?: ConfigPreset;
   readonly rules: Readonly<Record<string, RuleSetting>>;
   readonly exclude: readonly string[];
   readonly nativeWrappers: readonly string[];

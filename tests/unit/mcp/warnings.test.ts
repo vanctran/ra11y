@@ -251,4 +251,37 @@ describe("warningsFromScanMeta", () => {
     });
     expect(codes).toEqual([]);
   });
+
+  it("fires `storybook_preset_active` when the preset flag is set", () => {
+    const codes = computeScanWarnings({
+      filesScanned: 10,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+      storybookPresetActive: true,
+    });
+    expect(codes).toContain("storybook_preset_active");
+  });
+
+  it("does not fire `storybook_preset_active` when the flag is absent or false", () => {
+    const codesAbsent = computeScanWarnings({
+      filesScanned: 10,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+    });
+    expect(codesAbsent).not.toContain("storybook_preset_active");
+
+    const codesFalse = computeScanWarnings({
+      filesScanned: 10,
+      rootSource: "explicit",
+      configSource: "/proj/ra11y.config.ts",
+      analysisCoverage: undefined,
+      filesByExtension: undefined,
+      storybookPresetActive: false,
+    });
+    expect(codesFalse).not.toContain("storybook_preset_active");
+  });
 });

@@ -26,7 +26,14 @@ export type ScanWarningCode =
   // no hunks (e.g. clean working tree against HEAD). Zero findings in
   // this shape would otherwise read as "clean codebase" — the warning
   // tells the agent the comparison was a no-op, not a green scan.
-  | "no_hunks_in_comparison";
+  | "no_hunks_in_comparison"
+  // `preset: "storybook"` engaged on this scan. Surfaced honestly
+  // (not suppressed) so an agent reading the response can tell that
+  // non-default behavior was active — story files were included in
+  // discovery AND Storybook primitives (`Meta`, `StoryObj`, `StoryFn`,
+  // `Story`) were rendered transparent in the opaque-component
+  // telemetry. Not an error; a label the agent can branch on.
+  | "storybook_preset_active";
 
 export interface WarningInputs {
   /** Count of parseable files the scan actually evaluated. */
@@ -70,6 +77,14 @@ export interface WarningInputs {
    * from the build."
    */
   readonly scannedBuildArtifactsPresent?: boolean;
+  /**
+   * True when the resolved project config has `preset: "storybook"`.
+   * Drives the `storybook_preset_active` warning — an honest label
+   * that framework-aware transparency engaged for this scan (story
+   * files discovered, Storybook primitives treated transparently).
+   * Omitted or `false` when the preset did not apply.
+   */
+  readonly storybookPresetActive?: boolean;
 }
 
 /** Threshold below which a Tailwind-detected codebase is considered CSS-undercounted. */
@@ -109,6 +124,17 @@ export function computeScanWarnings(inputs: WarningInputs): readonly ScanWarning
     // on without reading into meta.
     out.push("scanned_build_artifacts_present");
   }
+  if (inputs.storybookPresetActive === true) {
+    // Honest label: `preset: "storybook"` engaged framework-aware
+    // transparency for this scan (story-file discovery on, Storybook
+    // primitives rendered transparent in opaque-component
+    // telemetry). The label fires whenever the preset applies,
+    // regardless of whether any story file was actually found — an
+    // agent reading the response can tell the non-default code path
+    // ran without inspecting `configSource` or the opaque-component
+    // block.
+    out.push("storybook_preset_active");
+  }
   return out;
 }
 
@@ -146,6 +172,7 @@ export function warningsFromScanMeta(args: {
   readonly rootSource: WarningInputs["rootSource"];
   readonly configSource: string | null | undefined;
   readonly scannedBuildArtifactsPresent?: boolean;
+  readonly storybookPresetActive?: boolean;
 }): readonly ScanWarningCode[] {
   return computeScanWarnings({
     filesScanned: readNumber(args.meta, "filesScanned"),
@@ -156,6 +183,9 @@ export function warningsFromScanMeta(args: {
     ...(args.scannedBuildArtifactsPresent === undefined
       ? {}
       : { scannedBuildArtifactsPresent: args.scannedBuildArtifactsPresent }),
+    ...(args.storybookPresetActive === undefined
+      ? {}
+      : { storybookPresetActive: args.storybookPresetActive }),
   });
 }
 
@@ -181,6 +211,7 @@ export function warningsFieldFromScanMeta(args: {
   readonly rootSource: WarningInputs["rootSource"];
   readonly configSource: string | null | undefined;
   readonly scannedBuildArtifactsPresent?: boolean;
+  readonly storybookPresetActive?: boolean;
 }): { readonly warnings?: readonly ScanWarningCode[] } {
   const codes = warningsFromScanMeta(args);
   return codes.length > 0 ? { warnings: codes } : {};
