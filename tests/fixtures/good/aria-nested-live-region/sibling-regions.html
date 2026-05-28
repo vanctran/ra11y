@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sibling live regions</title>
+  </head>
+  <body>
+    <main>
+      <h1>Account</h1>
+      <p>Settings updates are announced below.</p>
+
+      <!-- Polite status channel for routine updates. -->
+      <div id="status-channel" role="status" aria-atomic="true"></div>
+
+      <!-- Assertive alert channel for time-critical messages. Sibling of
+           the status region, not nested under it, so the two regions
+           announce independently. -->
+      <div id="alert-channel" role="alert" aria-atomic="true"></div>
+    </main>
+  </body>
+</html>

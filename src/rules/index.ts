@@ -18,6 +18,7 @@ import { rule as invalidRole } from "./aria/invalid-role.ts";
 import { rule as labelledbyTargetExists } from "./aria/labelledby-target-exists.ts";
 import { rule as liveRegionMissingOnInnerhtmlTarget } from "./aria/live-region-missing-on-innerhtml-target.ts";
 import { rule as liveRegionValid } from "./aria/live-region-valid.ts";
+import { rule as nestedLiveRegion } from "./aria/nested-live-region.ts";
 import { rule as popoverTriggerMissingHaspopup } from "./aria/popover-trigger-missing-haspopup.ts";
 import { rule as presentationOnSemanticAncestor } from "./aria/presentation-on-semantic-ancestor.ts";
 import { rule as progressbarValueRange } from "./aria/progressbar-value-range.ts";
@@ -197,6 +198,7 @@ export const BUILTIN_RULES: readonly Rule[] = [
   metaRefresh,
   multipleLabelForSameId,
   nestedInteractive,
+  nestedLiveRegion,
   noSubmitControl,
   nonEmptyLabel,
   notObscured,
@@ -316,6 +318,7 @@ export {
   metaRefresh,
   multipleLabelForSameId,
   nestedInteractive,
+  nestedLiveRegion,
   nonEmptyLabel,
   noSubmitControl,
   notObscured,

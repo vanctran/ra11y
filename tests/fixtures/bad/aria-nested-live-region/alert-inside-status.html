@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nested live regions</title>
+  </head>
+  <body>
+    <main>
+      <h1>Form status</h1>
+
+      <!-- Outer live region: polite status (implied by role). Inner live
+           region: assertive alert. With overlapping live regions of
+           different politeness, screen readers either honor only the
+           outer (the alert is silently dropped) or announce both, with
+           ordering and atomicity undefined. -->
+      <div role="status" aria-atomic="true">
+        <p>Your changes have been saved.</p>
+        <p role="alert">A scheduled refresh is required.</p>
+      </div>
+    </main>
+  </body>
+</html>
