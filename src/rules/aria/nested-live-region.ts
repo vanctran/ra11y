@@ -20,20 +20,27 @@
  * or whole-list re-reads when only one new item arrived.
  *
  * A "live region" here is an element that either:
- *   - declares `aria-live` with a non-`off` value (`polite` / `assertive`), or
- *   - declares `role` ∈ {`alert`, `status`, `log`} — the WAI-ARIA roles
- *     whose definition implies a non-`off` live region.
+ *   - declares `aria-live` with a non-`off` value (`polite` / `assertive`),
+ *   - declares `role` with any token in {`alert`, `status`, `log`} (the
+ *     WAI-ARIA roles whose definition implies a non-`off` live region —
+ *     scanned across all tokens per ARIA 1.2 §5.4 fallback semantics), or
+ *   - is the native HTML `<output>` element (implicit role=status per
+ *     the ARIA in HTML mapping).
  *
  * `aria-live="off"`, `role="timer"`, and `role="marquee"` are not live
  * for the purposes of this rule (politeness is `off`); a descendant
  * live region under an `off` ancestor is the only well-defined nesting
  * shape, so the rule deliberately skips it.
  *
- * Scope: single document. The rule does not resolve cross-file
- * component composition — a parent component declaring `aria-live` in
- * one file and a child component declaring `role="status"` in another
- * cannot be linked statically. That nesting shape is the same bug, but
- * it requires the agent to grep the rendered subtree.
+ * Scope: single document. PascalCase JSX components themselves are
+ * opaque — we cannot classify a `<Notifier>` element as live without
+ * resolving its render. But we DO walk through PascalCase ancestors
+ * when both endpoints (outer aria-live, inner role) are concrete
+ * attributes elsewhere in the same file: the runtime DOM relationship
+ * holds regardless of what the wrapper renders, and the agent reading
+ * the file can verify both endpoints in one read. When the nesting
+ * path crosses an opaque component, the violation reason names that so
+ * the agent can dismiss-or-verify in one read.
  */
 
 import { defineRule } from "../../api/plugin.ts";
@@ -54,16 +61,33 @@ import type {
 
 /**
  * Roles whose ARIA 1.2 definition implies a non-`off` live region. An
- * element carrying one of these roles is treated as a live region for
- * the nested-detection predicate even when `aria-live` is absent.
+ * element carrying one of these roles (in any token position of the
+ * space-separated `role` attribute) is treated as a live region for the
+ * nested-detection predicate even when `aria-live` is absent.
  *
- * `timer` and `marquee` are deliberately excluded — both imply
- * `aria-live="off"` per spec, so nesting them inside another live
- * region does not produce double-announcement behavior.
+ * Deliberately excluded:
+ *   - `timer` / `marquee` — both imply `aria-live="off"` per spec, so
+ *     nesting them inside another live region does not produce double-
+ *     announcement behavior.
+ *   - `alertdialog` — per ARIA 1.2 it does not inherit `alert`'s implicit
+ *     `aria-live`; assistive tech announces it via dialog focus
+ *     management rather than continuous live-region mutation
+ *     observation.
  *
  * Spec: https://www.w3.org/TR/wai-aria-1.2/#aria-live
  */
 const LIVE_ROLES: ReadonlySet<string> = new Set(["alert", "status", "log"]);
+
+/**
+ * Native HTML tags whose ARIA in HTML mapping is an implicit live-region
+ * role. `<output>` has implicit `role="status"`, which carries the
+ * polite live-region semantics; nesting it inside another live region
+ * triggers the same overlapping-announcement bug as an explicit
+ * `role="status"`.
+ *
+ * Spec: https://www.w3.org/TR/html-aam-1.0/#el-output
+ */
+const IMPLICIT_LIVE_REGION_TAGS: ReadonlySet<string> = new Set(["output"]);
 
 export const rule = defineRule({
   id: "aria/nested-live-region",
@@ -89,10 +113,10 @@ export const rule = defineRule({
       "https://www.w3.org/TR/wai-aria-1.2/#status",
       "https://www.w3.org/TR/wai-aria-1.2/#alert",
       "https://www.w3.org/TR/wai-aria-1.2/#log",
+      "https://www.w3.org/TR/html-aam-1.0/#el-output",
     ],
     knownLimitations: [
-      "Single-document scope: a parent component declaring a live region in one file and a child component declaring one in another file are not linked statically; the nesting is not detected when it straddles a component boundary.",
-      "Implicit `<output>` (role=status by default) is not treated as a live region — only explicit `aria-live` or explicit `role` values are inspected. An `<output>` nested inside an aria-live ancestor would pass this rule.",
+      "Cross-file scope is not resolved: when one endpoint of the nesting (outer aria-live or inner role) lives in a different file from the other, the rule cannot link them. Same-file nesting that crosses an opaque PascalCase component IS surfaced, with a note on the nesting path.",
     ],
   },
   afterFile(ctx) {
@@ -123,6 +147,8 @@ interface LiveDescriptor {
   readonly role: string | null;
   /** Lowercased aria-live value if the live status comes from `aria-live=`. */
   readonly ariaLive: string | null;
+  /** True when the live status comes from an implicit HTML mapping (e.g. <output>). */
+  readonly implicit: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +170,7 @@ function checkHtml(doc: HtmlDocument, emit: Emit): void {
         describeLive(el.tagName, inner),
         ancestor.el.loc.start.line,
         el.loc.start,
+        false,
       ),
     );
   }
@@ -164,20 +191,16 @@ function findHtmlLiveAncestor(
 function htmlLiveDescriptor(el: HtmlElement): LiveDescriptor | null {
   const rawLive = getHtmlAttribute(el, "aria-live");
   const ariaLive = rawLive === null ? null : rawLive.toLowerCase();
-  if (ariaLive !== null && ariaLive !== "polite" && ariaLive !== "assertive") {
-    // off / invalid token / empty — not a live region for our purposes.
-    if (ariaLive === "off") return null;
-    // Invalid tokens are someone else's problem (aria/live-region-valid). The
-    // attribute is effectively absent for nesting analysis.
-  }
+  if (ariaLive === "off") return null;
   const rawRole = getHtmlAttribute(el, "role");
-  const role = rawRole === null ? null : firstRoleToken(rawRole);
-  const liveByRole = role !== null && LIVE_ROLES.has(role);
+  const liveRole = rawRole === null ? null : firstLiveRoleToken(rawRole);
   const liveByAttr = ariaLive === "polite" || ariaLive === "assertive";
-  if (!(liveByRole || liveByAttr)) return null;
+  const implicitByTag = IMPLICIT_LIVE_REGION_TAGS.has(el.tagName.toLowerCase());
+  if (!(liveRole !== null || liveByAttr || implicitByTag)) return null;
   return {
-    role: liveByRole ? role : null,
+    role: liveRole,
     ariaLive: liveByAttr ? ariaLive : null,
+    implicit: implicitByTag && liveRole === null && !liveByAttr,
   };
 }
 
@@ -211,22 +234,36 @@ function checkJsx(module: TsxModule, emit: Emit): void {
         describeLive(el.tagName, inner),
         ancestor.el.loc.start.line,
         el.loc.start,
+        ancestor.crossedOpaqueComponent,
       ),
     );
   }
 }
 
+interface JsxAncestorMatch {
+  readonly el: JsxElement;
+  readonly crossedOpaqueComponent: boolean;
+}
+
 function findJsxLiveAncestor(
   element: JsxElement,
   parentOf: ReadonlyMap<JsxElement, JsxElement>,
-): { readonly el: JsxElement } | null {
+): JsxAncestorMatch | null {
+  let crossedOpaqueComponent = false;
   let parent = parentOf.get(element);
   while (parent) {
-    // PascalCase components are opaque to single-file analysis. We can't
-    // see what they render, so we don't walk through them either. This
-    // matches the documented single-document scope limitation.
-    if (isJsxPascalCase(parent.tagName)) return null;
-    if (jsxLiveDescriptor(parent) !== null) return { el: parent };
+    if (isJsxPascalCase(parent.tagName)) {
+      // The opaque component cannot itself be classified live without
+      // resolving its render — skip the descriptor check on it. But the
+      // walk continues: a same-file live ancestor above the wrapper IS
+      // observable, and per the "surface, don't suppress" doctrine the
+      // wrapper's opacity is something the agent can verify, not
+      // something we should hide behind a walk-stop.
+      crossedOpaqueComponent = true;
+      parent = parentOf.get(parent);
+      continue;
+    }
+    if (jsxLiveDescriptor(parent) !== null) return { el: parent, crossedOpaqueComponent };
     parent = parentOf.get(parent);
   }
   return null;
@@ -238,13 +275,14 @@ function jsxLiveDescriptor(el: JsxElement): LiveDescriptor | null {
   const ariaLive = rawLive === null ? null : rawLive.toLowerCase();
   if (ariaLive === "off") return null;
   const rawRole = getJsxAttributeString(el, "role");
-  const role = rawRole === null ? null : firstRoleToken(rawRole);
-  const liveByRole = role !== null && LIVE_ROLES.has(role);
+  const liveRole = rawRole === null ? null : firstLiveRoleToken(rawRole);
   const liveByAttr = ariaLive === "polite" || ariaLive === "assertive";
-  if (!(liveByRole || liveByAttr)) return null;
+  const implicitByTag = IMPLICIT_LIVE_REGION_TAGS.has(el.tagName.toLowerCase());
+  if (!(liveRole !== null || liveByAttr || implicitByTag)) return null;
   return {
-    role: liveByRole ? role : null,
+    role: liveRole,
     ariaLive: liveByAttr ? ariaLive : null,
+    implicit: implicitByTag && liveRole === null && !liveByAttr,
   };
 }
 
@@ -269,14 +307,25 @@ function isJsxPascalCase(tag: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * `role` is a space-separated list of role tokens; assistive tech uses
- * the first recognized one. For nesting detection only the first token
- * matters — if it's a live role, the element is a live region.
+ * `role` is a space-separated list of role tokens. Per ARIA 1.2 §5.4
+ * fallback semantics, assistive tech uses the first recognized role
+ * token — but enumerating "every recognized ARIA role" inside this rule
+ * would duplicate the catalog that lives in `aria/invalid-role`. The
+ * pragmatic equivalent: scan every token and return the first that is a
+ * live role. If any token in the list is a live role, the element
+ * resolves to a live region for nesting purposes; the order doesn't
+ * matter for the binary live/not-live decision this rule makes.
+ *
+ * Returns the matched lowercased live role, or null if none of the
+ * tokens are live roles.
  */
-function firstRoleToken(raw: string): string | null {
+function firstLiveRoleToken(raw: string): string | null {
   const tokens = raw.trim().split(/\s+/u);
-  const first = tokens[0];
-  return first ? first.toLowerCase() : null;
+  for (const tok of tokens) {
+    const lower = tok.toLowerCase();
+    if (LIVE_ROLES.has(lower)) return lower;
+  }
+  return null;
 }
 
 function describeLive(tagName: string, d: LiveDescriptor): string {
@@ -285,7 +334,10 @@ function describeLive(tagName: string, d: LiveDescriptor): string {
     return `<${tag} role="${d.role}" aria-live="${d.ariaLive}">`;
   }
   if (d.role !== null) return `<${tag} role="${d.role}">`;
-  return `<${tag} aria-live="${d.ariaLive ?? ""}">`;
+  if (d.ariaLive !== null) return `<${tag} aria-live="${d.ariaLive}">`;
+  // Implicit live region (e.g. <output>) — name the element so the agent
+  // can connect the implicit mapping to the surfaced finding.
+  return `<${tag}> (implicit live region)`;
 }
 
 function buildViolation(
@@ -293,16 +345,20 @@ function buildViolation(
   inner: string,
   outerLine: number,
   loc: { line: number; column: number },
+  crossedOpaqueComponent: boolean,
 ): {
   severity: "error";
   location: { filePath: string; line: number; column: number };
   message: string;
   suggestion: string;
 } {
+  const pathNote = crossedOpaqueComponent
+    ? " The nesting path crosses one or more opaque PascalCase components — verify that none of them override `aria-live` on the wrapping container before suppressing."
+    : "";
   return {
     severity: "error",
     location: { filePath: "", line: loc.line, column: loc.column },
-    message: `${inner} is a live region nested inside another live region ${outer} (opened on line ${outerLine}). Overlapping live regions have no defined behavior — screen readers may announce only the outer, announce both (duplicate), or re-announce the entire outer region every time any descendant mutates.`,
+    message: `${inner} is a live region nested inside another live region ${outer} (opened on line ${outerLine}). Overlapping live regions have no defined behavior — screen readers may announce only the outer, announce both (duplicate), or re-announce the entire outer region every time any descendant mutates.${pathNote}`,
     suggestion: `Keep one live region for this content area. Usually the outer ${outer} should own announcements (so additions to the list are read once); remove the inner declaration — drop the role or set aria-live="off" on ${inner} — and let the outer region carry the politeness. If the inner element genuinely needs its own announcement channel (e.g. a time-critical alert that must interrupt), move it outside the outer live region so the two regions are siblings rather than nested.`,
   };
 }

@@ -34,3 +34,4 @@ WAI-ARIA does not define the resolution when two live regions overlap. Screen re
 - <https://www.w3.org/TR/wai-aria-1.2/#status>
 - <https://www.w3.org/TR/wai-aria-1.2/#alert>
 - <https://www.w3.org/TR/wai-aria-1.2/#log>
+- <https://www.w3.org/TR/html-aam-1.0/#el-output>

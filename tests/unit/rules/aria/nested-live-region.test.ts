@@ -153,11 +153,45 @@ describe("rule aria/nested-live-region", () => {
     });
   });
 
+  describe("JSX: fires through opaque components when both endpoints are observable in-file", () => {
+    it("aria-live ancestor and role=status descendant are connected through a PascalCase wrapper", () => {
+      // Both the outer aria-live and the inner role="status" are concrete
+      // attributes in this file; the wrapper's render cannot un-nest the
+      // visible DOM relationship. Per "surface, don't suppress", we
+      // surface with a note on the nesting path.
+      const violations = runRule(
+        rule,
+        `export const View = () => (
+          <div aria-live="polite">
+            <Wrapper>
+              <span role="status">Saved.</span>
+            </Wrapper>
+          </div>
+        );`,
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.message).toMatch(/opaque PascalCase components?/);
+    });
+
+    it("the path-crossing note appears only when the walk actually traverses a PascalCase ancestor", () => {
+      const violations = runRule(
+        rule,
+        `export const View = () => (
+          <div aria-live="polite">
+            <span role="status">Saved.</span>
+          </div>
+        );`,
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.message).not.toMatch(/opaque PascalCase/);
+    });
+  });
+
   describe("JSX: does not fire when", () => {
-    it("the live region declarations are split across PascalCase component boundaries", () => {
-      // The outer <Notifier> is opaque to single-file analysis — even if at
-      // runtime it renders an aria-live container, we can't see that here,
-      // so the inner role="status" must not fire from this file alone.
+    it("only the inner endpoint is observable in-file (no aria-live ancestor present)", () => {
+      // No live ancestor in this file at all — the outer <Notifier> is
+      // opaque, may render anything, and we have no second endpoint to
+      // pair with. Nothing to flag.
       const violations = runRule(
         rule,
         `export const Inner = () => <div role="status">Saved.</div>;`,
@@ -191,15 +225,31 @@ describe("rule aria/nested-live-region", () => {
       expect(violations).toHaveLength(2);
     });
 
-    it("multi-token role uses the first token to decide live-ness", () => {
-      // role="status alert" — the first token is the recognized role per
-      // ARIA's fallback resolution; this is a status nested under polite.
+    it("multi-token role matches when ANY token is a live role (not only the first)", () => {
+      // Per ARIA 1.2 §5.4 fallback semantics, AT picks the first recognized
+      // role token. Enumerating every recognized role here would duplicate
+      // aria/invalid-role's catalog, so we take the pragmatic equivalent
+      // and scan every token for a live role — the binary live/not-live
+      // decision is independent of which token wins fallback resolution.
       const violations = runRule(
         rule,
-        `<div aria-live="polite"><div role="status alert">Saved.</div></div>`,
+        `<div aria-live="polite"><div role="unknown_token status">Saved.</div></div>`,
         { filePath: "index.html" },
       );
       expect(violations).toHaveLength(1);
+    });
+
+    it("native <output> is treated as an implicit live region", () => {
+      // <output> has implicit role=status per the ARIA in HTML mapping;
+      // nesting it inside another live region triggers the same
+      // overlapping-announcement bug as an explicit role="status".
+      const violations = runRule(
+        rule,
+        `<div aria-live="polite"><output>Computing…</output></div>`,
+        { filePath: "index.html" },
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.message).toContain("implicit live region");
     });
 
     it("case-insensitive matching on role and aria-live tokens", () => {
