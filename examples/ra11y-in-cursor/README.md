@@ -6,7 +6,7 @@ A minimal reference for wiring the ra11y MCP server into a Cursor workspace and 
 
 | File | Purpose |
 |---|---|
-| [`.cursor/mcp.json`](./.cursor/mcp.json) | Registers the ra11y MCP server with Cursor at the workspace scope. Uses `npx @ra11y/core --mcp` so no global install is required. |
+| [`.cursor/mcp.json`](./.cursor/mcp.json) | Registers the ra11y MCP server with Cursor at the workspace scope. Uses the explicit `npx -y --package=@ra11y/core ra11y --mcp` form so no global install is required. |
 
 Cursor reads per-project MCP servers from `.cursor/mcp.json` at the workspace root, or globally from `~/.cursor/mcp.json`. See https://docs.cursor.com/context/model-context-protocol for the host-side reference.
 

@@ -6,7 +6,7 @@ A minimal reference for wiring the ra11y MCP server into a Claude Code project a
 
 | File | Purpose |
 |---|---|
-| [`.mcp.json`](./.mcp.json) | Registers the ra11y MCP server with Claude Code. Uses `npx @ra11y/core --mcp` so no global install is required. |
+| [`.mcp.json`](./.mcp.json) | Registers the ra11y MCP server with Claude Code. Uses the explicit `npx -y --package=@ra11y/core ra11y --mcp` form so no global install is required. |
 | [`CLAUDE.md`](./CLAUDE.md) | Drop-in instructions for Claude Code — the deterministic v1 workflow (`scan_project` → `checklist` → `suggest_fix` → `verdict_candidate` → `draft_vpat_narrative`), rules of the road, and configuration hooks. Paste the whole file, or append to an existing project `CLAUDE.md`. |
 
 ## Install

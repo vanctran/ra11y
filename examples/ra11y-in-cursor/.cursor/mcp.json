@@ -2,7 +2,7 @@
   "mcpServers": {
     "ra11y": {
       "command": "npx",
-      "args": ["@ra11y/core", "--mcp"],
+      "args": ["-y", "--package=@ra11y/core", "ra11y", "--mcp"],
       "type": "stdio"
     }
   }
